@@ -46,6 +46,38 @@ export type Transaction = {
   created_at: number;
 };
 
+export type RawMaterial = {
+  id: string;
+  name: string;
+  category: string;
+  unit: "kg" | "liters" | "pcs";
+  stock: number;
+  avg_cost: number;
+  low_threshold: number;
+};
+
+export type BatchIngredient = { raw_id: string; qty: number };
+export type CookingBatch = {
+  id: string;
+  product_id: string;
+  ingredients: BatchIngredient[];
+  labor_cost: number;
+  plates: number;
+  raw_cost: number;
+  unit_cost: number;
+  plates_remaining: number;
+  created_at: number;
+};
+
+export type WastageLog = {
+  id: string;
+  batch_id: string;
+  product_name: string;
+  plates: number;
+  reason: string;
+  created_at: number;
+};
+
 export type CartItem = { product: Product; qty: number };
 
 type Ctx = {
