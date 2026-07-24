@@ -78,6 +78,28 @@ export type WastageLog = {
   created_at: number;
 };
 
+export type PaymentMethod = "cash" | "bank";
+export type Purchase = {
+  id: string;
+  date: number;
+  supplier: string;
+  raw_id: string;
+  raw_name: string;
+  qty: number;
+  total_cost: number;
+  payment_method: PaymentMethod;
+};
+
+export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
+export type Expense = {
+  id: string;
+  date: number;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  payment_method: PaymentMethod;
+};
+
 export type CartItem = { product: Product; qty: number };
 
 type Ctx = {
@@ -90,6 +112,9 @@ type Ctx = {
   rawMaterials: RawMaterial[];
   batches: CookingBatch[];
   wastage: WastageLog[];
+  purchases: Purchase[];
+  expenses: Expense[];
+  cash: number;
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
@@ -105,6 +130,8 @@ type Ctx = {
   updateRawStock: (id: string, delta: number) => void;
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
+  recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
+  recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -169,11 +196,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(seedRaw);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cash, setCash] = useState<number>(500000);
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
+    purchases, expenses, cash,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
@@ -222,6 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     topUp(customerId, amount, description = "Cash top-up at counter") {
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
+      setCash((c) => c + amount);
     },
     posSale(customerId, items) {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -276,7 +308,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
       setWastage((prev) => [{ id: `w${Date.now()}`, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage]);
+    recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date }) {
+      if (qty <= 0 || total_cost < 0) return null;
+      const raw = rawMaterials.find((r) => r.id === raw_id);
+      if (!raw) return null;
+      const newStock = raw.stock + qty;
+      // Weighted average cost recalculation
+      const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
+      setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
+      setCash((c) => c - total_cost);
+      const purchase: Purchase = {
+        id: `PO-${Date.now()}`, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
+        qty, total_cost, payment_method,
+      };
+      setPurchases((prev) => [purchase, ...prev]);
+      return purchase;
+    },
+    recordExpense({ category, amount, description, payment_method, date }) {
+      if (amount <= 0) return null;
+      const exp: Expense = { id: `EX-${Date.now()}`, date: date ?? Date.now(), category, amount, description, payment_method };
+      setExpenses((prev) => [exp, ...prev]);
+      setCash((c) => c - amount);
+      return exp;
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

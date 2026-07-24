@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2 } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 
-export type StaffTab = "orders" | "pos" | "inventory" | "analytics";
+export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
   const { currentUser, logout } = useStore();
@@ -43,6 +43,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="Walk-in POS" active={active === "pos"} />
               <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Store & Inventory" active={active === "inventory"} />
+              <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />
               <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />
             </nav>
           </div>
@@ -66,6 +67,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Orders" active={active === "orders"} />
           <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
           <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />
+          <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />
           <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />
         </div>
       </header>
