@@ -15,6 +15,7 @@ import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -50,6 +51,11 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/dashboard': typeof DashboardRoute
+  '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/dashboard': typeof DashboardRoute
+  '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/dashboard': typeof DashboardRoute
+  '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/cart'
     | '/dashboard'
+    | '/finance'
     | '/history'
     | '/inventory'
     | '/menu'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/cart'
     | '/dashboard'
+    | '/finance'
     | '/history'
     | '/inventory'
     | '/menu'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/cart'
     | '/dashboard'
+    | '/finance'
     | '/history'
     | '/inventory'
     | '/menu'
@@ -152,6 +164,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   CartRoute: typeof CartRoute
   DashboardRoute: typeof DashboardRoute
+  FinanceRoute: typeof FinanceRoute
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
   MenuRoute: typeof MenuRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -240,6 +260,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   CartRoute: CartRoute,
   DashboardRoute: DashboardRoute,
+  FinanceRoute: FinanceRoute,
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
   MenuRoute: MenuRoute,
