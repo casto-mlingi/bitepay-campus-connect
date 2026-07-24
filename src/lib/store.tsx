@@ -87,6 +87,9 @@ type Ctx = {
   orders: Order[];
   transactions: Transaction[];
   cart: CartItem[];
+  rawMaterials: RawMaterial[];
+  batches: CookingBatch[];
+  wastage: WastageLog[];
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
@@ -98,6 +101,10 @@ type Ctx = {
   topUp: (customerId: string, amount: number, description?: string) => void;
   posSale: (customerId: string, items: OrderItem[]) => Order | null;
   findCustomer: (query: string) => Profile | null;
+  addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
+  updateRawStock: (id: string, delta: number) => void;
+  createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
+  logWastage: (batch_id: string, plates: number, reason: string) => void;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
