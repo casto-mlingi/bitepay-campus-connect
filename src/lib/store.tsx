@@ -243,7 +243,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!q) return null;
       return profiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart]);
+    addRawMaterial(r) {
+      setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]);
+    },
+    updateRawStock(id, delta) {
+      setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r));
+    },
+    createBatch({ product_id, ingredients, labor_cost, plates }) {
+      if (plates <= 0 || ingredients.length === 0) return null;
+      let raw_cost = 0;
+      for (const ing of ingredients) {
+        const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+        if (!raw || raw.stock < ing.qty) return null;
+        raw_cost += raw.avg_cost * ing.qty;
+      }
+      const unit_cost = Math.round((raw_cost + labor_cost) / plates);
+      const batch: CookingBatch = {
+        id: `B-${Date.now()}`, product_id, ingredients, labor_cost, plates,
+        raw_cost, unit_cost, plates_remaining: plates, created_at: Date.now(),
+      };
+      setRawMaterials((prev) => prev.map((r) => {
+        const ing = ingredients.find((i) => i.raw_id === r.id);
+        return ing ? { ...r, stock: Math.max(0, r.stock - ing.qty) } : r;
+      }));
+      setBatches((prev) => [batch, ...prev]);
+      return batch;
+    },
+    logWastage(batch_id, plates, reason) {
+      const b = batches.find((x) => x.id === batch_id);
+      if (!b || plates <= 0) return;
+      const prod = seedProducts.find((p) => p.id === b.product_id);
+      setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
+      setWastage((prev) => [{ id: `w${Date.now()}`, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
