@@ -46,6 +46,38 @@ export type Transaction = {
   created_at: number;
 };
 
+export type RawMaterial = {
+  id: string;
+  name: string;
+  category: string;
+  unit: "kg" | "liters" | "pcs";
+  stock: number;
+  avg_cost: number;
+  low_threshold: number;
+};
+
+export type BatchIngredient = { raw_id: string; qty: number };
+export type CookingBatch = {
+  id: string;
+  product_id: string;
+  ingredients: BatchIngredient[];
+  labor_cost: number;
+  plates: number;
+  raw_cost: number;
+  unit_cost: number;
+  plates_remaining: number;
+  created_at: number;
+};
+
+export type WastageLog = {
+  id: string;
+  batch_id: string;
+  product_name: string;
+  plates: number;
+  reason: string;
+  created_at: number;
+};
+
 export type CartItem = { product: Product; qty: number };
 
 type Ctx = {
@@ -55,6 +87,9 @@ type Ctx = {
   orders: Order[];
   transactions: Transaction[];
   cart: CartItem[];
+  rawMaterials: RawMaterial[];
+  batches: CookingBatch[];
+  wastage: WastageLog[];
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
@@ -66,6 +101,10 @@ type Ctx = {
   topUp: (customerId: string, amount: number, description?: string) => void;
   posSale: (customerId: string, items: OrderItem[]) => Order | null;
   findCustomer: (query: string) => Profile | null;
+  addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
+  updateRawStock: (id: string, delta: number) => void;
+  createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
+  logWastage: (batch_id: string, plates: number, reason: string) => void;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -111,6 +150,15 @@ const seedTx: Transaction[] = [
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
 
+const seedRaw: RawMaterial[] = [
+  { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
+  { id: "r2", name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
+  { id: "r3", name: "Cooking Oil", category: "Oils", unit: "liters", stock: 18, avg_cost: 6800, low_threshold: 10 },
+  { id: "r4", name: "Chicken", category: "Protein", unit: "kg", stock: 8, avg_cost: 12000, low_threshold: 10 },
+  { id: "r5", name: "Wheat Flour", category: "Grains", unit: "kg", stock: 30, avg_cost: 2400, low_threshold: 15 },
+  { id: "r6", name: "Onions", category: "Vegetables", unit: "kg", stock: 22, avg_cost: 1800, low_threshold: 10 },
+];
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>(seedProfiles);
   const [products] = useState<Product[]>(seedProducts);
@@ -118,11 +166,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(seedTx);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(seedRaw);
+  const [batches, setBatches] = useState<CookingBatch[]>([]);
+  const [wastage, setWastage] = useState<WastageLog[]>([]);
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
   const value: Ctx = useMemo(() => ({
-    currentUser, profiles, products, orders, transactions, cart,
+    currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
@@ -192,7 +243,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!q) return null;
       return profiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart]);
+    addRawMaterial(r) {
+      setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]);
+    },
+    updateRawStock(id, delta) {
+      setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r));
+    },
+    createBatch({ product_id, ingredients, labor_cost, plates }) {
+      if (plates <= 0 || ingredients.length === 0) return null;
+      let raw_cost = 0;
+      for (const ing of ingredients) {
+        const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+        if (!raw || raw.stock < ing.qty) return null;
+        raw_cost += raw.avg_cost * ing.qty;
+      }
+      const unit_cost = Math.round((raw_cost + labor_cost) / plates);
+      const batch: CookingBatch = {
+        id: `B-${Date.now()}`, product_id, ingredients, labor_cost, plates,
+        raw_cost, unit_cost, plates_remaining: plates, created_at: Date.now(),
+      };
+      setRawMaterials((prev) => prev.map((r) => {
+        const ing = ingredients.find((i) => i.raw_id === r.id);
+        return ing ? { ...r, stock: Math.max(0, r.stock - ing.qty) } : r;
+      }));
+      setBatches((prev) => [batch, ...prev]);
+      return batch;
+    },
+    logWastage(batch_id, plates, reason) {
+      const b = batches.find((x) => x.id === batch_id);
+      if (!b || plates <= 0) return;
+      const prod = seedProducts.find((p) => p.id === b.product_id);
+      setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
+      setWastage((prev) => [{ id: `w${Date.now()}`, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
