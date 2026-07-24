@@ -308,7 +308,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
       setWastage((prev) => [{ id: `w${Date.now()}`, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage]);
+    recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date }) {
+      if (qty <= 0 || total_cost < 0) return null;
+      const raw = rawMaterials.find((r) => r.id === raw_id);
+      if (!raw) return null;
+      const newStock = raw.stock + qty;
+      // Weighted average cost recalculation
+      const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
+      setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
+      setCash((c) => c - total_cost);
+      const purchase: Purchase = {
+        id: `PO-${Date.now()}`, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
+        qty, total_cost, payment_method,
+      };
+      setPurchases((prev) => [purchase, ...prev]);
+      return purchase;
+    },
+    recordExpense({ category, amount, description, payment_method, date }) {
+      if (amount <= 0) return null;
+      const exp: Expense = { id: `EX-${Date.now()}`, date: date ?? Date.now(), category, amount, description, payment_method };
+      setExpenses((prev) => [exp, ...prev]);
+      setCash((c) => c - amount);
+      return exp;
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
