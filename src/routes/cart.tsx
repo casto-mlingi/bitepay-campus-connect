@@ -28,14 +28,16 @@ function CartPage() {
     return (
       <CustomerShell active="menu">
         <div className="text-center py-16">
-          <div className="w-16 h-16 rounded-full bg-success/15 text-success grid place-items-center mx-auto">
-            <CheckCircle2 className="w-8 h-8" />
+          <div className="w-20 h-20 rounded-full bg-success/15 text-success grid place-items-center mx-auto">
+            <CheckCircle2 className="w-10 h-10" />
           </div>
-          <h1 className="mt-4 text-2xl font-bold">Order placed!</h1>
-          <p className="mt-1 text-muted-foreground">Your order <span className="font-semibold text-foreground">{placed}</span> is being prepared.</p>
-          <div className="mt-6 flex gap-3 justify-center">
-            <Button asChild variant="outline"><Link to="/menu">Order more</Link></Button>
-            <Button asChild><Link to="/dashboard">Back to home</Link></Button>
+          <h1 className="mt-5 text-2xl font-bold">Congratulations! 🎉</h1>
+          <p className="mt-1.5 text-muted-foreground text-sm max-w-xs mx-auto">
+            Your order <span className="font-semibold text-foreground">{placed}</span> is complete. Please enjoy the best menu from us.
+          </p>
+          <div className="mt-8 flex gap-3 justify-center">
+            <Button asChild variant="outline" className="rounded-xl"><Link to="/menu">Order more</Link></Button>
+            <Button asChild className="rounded-xl bg-success hover:bg-success/90 text-success-foreground"><Link to="/dashboard">Get Started</Link></Button>
           </div>
         </div>
       </CustomerShell>
@@ -46,50 +48,51 @@ function CartPage() {
     <CustomerShell active="menu">
       <div className="flex items-center gap-2">
         <Link to="/menu" className="p-2 -ml-2 rounded-lg hover:bg-muted"><ArrowLeft className="w-5 h-5" /></Link>
-        <h1 className="text-2xl font-bold">Your Cart</h1>
+        <h1 className="text-2xl font-bold">My Cart</h1>
+        {cart.length > 0 && <span className="ml-1 text-muted-foreground text-sm">({cart.length})</span>}
       </div>
 
       {cart.length === 0 ? (
-        <div className="mt-10 rounded-2xl border border-dashed p-10 text-center text-muted-foreground">
-          Your cart is empty. <Link to="/menu" className="text-primary font-medium">Browse menu →</Link>
+        <div className="mt-10 rounded-3xl border border-dashed p-10 text-center text-muted-foreground">
+          Your cart is empty. <Link to="/menu" className="text-primary font-semibold">Browse menu →</Link>
         </div>
       ) : (
         <>
           <ul className="mt-4 space-y-2">
             {cart.map((c) => (
-              <li key={c.product.id} className="bg-surface border rounded-xl p-3 flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${c.product.gradient} grid place-items-center text-2xl shrink-0`}>{c.product.emoji}</div>
+              <li key={c.product.id} className="bg-surface border rounded-2xl p-3 flex items-center gap-3">
+                <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${c.product.gradient} grid place-items-center text-2xl shrink-0`}>{c.product.emoji}</div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold truncate">{c.product.name}</div>
-                  <div className="text-sm text-muted-foreground">{formatTZS(c.product.price)}</div>
+                  <div className="text-sm text-primary font-bold">{formatTZS(c.product.price)}</div>
                 </div>
-                <div className="flex items-center gap-1.5 bg-muted rounded-lg">
+                <div className="flex items-center gap-1 bg-muted rounded-full">
                   <button onClick={() => setQty(c.product.id, c.qty - 1)} className="w-8 h-8 grid place-items-center">
                     {c.qty === 1 ? <Trash2 className="w-4 h-4 text-destructive" /> : <Minus className="w-4 h-4" />}
                   </button>
-                  <span className="min-w-[1.25rem] text-center font-semibold text-sm">{c.qty}</span>
-                  <button onClick={() => setQty(c.product.id, c.qty + 1)} className="w-8 h-8 grid place-items-center"><Plus className="w-4 h-4" /></button>
+                  <span className="min-w-[1.25rem] text-center font-bold text-sm">{c.qty}</span>
+                  <button onClick={() => setQty(c.product.id, c.qty + 1)} className="w-8 h-8 grid place-items-center rounded-full bg-success text-success-foreground"><Plus className="w-4 h-4" /></button>
                 </div>
               </li>
             ))}
           </ul>
 
-          <div className="mt-6 bg-surface border rounded-2xl p-5">
+          <div className="mt-6 bg-surface border rounded-3xl p-5">
             <h3 className="font-bold mb-3">Order Summary</h3>
             <Row label="Subtotal" value={formatTZS(subtotal)} />
             <Row label="Service (5%)" value={formatTZS(tax)} />
-            <div className="my-3 border-t" />
+            <div className="my-3 border-t border-dashed" />
             <Row label="Total" value={formatTZS(total)} strong />
           </div>
 
-          <div className="mt-4 bg-surface border rounded-2xl p-5">
+          <div className="mt-4 bg-surface border rounded-3xl p-5">
             <h3 className="font-bold mb-3">Delivery</h3>
             <div className="grid grid-cols-2 gap-2">
               {(["pickup", "delivery"] as DeliveryType[]).map((d) => (
                 <button
                   key={d}
                   onClick={() => setDelivery(d)}
-                  className={`py-3 rounded-lg text-sm font-semibold capitalize border-2 transition ${
+                  className={`py-3 rounded-xl text-sm font-semibold capitalize border-2 transition ${
                     delivery === d ? "border-primary bg-primary/5 text-primary" : "border-border"
                   }`}
                 >
@@ -99,7 +102,7 @@ function CartPage() {
             </div>
           </div>
 
-          <div className="mt-4 bg-surface border rounded-2xl p-5">
+          <div className="mt-4 bg-surface border rounded-3xl p-5">
             <h3 className="font-bold mb-3">Payment</h3>
             <div className="flex items-center justify-between text-sm mb-1">
               <span className="text-muted-foreground flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Wallet Balance</span>
@@ -111,7 +114,7 @@ function CartPage() {
             </div>
 
             {!canPay && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-primary/10 text-primary p-3">
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-primary/10 text-primary p-3">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                 <div className="text-sm">
                   <div className="font-semibold">Low Balance</div>
@@ -123,9 +126,9 @@ function CartPage() {
             <Button
               disabled={!canPay}
               onClick={() => { const o = placeOrder(delivery); if (o) setPlaced(o.id); }}
-              className="w-full mt-4 h-12 text-base font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50"
+              className="w-full mt-4 h-12 rounded-xl text-base font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50"
             >
-              Confirm & Pay with Wallet
+              Place Order
             </Button>
           </div>
         </>
@@ -138,7 +141,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   return (
     <div className={`flex items-center justify-between ${strong ? "text-base font-bold" : "text-sm"}`}>
       <span className={strong ? "" : "text-muted-foreground"}>{label}</span>
-      <span>{value}</span>
+      <span className={strong ? "text-primary" : ""}>{value}</span>
     </div>
   );
 }
