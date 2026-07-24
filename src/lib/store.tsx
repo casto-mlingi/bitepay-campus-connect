@@ -196,11 +196,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(seedRaw);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cash, setCash] = useState<number>(500000);
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
+    purchases, expenses, cash,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
