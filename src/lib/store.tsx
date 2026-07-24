@@ -78,6 +78,28 @@ export type WastageLog = {
   created_at: number;
 };
 
+export type PaymentMethod = "cash" | "bank";
+export type Purchase = {
+  id: string;
+  date: number;
+  supplier: string;
+  raw_id: string;
+  raw_name: string;
+  qty: number;
+  total_cost: number;
+  payment_method: PaymentMethod;
+};
+
+export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
+export type Expense = {
+  id: string;
+  date: number;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  payment_method: PaymentMethod;
+};
+
 export type CartItem = { product: Product; qty: number };
 
 type Ctx = {
