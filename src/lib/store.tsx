@@ -253,6 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     topUp(customerId, amount, description = "Cash top-up at counter") {
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
+      setCash((c) => c + amount);
     },
     posSale(customerId, items) {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
