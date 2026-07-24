@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TopupRouteImport } from './routes/topup'
+import { Route as StaffRouteImport } from './routes/staff'
+import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -19,6 +21,16 @@ import { Route as IndexRouteImport } from './routes/index'
 const TopupRoute = TopupRouteImport.update({
   id: '/topup',
   path: '/topup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PosRoute = PosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MenuRoute = MenuRouteImport.update({
@@ -53,6 +65,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +75,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesById {
@@ -70,13 +86,31 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cart' | '/dashboard' | '/history' | '/menu' | '/topup'
+  fullPaths:
+    | '/'
+    | '/cart'
+    | '/dashboard'
+    | '/history'
+    | '/menu'
+    | '/pos'
+    | '/staff'
+    | '/topup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cart' | '/dashboard' | '/history' | '/menu' | '/topup'
+  to:
+    | '/'
+    | '/cart'
+    | '/dashboard'
+    | '/history'
+    | '/menu'
+    | '/pos'
+    | '/staff'
+    | '/topup'
   id:
     | '__root__'
     | '/'
@@ -84,6 +118,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/history'
     | '/menu'
+    | '/pos'
+    | '/staff'
     | '/topup'
   fileRoutesById: FileRoutesById
 }
@@ -93,6 +129,8 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   HistoryRoute: typeof HistoryRoute
   MenuRoute: typeof MenuRoute
+  PosRoute: typeof PosRoute
+  StaffRoute: typeof StaffRoute
   TopupRoute: typeof TopupRoute
 }
 
@@ -103,6 +141,20 @@ declare module '@tanstack/react-router' {
       path: '/topup'
       fullPath: '/topup'
       preLoaderRoute: typeof TopupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pos': {
+      id: '/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof PosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/menu': {
@@ -149,8 +201,20 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   HistoryRoute: HistoryRoute,
   MenuRoute: MenuRoute,
+  PosRoute: PosRoute,
+  StaffRoute: StaffRoute,
   TopupRoute: TopupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
