@@ -150,6 +150,15 @@ const seedTx: Transaction[] = [
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
 
+const seedRaw: RawMaterial[] = [
+  { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
+  { id: "r2", name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
+  { id: "r3", name: "Cooking Oil", category: "Oils", unit: "liters", stock: 18, avg_cost: 6800, low_threshold: 10 },
+  { id: "r4", name: "Chicken", category: "Protein", unit: "kg", stock: 8, avg_cost: 12000, low_threshold: 10 },
+  { id: "r5", name: "Wheat Flour", category: "Grains", unit: "kg", stock: 30, avg_cost: 2400, low_threshold: 15 },
+  { id: "r6", name: "Onions", category: "Vegetables", unit: "kg", stock: 22, avg_cost: 1800, low_threshold: 10 },
+];
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>(seedProfiles);
   const [products] = useState<Product[]>(seedProducts);
@@ -157,11 +166,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(seedTx);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(seedRaw);
+  const [batches, setBatches] = useState<CookingBatch[]>([]);
+  const [wastage, setWastage] = useState<WastageLog[]>([]);
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
   const value: Ctx = useMemo(() => ({
-    currentUser, profiles, products, orders, transactions, cart,
+    currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
