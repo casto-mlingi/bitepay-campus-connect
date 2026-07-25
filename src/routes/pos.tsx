@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt } from "lucide-react";
+import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone } from "lucide-react";
 import { useStore, formatTZS, type Product, type Profile, type Order } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, type ReceiptExtras } from "@/lib/receipt";
+import { QRScannerModal } from "@/components/qr-scanner-modal";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
@@ -14,19 +15,22 @@ export const Route = createFileRoute("/pos")({
 
 type Line = { product: Product; qty: number };
 type Mode = "wallet" | "cash";
+type Tender = "cash" | "mobile";
 
 function POS() {
-  const { currentUser, products, findCustomer, posSale, posCashSale, topUp, profiles } = useStore();
+  const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
   const [customer, setCustomer] = useState<Profile | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
   const [category, setCategory] = useState<string>("All");
   const [topupAmt, setTopupAmt] = useState<number>(10000);
+  const [topupTender, setTopupTender] = useState<Tender>("cash");
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [cashName, setCashName] = useState<string>("");
+  const [tender, setTender] = useState<Tender>("cash");
   const [toast, setToast] = useState<string>("");
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
 
@@ -40,7 +44,15 @@ function POS() {
   const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
   const filtered = category === "All" ? products : products.filter((p) => p.category === category);
   const total = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
-  const change = Math.max(0, cashReceived - total);
+  const change = tender === "mobile" ? 0 : Math.max(0, cashReceived - total);
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || freshCustomer) return [] as Profile[];
+    return profiles
+      .filter((p) => p.role === "customer" && (p.full_name.toLowerCase().includes(q) || p.phone.includes(q) || p.id.toLowerCase().includes(q)))
+      .slice(0, 6);
+  }, [query, profiles, freshCustomer]);
 
   const addLine = (p: Product) => {
     setLines((prev) => {
@@ -50,11 +62,13 @@ function POS() {
   };
   const setLineQty = (id: string, qty: number) => setLines((prev) => qty <= 0 ? prev.filter((l) => l.product.id !== id) : prev.map((l) => l.product.id === id ? { ...l, qty } : l));
 
-  const doSearch = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const c = findCustomer(query);
-    setCustomer(c);
-    setNotFound(!c);
+  const pickCustomer = (c: Profile) => { setCustomer(c); setQuery(""); };
+
+  const onScan = (text: string) => {
+    setShowScanner(false);
+    const c = findCustomer(text) ?? profiles.find((p) => p.role === "customer" && p.id === text) ?? null;
+    if (c) { pickCustomer(c); showToast(`Loaded ${c.full_name}`); }
+    else showToast("QR did not match a customer");
   };
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
@@ -67,7 +81,7 @@ function POS() {
     if (!freshCustomer) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
-    const o = posSale(freshCustomer.id, items, cashPortion);
+    const o = posSale(freshCustomer.id, items, cashPortion, tender);
     if (!o) { showToast("Insufficient wallet balance"); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: o, extras });
@@ -79,28 +93,30 @@ function POS() {
 
   const doCashSale = () => {
     if (lines.length === 0) return;
+    const effectiveReceived = tender === "mobile" ? total : cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    const o = posCashSale(items, cashReceived, cashName.trim() || "Walk-in Cash");
-    if (!o) { showToast("Cash received is less than total"); return; }
-    const extras: ReceiptExtras = { paymentMode: "cash", cashReceived, change, cashierName: currentUser?.full_name };
+    const o = posCashSale(items, effectiveReceived, cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender);
+    if (!o) { showToast("Amount received is less than total"); return; }
+    const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: o, extras });
     printReceipt(o, extras);
     setLines([]);
     setCashReceived(0);
     setCashName("");
-    showToast(`Cash sale ${o.id} — change ${formatTZS(extras.change ?? 0)}`);
+    showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${o.receipt_no ?? o.id}`);
   };
 
   const doTopUp = () => {
     if (!freshCustomer || topupAmt <= 0) return;
-    topUp(freshCustomer.id, topupAmt);
-    showToast(`Topped up ${formatTZS(topupAmt)} to ${freshCustomer.full_name}`);
+    // Route to correct account: simulate via description; store's topUp always adds to cash so we mirror bank adjustment when mobile
+    topUp(freshCustomer.id, topupAmt, topupTender === "mobile" ? "Mobile money top-up" : "Cash top-up at counter");
+    showToast(`Topped up ${formatTZS(topupAmt)} (${topupTender === "mobile" ? "Mobile" : "Cash"}) to ${freshCustomer.full_name}`);
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
   const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
-  const canCash = lines.length > 0 && cashReceived >= total && total > 0;
+  const canCash = lines.length > 0 && total > 0 && (tender === "mobile" ? true : cashReceived >= total);
 
   return (
     <StaffShell active="pos">
@@ -132,7 +148,6 @@ function POS() {
         <aside className="bg-surface border rounded-2xl p-5 h-fit lg:sticky lg:top-24">
           <h2 className="font-bold text-lg">Current Receipt</h2>
 
-          {/* Sale mode toggle */}
           <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
             <button onClick={() => setMode("wallet")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "wallet" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
@@ -146,16 +161,39 @@ function POS() {
 
           {mode === "wallet" ? (
             <>
-              <form onSubmit={doSearch} className="mt-3">
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => { setQuery(e.target.value); setNotFound(false); }}
-                    placeholder="Search customer by phone or ID" className="pl-9" />
+              <div className="mt-3">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={query} onChange={(e) => { setQuery(e.target.value); }}
+                      placeholder="Search by name, phone or ID" className="pl-9" />
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => setShowScanner(true)} title="Scan QR ID">
+                    <QrCode className="w-4 h-4" />
+                  </Button>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">Try <button type="button" className="underline" onClick={() => { setQuery("0712345678"); }}>0712345678</button></div>
-              </form>
-
-              {notFound && <div className="mt-3 text-sm text-destructive">No customer found.</div>}
+                {suggestions.length > 0 && (
+                  <ul className="mt-2 border rounded-xl overflow-hidden bg-background shadow-sm max-h-64 overflow-y-auto">
+                    {suggestions.map((s) => (
+                      <li key={s.id}>
+                        <button onClick={() => pickCustomer(s)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary grid place-items-center text-xs font-bold">
+                            {s.full_name.split(" ").map((x) => x[0]).slice(0, 2).join("")}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm leading-tight truncate">{s.full_name}</div>
+                            <div className="text-xs text-muted-foreground">{s.phone}</div>
+                          </div>
+                          <div className="text-xs font-bold text-success">{formatTZS(s.wallet_balance)}</div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {query && !freshCustomer && suggestions.length === 0 && (
+                  <div className="text-xs text-muted-foreground mt-2">No matching customer. Try scanning the QR, or add them in <button className="underline" onClick={() => navigate({ to: "/customers" })}>Customers</button>.</div>
+                )}
+              </div>
 
               {freshCustomer && (
                 <>
@@ -177,11 +215,14 @@ function POS() {
                         <Banknote className="w-3.5 h-3.5" /> Split payment — wallet short by {formatTZS(walletShort)}
                       </div>
                       <label className="block">
-                        <span className="text-xs text-muted-foreground">Cash top-up for this sale (TZS)</span>
+                        <span className="text-xs text-muted-foreground">Extra pay for this sale (TZS)</span>
                         <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)}
                           className="mt-1 font-semibold bg-background" />
                       </label>
-                      <div className="text-xs text-muted-foreground">Wallet pays {formatTZS(Math.max(0, total - Math.max(splitCash, walletShort)))} · Cash pays {formatTZS(Math.max(splitCash, walletShort))}</div>
+                      <TenderPicker tender={tender} onChange={setTender} />
+                      <div className="text-xs text-muted-foreground">
+                        Wallet pays {formatTZS(Math.max(0, total - Math.max(splitCash, walletShort)))} · {tender === "mobile" ? "Mobile" : "Cash"} pays {formatTZS(Math.max(splitCash, walletShort))}
+                      </div>
                     </div>
                   )}
                 </>
@@ -191,7 +232,7 @@ function POS() {
             <div className="mt-3 space-y-2">
               <label className="block">
                 <span className="text-xs text-muted-foreground">Customer Name (optional)</span>
-                <Input value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder="Walk-in Cash" className="mt-1" />
+                <Input value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder={tender === "mobile" ? "Mobile Money" : "Walk-in Cash"} className="mt-1" />
               </label>
             </div>
           )}
@@ -227,24 +268,33 @@ function POS() {
           </div>
 
           {mode === "cash" && (
-            <div className="mt-3 space-y-2">
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Cash Received (TZS)</span>
-                <Input type="number" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
-                  placeholder="0" className="mt-1 font-semibold" />
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
-                  <button key={v} onClick={() => setCashReceived(v)}
-                    className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
-                    {formatTZS(v)}
-                  </button>
-                ))}
-              </div>
-              <div className={`flex items-center justify-between text-sm rounded-lg p-2.5 ${change >= 0 && cashReceived >= total && total > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                <span className="font-medium">Change</span>
-                <span className="font-bold">{formatTZS(change)}</span>
-              </div>
+            <div className="mt-3 space-y-2.5">
+              <TenderPicker tender={tender} onChange={setTender} />
+              {tender === "cash" ? (
+                <>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Cash Received (TZS)</span>
+                    <Input type="number" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
+                      placeholder="0" className="mt-1 font-semibold" />
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
+                      <button key={v} onClick={() => setCashReceived(v)}
+                        className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
+                        {formatTZS(v)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={`flex items-center justify-between text-sm rounded-lg p-2.5 ${change >= 0 && cashReceived >= total && total > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                    <span className="font-medium">Change</span>
+                    <span className="font-bold">{formatTZS(change)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg bg-primary/5 text-primary p-2.5 text-xs">
+                  Charge <span className="font-bold">{formatTZS(total)}</span> via M-Pesa / Tigo Pesa / Airtel Money. Amount will be credited to the Bank account.
+                </div>
+              )}
             </div>
           )}
 
@@ -256,7 +306,8 @@ function POS() {
           ) : (
             <Button disabled={!canCash} onClick={doCashSale}
               className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
-              <Printer className="w-4 h-4 mr-2" /> Collect Cash & Print
+              <Printer className="w-4 h-4 mr-2" />
+              {tender === "mobile" ? "Confirm Mobile Payment & Print" : "Collect Cash & Print"}
             </Button>
           )}
 
@@ -267,6 +318,7 @@ function POS() {
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
+                {lastReceipt.order.tender && <span> · {lastReceipt.order.tender === "mobile" ? "Mobile" : "Cash"}</span>}
                 {(lastReceipt.order.loyalty_earned ?? 0) > 0 && <span className="text-success"> · +{formatTZS(lastReceipt.order.loyalty_earned ?? 0)} loyalty</span>}
               </div>
               <div className="flex gap-2 mt-2">
@@ -282,8 +334,9 @@ function POS() {
 
           {mode === "wallet" && (
             <div className="mt-5 border-t pt-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Accept Cash Top-Up</div>
-              <div className="flex gap-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Accept Top-Up</div>
+              <TenderPicker tender={topupTender} onChange={setTopupTender} />
+              <div className="flex gap-2 mt-2">
                 <div className="flex-1 flex items-center border rounded-lg px-3">
                   <span className="text-xs text-muted-foreground mr-2">TZS</span>
                   <input type="number" value={topupAmt} onChange={(e) => setTopupAmt(Number(e.target.value) || 0)}
@@ -298,11 +351,28 @@ function POS() {
         </aside>
       </div>
 
+      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={onScan} />}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
           <CheckCircle2 className="w-4 h-4 text-success" /> {toast}
         </div>
       )}
     </StaffShell>
+  );
+}
+
+function TenderPicker({ tender, onChange }: { tender: Tender; onChange: (t: Tender) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg">
+      <button type="button" onClick={() => onChange("cash")}
+        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${tender === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
+        <Banknote className="w-3.5 h-3.5" /> Cash
+      </button>
+      <button type="button" onClick={() => onChange("mobile")}
+        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${tender === "mobile" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
+        <Smartphone className="w-3.5 h-3.5" /> Mobile Money
+      </button>
+    </div>
   );
 }
