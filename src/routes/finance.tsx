@@ -262,7 +262,7 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
 }
 
 function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
-  const { rawMaterials, purchases, cash } = useStore();
+  const { rawMaterials, purchases, cash, bank } = useStore();
   const [supplier, setSupplier] = useState("");
   const [rawId, setRawId] = useState("");
   const [qty, setQty] = useState(1);
