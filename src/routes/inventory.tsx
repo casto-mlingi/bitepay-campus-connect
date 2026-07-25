@@ -210,11 +210,8 @@ function BatchesPanel() {
             <div className="text-muted-foreground mb-1">Total Plates Produced</div>
             <input type="number" min={1} value={plates} onChange={(e) => setPlates(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border bg-background" />
           </label>
-          <label className="text-sm md:col-span-2">
-            <div className="text-muted-foreground mb-1">Daily Labor / Overhead Cost (TZS)</div>
-            <input type="number" min={0} value={labor} onChange={(e) => setLabor(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border bg-background" />
-          </label>
         </div>
+
 
         <div>
           <div className="flex items-center justify-between mb-2">
