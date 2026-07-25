@@ -108,8 +108,7 @@ function POS() {
 
   const doTopUp = () => {
     if (!freshCustomer || topupAmt <= 0) return;
-    // Route to correct account: simulate via description; store's topUp always adds to cash so we mirror bank adjustment when mobile
-    topUp(freshCustomer.id, topupAmt, topupTender === "mobile" ? "Mobile money top-up" : "Cash top-up at counter");
+    topUp(freshCustomer.id, topupAmt, topupTender === "mobile" ? "Mobile money top-up" : "Cash top-up at counter", topupTender);
     showToast(`Topped up ${formatTZS(topupAmt)} (${topupTender === "mobile" ? "Mobile" : "Cash"}) to ${freshCustomer.full_name}`);
   };
 
