@@ -171,6 +171,19 @@ function POS() {
                     <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="w-4 h-4" /> Wallet</div>
                     <div className="font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>
                   </div>
+                  {walletShort > 0 && lines.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                      <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
+                        <Banknote className="w-3.5 h-3.5" /> Split payment — wallet short by {formatTZS(walletShort)}
+                      </div>
+                      <label className="block">
+                        <span className="text-xs text-muted-foreground">Cash top-up for this sale (TZS)</span>
+                        <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)}
+                          className="mt-1 font-semibold bg-background" />
+                      </label>
+                      <div className="text-xs text-muted-foreground">Wallet pays {formatTZS(Math.max(0, total - Math.max(splitCash, walletShort)))} · Cash pays {formatTZS(Math.max(splitCash, walletShort))}</div>
+                    </div>
+                  )}
                 </>
               )}
             </>
