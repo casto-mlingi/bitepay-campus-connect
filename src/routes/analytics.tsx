@@ -92,7 +92,7 @@ function AnalyticsPage() {
                     <div className="font-semibold text-sm">{prod?.emoji} {prod?.name}</div>
                     <div className="text-xs text-muted-foreground">{b.id} · {b.plates_remaining}/{b.plates} left · {formatTZS(b.unit_cost)}/plate</div>
                   </div>
-                  <div className="font-mono text-sm">{formatTZS(b.raw_cost + b.labor_cost)}</div>
+                  <div className="font-mono text-sm">{formatTZS(b.raw_cost)}</div>
                 </li>
               );
             })}
