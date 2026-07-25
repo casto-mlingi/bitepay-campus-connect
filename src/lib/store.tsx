@@ -286,7 +286,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
       setCash((c) => c + amount);
     },
-    posSale(customerId, items, cashPortion = 0) {
+    posSale(customerId, items, cashPortion = 0, tender = "cash") {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
       const cust = profiles.find((p) => p.id === customerId);
       if (!cust) return null;
@@ -300,6 +300,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id, customer_id: cust.id, customer_name: cust.full_name, items,
         total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
         created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
+        tender: cashPart > 0 ? tender : undefined,
       };
       setOrders((prev) => [order, ...prev]);
       setProfiles((prev) => prev.map((p) => p.id === cust.id ? { ...p, wallet_balance: p.wallet_balance - walletPart + loyalty } : p));
@@ -309,10 +310,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (loyalty > 0) tx.push({ id: `tl${Date.now()}`, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
         return [...tx, ...prev];
       });
-      if (cashPart > 0) setCash((c) => c + cashPart);
+      if (cashPart > 0) {
+        if (tender === "mobile") setBank((b) => b + cashPart);
+        else setCash((c) => c + cashPart);
+      }
       return order;
     },
-    posCashSale(items, cashReceived, customerName = "Walk-in Cash") {
+    posCashSale(items, cashReceived, customerName = "Walk-in Cash", tender = "cash") {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
       if (total <= 0 || cashReceived < total) return null;
       const id = nextOrderId();
@@ -320,10 +324,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const order: Order = {
         id, customer_id: "walkin", customer_name: customerName, items,
         total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
-        created_at: Date.now(), receipt_no, cash_paid: cashReceived, wallet_paid: 0,
+        created_at: Date.now(), receipt_no, cash_paid: cashReceived, wallet_paid: 0, tender,
       };
       setOrders((prev) => [order, ...prev]);
-      setCash((c) => c + total);
+      if (tender === "mobile") setBank((b) => b + total);
+      else setCash((c) => c + total);
       return order;
     },
     findCustomer(query) {
