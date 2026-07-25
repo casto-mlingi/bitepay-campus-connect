@@ -133,6 +133,7 @@ type Ctx = {
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
+  transferFunds: (from: PaymentMethod, amount: number) => boolean;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
