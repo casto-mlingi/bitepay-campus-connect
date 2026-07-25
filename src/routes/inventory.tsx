@@ -164,7 +164,6 @@ function RawMaterialsPanel() {
 function BatchesPanel() {
   const { rawMaterials, products, batches, createBatch } = useStore();
   const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [labor, setLabor] = useState(15000);
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
@@ -174,7 +173,7 @@ function BatchesPanel() {
     return s + (r ? r.avg_cost * i.qty : 0);
   }, 0), [ings, rawMaterials]);
 
-  const unitCost = plates > 0 ? Math.round((rawCost + labor) / plates) : 0;
+  const unitCost = plates > 0 ? Math.round(rawCost / plates) : 0;
 
   const addIng = () => {
     const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id));
