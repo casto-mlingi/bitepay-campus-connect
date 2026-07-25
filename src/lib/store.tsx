@@ -115,6 +115,7 @@ type Ctx = {
   purchases: Purchase[];
   expenses: Expense[];
   cash: number;
+  bank: number;
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
@@ -199,12 +200,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cash, setCash] = useState<number>(500000);
+  const [bank, setBank] = useState<number>(1500000);
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
-    purchases, expenses, cash,
+    purchases, expenses, cash, bank,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
@@ -316,7 +318,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Weighted average cost recalculation
       const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
       setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
-      setCash((c) => c - total_cost);
+      if (payment_method === "bank") setBank((b) => b - total_cost);
+      else setCash((c) => c - total_cost);
       const purchase: Purchase = {
         id: `PO-${Date.now()}`, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
         qty, total_cost, payment_method,
@@ -328,10 +331,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (amount <= 0) return null;
       const exp: Expense = { id: `EX-${Date.now()}`, date: date ?? Date.now(), category, amount, description, payment_method };
       setExpenses((prev) => [exp, ...prev]);
-      setCash((c) => c - amount);
+      if (payment_method === "bank") setBank((b) => b - amount);
+      else setCash((c) => c - amount);
       return exp;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

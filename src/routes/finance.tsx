@@ -23,7 +23,7 @@ type Tab = "treasury" | "procurement" | "expenses" | "pnl";
 
 function FinancePage() {
   const {
-    currentUser, cash, rawMaterials, batches, profiles, orders, purchases, expenses,
+    currentUser, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
     recordPurchase, recordExpense,
   } = useStore();
   const navigate = useNavigate();
@@ -76,6 +76,7 @@ function FinancePage() {
       {tab === "treasury" && (
         <Treasury
           cash={cash}
+          bank={bank}
           totalInventoryValue={totalInventoryValue}
           rawInventoryValue={rawInventoryValue}
           finishedGoodsValue={finishedGoodsValue}
@@ -117,21 +118,36 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 }
 
 function Treasury({
-  cash, totalInventoryValue, rawInventoryValue, finishedGoodsValue, walletLiabilities,
+  cash, bank, totalInventoryValue, rawInventoryValue, finishedGoodsValue, walletLiabilities,
   netProfit, grossRevenue, cogs, opex,
 }: {
-  cash: number; totalInventoryValue: number; rawInventoryValue: number; finishedGoodsValue: number;
+  cash: number; bank: number; totalInventoryValue: number; rawInventoryValue: number; finishedGoodsValue: number;
   walletLiabilities: number; netProfit: number; grossRevenue: number; cogs: number; opex: number;
 }) {
+  const totalAssets = cash + bank + totalInventoryValue;
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         <MetricCard
-          label="Working Capital"
-          sublabel="Cash available"
+          label="Cash on Hand"
+          sublabel="Working capital (cash)"
           value={formatTZS(cash)}
           icon={<Banknote className="w-5 h-5" />}
           tone="primary"
+        />
+        <MetricCard
+          label="Bank Balance"
+          sublabel="Funds in bank account"
+          value={formatTZS(bank)}
+          icon={<Wallet className="w-5 h-5" />}
+          tone="success"
+        />
+        <MetricCard
+          label="Total Liquidity"
+          sublabel="Cash + Bank"
+          value={formatTZS(cash + bank)}
+          icon={<TrendingUp className="w-5 h-5" />}
+          tone="neutral"
         />
         <MetricCard
           label="Total Inventory Value"
@@ -173,12 +189,13 @@ function Treasury({
         <div className="bg-surface border rounded-2xl p-5">
           <h2 className="font-bold mb-4 flex items-center gap-2"><Package className="w-5 h-5 text-primary" /> Balance Composition</h2>
           <div className="space-y-3 text-sm">
-            <Bar label="Cash" value={cash} total={cash + totalInventoryValue} color="bg-primary" />
-            <Bar label="Raw Materials" value={rawInventoryValue} total={cash + totalInventoryValue} color="bg-amber-500" />
-            <Bar label="Finished Goods" value={finishedGoodsValue} total={cash + totalInventoryValue} color="bg-emerald-500" />
+            <Bar label="Cash" value={cash} total={totalAssets} color="bg-primary" />
+            <Bar label="Bank" value={bank} total={totalAssets} color="bg-emerald-500" />
+            <Bar label="Raw Materials" value={rawInventoryValue} total={totalAssets} color="bg-amber-500" />
+            <Bar label="Finished Goods" value={finishedGoodsValue} total={totalAssets} color="bg-sky-500" />
             <div className="border-t pt-3 flex justify-between font-semibold">
               <span>Total Assets</span>
-              <span>{formatTZS(cash + totalInventoryValue)}</span>
+              <span>{formatTZS(totalAssets)}</span>
             </div>
             <div className="flex justify-between text-muted-foreground text-xs">
               <span>Less: Wallet Liabilities</span>
@@ -186,7 +203,7 @@ function Treasury({
             </div>
             <div className="flex justify-between font-bold text-sm">
               <span>Net Equity</span>
-              <span>{formatTZS(cash + totalInventoryValue - walletLiabilities)}</span>
+              <span>{formatTZS(totalAssets - walletLiabilities)}</span>
             </div>
           </div>
         </div>
@@ -245,7 +262,7 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
 }
 
 function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
-  const { rawMaterials, purchases, cash } = useStore();
+  const { rawMaterials, purchases, cash, bank } = useStore();
   const [supplier, setSupplier] = useState("");
   const [rawId, setRawId] = useState("");
   const [qty, setQty] = useState(1);
@@ -309,7 +326,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
         </Field>
         <div className="bg-muted rounded-xl p-3 text-xs space-y-1">
           <div className="flex justify-between"><span className="text-muted-foreground">Per unit</span><span className="font-mono font-semibold">{formatTZS(perUnit)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Working capital after</span><span className="font-mono font-semibold">{formatTZS(cash - totalCost)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{method === "bank" ? "Bank" : "Cash"} balance after</span><span className="font-mono font-semibold">{formatTZS((method === "bank" ? bank : cash) - totalCost)}</span></div>
         </div>
         <button className="w-full bg-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90">
           <Plus className="w-4 h-4" /> Record Purchase
