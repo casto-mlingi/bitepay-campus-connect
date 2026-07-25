@@ -246,8 +246,8 @@ function BatchesPanel() {
           <div className="text-xs uppercase tracking-wider opacity-80 flex items-center gap-1"><Calculator className="w-3 h-3" /> Live Cost Preview</div>
           <div className="mt-4 space-y-1 text-sm opacity-90">
             <Row label="Raw Materials" value={formatTZS(rawCost)} />
-            <Row label="Labor / Overhead" value={formatTZS(labor)} />
             <Row label="Plates" value={String(plates)} />
+
           </div>
           <div className="mt-4 pt-4 border-t border-white/30">
             <div className="text-xs uppercase opacity-80">Unit Cost per Plate</div>
