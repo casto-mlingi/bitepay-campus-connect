@@ -38,6 +38,7 @@ export type Order = {
   cash_paid?: number;
   wallet_paid?: number;
   loyalty_earned?: number;
+  tender?: "cash" | "mobile";
 };
 
 export type Transaction = {
