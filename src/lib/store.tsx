@@ -414,7 +414,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
