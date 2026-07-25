@@ -59,16 +59,22 @@ function POS() {
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
+  const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
+  const [splitCash, setSplitCash] = useState<number>(0);
+  useEffect(() => { setSplitCash(walletShort); }, [walletShort]);
+
   const doWalletSale = () => {
     if (!freshCustomer) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    const o = posSale(freshCustomer.id, items);
+    const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
+    const o = posSale(freshCustomer.id, items, cashPortion);
     if (!o) { showToast("Insufficient wallet balance"); return; }
-    const extras: ReceiptExtras = { paymentMode: "wallet", cashierName: currentUser?.full_name };
+    const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: o, extras });
     printReceipt(o, extras);
     setLines([]);
-    showToast(`Sale ${o.id} — receipt printed`);
+    setSplitCash(0);
+    showToast(`Sale ${o.receipt_no ?? o.id} — receipt printed`);
   };
 
   const doCashSale = () => {
