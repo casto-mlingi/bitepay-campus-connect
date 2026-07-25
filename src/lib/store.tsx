@@ -34,6 +34,10 @@ export type Order = {
   delivery_type: DeliveryType;
   payment_status: "paid" | "unpaid";
   created_at: number;
+  receipt_no?: string;
+  cash_paid?: number;
+  wallet_paid?: number;
+  loyalty_earned?: number;
 };
 
 export type Transaction = {
