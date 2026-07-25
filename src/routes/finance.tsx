@@ -326,7 +326,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
         </Field>
         <div className="bg-muted rounded-xl p-3 text-xs space-y-1">
           <div className="flex justify-between"><span className="text-muted-foreground">Per unit</span><span className="font-mono font-semibold">{formatTZS(perUnit)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Working capital after</span><span className="font-mono font-semibold">{formatTZS(cash - totalCost)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{method === "bank" ? "Bank" : "Cash"} balance after</span><span className="font-mono font-semibold">{formatTZS((method === "bank" ? bank : cash) - totalCost)}</span></div>
         </div>
         <button className="w-full bg-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90">
           <Plus className="w-4 h-4" /> Record Purchase
