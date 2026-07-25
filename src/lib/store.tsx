@@ -281,10 +281,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
     },
-    topUp(customerId, amount, description = "Cash top-up at counter") {
+    topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash") {
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
-      setCash((c) => c + amount);
+      if (tender === "mobile") setBank((b) => b + amount);
+      else setCash((c) => c + amount);
     },
     posSale(customerId, items, cashPortion = 0, tender = "cash") {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
