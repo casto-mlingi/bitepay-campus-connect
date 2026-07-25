@@ -336,6 +336,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else setCash((c) => c - amount);
       return exp;
     },
+    transferFunds(from, amount) {
+      if (amount <= 0) return false;
+      if (from === "cash") {
+        if (cash < amount) return false;
+        setCash((c) => c - amount);
+        setBank((b) => b + amount);
+      } else {
+        if (bank < amount) return false;
+        setBank((b) => b - amount);
+        setCash((c) => c + amount);
+      }
+      return true;
+    },
   }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
