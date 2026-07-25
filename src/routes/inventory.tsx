@@ -83,17 +83,35 @@ function RawMaterialsPanel() {
 
       {showForm && (
         <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">
-          <input required placeholder="Name" className="col-span-2 px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input placeholder="Category" className="px-3 py-2 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-          <select className="px-3 py-2 rounded-lg border bg-background" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as "kg" | "liters" | "pcs" })}>
-            <option value="kg">kg</option>
-            <option value="liters">liters</option>
-            <option value="pcs">pcs</option>
-          </select>
-          <input type="number" placeholder="Stock" className="px-3 py-2 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
-          <input type="number" placeholder="Cost/Unit" className="px-3 py-2 rounded-lg border bg-background" value={form.avg_cost} onChange={(e) => setForm({ ...form, avg_cost: Number(e.target.value) })} />
-          <input type="number" placeholder="Low Threshold" className="col-span-2 px-3 py-2 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
-          <button className="col-span-2 md:col-span-1 bg-foreground text-background rounded-lg font-semibold text-sm py-2">Save</button>
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Item Name</div>
+            <input required placeholder="e.g. Rice" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Category</div>
+            <input placeholder="e.g. Grains" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Unit</div>
+            <select className="w-full px-3 py-2 rounded-lg border bg-background" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as "kg" | "liters" | "pcs" })}>
+              <option value="kg">kg</option>
+              <option value="liters">liters</option>
+              <option value="pcs">pcs</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Stock</div>
+            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Cost / Unit (TZS)</div>
+            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.avg_cost} onChange={(e) => setForm({ ...form, avg_cost: Number(e.target.value) })} />
+          </label>
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Low Stock Threshold</div>
+            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
+          </label>
+          <button className="col-span-2 md:col-span-1 bg-foreground text-background rounded-lg font-semibold text-sm py-2 self-end">Save</button>
         </form>
       )}
 
