@@ -133,6 +133,7 @@ type Ctx = {
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
+  transferFunds: (from: PaymentMethod, amount: number) => boolean;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -334,6 +335,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (payment_method === "bank") setBank((b) => b - amount);
       else setCash((c) => c - amount);
       return exp;
+    },
+    transferFunds(from, amount) {
+      if (amount <= 0) return false;
+      if (from === "cash") {
+        if (cash < amount) return false;
+        setCash((c) => c - amount);
+        setBank((b) => b + amount);
+      } else {
+        if (bank < amount) return false;
+        setBank((b) => b - amount);
+        setCash((c) => c + amount);
+      }
+      return true;
     },
   }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
 

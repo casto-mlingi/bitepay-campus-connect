@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight,
+  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
@@ -124,10 +124,29 @@ function Treasury({
   cash: number; bank: number; totalInventoryValue: number; rawInventoryValue: number; finishedGoodsValue: number;
   walletLiabilities: number; netProfit: number; grossRevenue: number; cogs: number; opex: number;
 }) {
+  const { transferFunds } = useStore();
   const totalAssets = cash + bank + totalInventoryValue;
+  const [transferOpen, setTransferOpen] = useState(false);
   return (
     <>
+      <div className="flex items-center justify-end mb-4">
+        <button
+          onClick={() => setTransferOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white font-semibold text-sm hover:opacity-90"
+        >
+          <ArrowLeftRight className="w-4 h-4" /> Transfer Funds
+        </button>
+      </div>
+      {transferOpen && (
+        <TransferModal
+          cash={cash}
+          bank={bank}
+          onClose={() => setTransferOpen(false)}
+          onTransfer={transferFunds}
+        />
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+
         <MetricCard
           label="Cash on Hand"
           sublabel="Working capital (cash)"
@@ -211,6 +230,81 @@ function Treasury({
     </>
   );
 }
+
+function TransferModal({
+  cash, bank, onClose, onTransfer,
+}: {
+  cash: number; bank: number; onClose: () => void;
+  onTransfer: (from: PaymentMethod, amount: number) => boolean;
+}) {
+  const [from, setFrom] = useState<PaymentMethod>("cash");
+  const [amount, setAmount] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const to: PaymentMethod = from === "cash" ? "bank" : "cash";
+  const available = from === "cash" ? cash : bank;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    if (amount <= 0) { setErr("Enter an amount greater than 0."); return; }
+    if (amount > available) { setErr("Amount exceeds available balance."); return; }
+    const ok = onTransfer(from, amount);
+    if (!ok) { setErr("Transfer failed."); return; }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4" onClick={onClose}>
+      <form
+        onSubmit={submit}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface rounded-2xl border shadow-xl w-full max-w-md p-5 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+            <ArrowLeftRight className="w-5 h-5 text-primary" /> Transfer Funds
+          </h3>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-muted">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setFrom("cash")}
+            className={`p-3 rounded-xl border text-left ${from === "cash" ? "border-primary bg-primary/5" : ""}`}>
+            <div className="text-[10px] uppercase text-muted-foreground font-semibold">From</div>
+            <div className="font-bold">Cash on Hand</div>
+            <div className="text-xs text-muted-foreground">{formatTZS(cash)}</div>
+          </button>
+          <button type="button" onClick={() => setFrom("bank")}
+            className={`p-3 rounded-xl border text-left ${from === "bank" ? "border-primary bg-primary/5" : ""}`}>
+            <div className="text-[10px] uppercase text-muted-foreground font-semibold">From</div>
+            <div className="font-bold">Bank Account</div>
+            <div className="text-xs text-muted-foreground">{formatTZS(bank)}</div>
+          </button>
+        </div>
+        <div className="text-center text-xs text-muted-foreground">
+          Sending to <span className="font-semibold capitalize text-foreground">{to === "bank" ? "Bank Account" : "Cash on Hand"}</span>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground">Amount (TZS)</label>
+          <input
+            type="number" min={0} value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            placeholder="0"
+            className="w-full px-3 py-2 rounded-lg border bg-background mt-1"
+          />
+          <div className="text-[11px] text-muted-foreground mt-1">Available: {formatTZS(available)}</div>
+        </div>
+        {err && <div className="text-xs text-red-500 font-semibold">{err}</div>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border font-semibold text-sm">Cancel</button>
+          <button className="flex-1 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm">Confirm Transfer</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 
 function MetricCard({
   label, sublabel, value, icon, tone,
