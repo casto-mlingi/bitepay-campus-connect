@@ -59,16 +59,22 @@ function POS() {
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
+  const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
+  const [splitCash, setSplitCash] = useState<number>(0);
+  useEffect(() => { setSplitCash(walletShort); }, [walletShort]);
+
   const doWalletSale = () => {
     if (!freshCustomer) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    const o = posSale(freshCustomer.id, items);
+    const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
+    const o = posSale(freshCustomer.id, items, cashPortion);
     if (!o) { showToast("Insufficient wallet balance"); return; }
-    const extras: ReceiptExtras = { paymentMode: "wallet", cashierName: currentUser?.full_name };
+    const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: o, extras });
     printReceipt(o, extras);
     setLines([]);
-    showToast(`Sale ${o.id} — receipt printed`);
+    setSplitCash(0);
+    showToast(`Sale ${o.receipt_no ?? o.id} — receipt printed`);
   };
 
   const doCashSale = () => {
@@ -93,7 +99,7 @@ function POS() {
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
-  const canWallet = !!freshCustomer && lines.length > 0 && (freshCustomer.wallet_balance >= total);
+  const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
   const canCash = lines.length > 0 && cashReceived >= total && total > 0;
 
   return (
@@ -165,6 +171,19 @@ function POS() {
                     <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="w-4 h-4" /> Wallet</div>
                     <div className="font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>
                   </div>
+                  {walletShort > 0 && lines.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                      <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
+                        <Banknote className="w-3.5 h-3.5" /> Split payment — wallet short by {formatTZS(walletShort)}
+                      </div>
+                      <label className="block">
+                        <span className="text-xs text-muted-foreground">Cash top-up for this sale (TZS)</span>
+                        <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)}
+                          className="mt-1 font-semibold bg-background" />
+                      </label>
+                      <div className="text-xs text-muted-foreground">Wallet pays {formatTZS(Math.max(0, total - Math.max(splitCash, walletShort)))} · Cash pays {formatTZS(Math.max(splitCash, walletShort))}</div>
+                    </div>
+                  )}
                 </>
               )}
             </>
@@ -244,10 +263,11 @@ function POS() {
           {lastReceipt && (
             <div className="mt-4 rounded-xl border bg-muted/30 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.id}
+                <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.receipt_no ?? lastReceipt.order.id}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
+                {(lastReceipt.order.loyalty_earned ?? 0) > 0 && <span className="text-success"> · +{formatTZS(lastReceipt.order.loyalty_earned ?? 0)} loyalty</span>}
               </div>
               <div className="flex gap-2 mt-2">
                 <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}>

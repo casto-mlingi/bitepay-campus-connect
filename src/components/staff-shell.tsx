@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 
-export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance";
+export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
   const { currentUser, logout } = useStore();
@@ -42,6 +42,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
             <nav className="hidden md:flex items-center gap-1">
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="Walk-in POS" active={active === "pos"} />
+              <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
               <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Store & Inventory" active={active === "inventory"} />
               <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />
               <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />
@@ -66,6 +67,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
         <div className="md:hidden max-w-7xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto">
           <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Orders" active={active === "orders"} />
           <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
+          <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
           <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />
           <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />
           <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />

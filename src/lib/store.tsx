@@ -34,6 +34,10 @@ export type Order = {
   delivery_type: DeliveryType;
   payment_status: "paid" | "unpaid";
   created_at: number;
+  receipt_no?: string;
+  cash_paid?: number;
+  wallet_paid?: number;
+  loyalty_earned?: number;
 };
 
 export type Transaction = {
@@ -125,9 +129,10 @@ type Ctx = {
   placeOrder: (deliveryType: DeliveryType) => Order | null;
   advanceOrder: (id: string) => void;
   topUp: (customerId: string, amount: number, description?: string) => void;
-  posSale: (customerId: string, items: OrderItem[]) => Order | null;
+  posSale: (customerId: string, items: OrderItem[], cashPortion?: number) => Order | null;
   posCashSale: (items: OrderItem[], cashReceived: number, customerName?: string) => Order | null;
   findCustomer: (query: string) => Profile | null;
+  addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
   updateRawStock: (id: string, delta: number) => void;
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
@@ -180,6 +185,13 @@ const seedTx: Transaction[] = [
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
 
+const pad = (n: number, w = 3) => String(n).padStart(w, "0");
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
+};
+const LOYALTY_RATE = 0.01; // 1% cashback on every sale (paid portion)
+
 const seedRaw: RawMaterial[] = [
   { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
   { id: "r2", name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
@@ -203,6 +215,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cash, setCash] = useState<number>(500000);
   const [bank, setBank] = useState<number>(1500000);
+  const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
+
+  const nextReceiptNo = () => {
+    const day = todayKey();
+    let no = "";
+    setReceiptSeq((prev) => {
+      const next = prev.day === day ? { day, n: prev.n + 1 } : { day, n: 1 };
+      no = `R-${day}-${pad(next.n)}`;
+      return next;
+    });
+    // fallback synchronous compute
+    const nextN = receiptSeq.day === day ? receiptSeq.n + 1 : 1;
+    return no || `R-${day}-${pad(nextN)}`;
+  };
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
@@ -259,29 +285,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
       setCash((c) => c + amount);
     },
-    posSale(customerId, items) {
+    posSale(customerId, items, cashPortion = 0) {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
       const cust = profiles.find((p) => p.id === customerId);
-      if (!cust || cust.wallet_balance < total) return null;
+      if (!cust) return null;
+      const cashPart = Math.max(0, Math.min(cashPortion, total));
+      const walletPart = total - cashPart;
+      if (cust.wallet_balance < walletPart) return null;
       const id = nextOrderId();
+      const receipt_no = nextReceiptNo();
+      const loyalty = Math.round(total * LOYALTY_RATE);
       const order: Order = {
         id, customer_id: cust.id, customer_name: cust.full_name, items,
         total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
-        created_at: Date.now(),
+        created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
       };
       setOrders((prev) => [order, ...prev]);
-      setProfiles((prev) => prev.map((p) => p.id === cust.id ? { ...p, wallet_balance: p.wallet_balance - total } : p));
-      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: total, description: `POS ${id}`, created_at: Date.now() }, ...prev]);
+      setProfiles((prev) => prev.map((p) => p.id === cust.id ? { ...p, wallet_balance: p.wallet_balance - walletPart + loyalty } : p));
+      setTransactions((prev) => {
+        const tx: Transaction[] = [];
+        if (walletPart > 0) tx.push({ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
+        if (loyalty > 0) tx.push({ id: `tl${Date.now()}`, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
+        return [...tx, ...prev];
+      });
+      if (cashPart > 0) setCash((c) => c + cashPart);
       return order;
     },
     posCashSale(items, cashReceived, customerName = "Walk-in Cash") {
       const total = items.reduce((s, i) => s + i.price * i.qty, 0);
       if (total <= 0 || cashReceived < total) return null;
       const id = nextOrderId();
+      const receipt_no = nextReceiptNo();
       const order: Order = {
         id, customer_id: "walkin", customer_name: customerName, items,
         total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
-        created_at: Date.now(),
+        created_at: Date.now(), receipt_no, cash_paid: cashReceived, wallet_paid: 0,
       };
       setOrders((prev) => [order, ...prev]);
       setCash((c) => c + total);
@@ -291,6 +329,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const q = query.trim().toLowerCase();
       if (!q) return null;
       return profiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
+    },
+    addCustomer({ full_name, phone, initial_balance = 0 }) {
+      const name = full_name.trim();
+      const ph = phone.trim();
+      if (!name || !ph) return null;
+      if (profiles.some((p) => p.phone === ph)) return null;
+      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer" };
+      setProfiles((prev) => [...prev, u]);
+      if (initial_balance > 0) {
+        setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
+        setCash((c) => c + initial_balance);
+      }
+      return u;
     },
     addRawMaterial(r) {
       setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]);
@@ -363,7 +414,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

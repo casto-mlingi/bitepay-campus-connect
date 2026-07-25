@@ -15,7 +15,8 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
   lines.push("           BitePay");
   lines.push("   College Canteen & Hotel");
   lines.push(line);
-  lines.push(`Receipt : ${order.id}`);
+  lines.push(`Receipt : ${order.receipt_no ?? order.id}`);
+  lines.push(`Order   : ${order.id}`);
   lines.push(`Date    : ${date}`);
   lines.push(`Customer: ${order.customer_name}`);
   if (extras.cashierName) lines.push(`Cashier : ${extras.cashierName}`);
@@ -30,9 +31,16 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
   });
   lines.push(line);
   lines.push(`TOTAL              ${formatTZS(order.total_amount).padStart(13)}`);
+  if ((order.wallet_paid ?? 0) > 0 && (order.cash_paid ?? 0) > 0) {
+    lines.push(`WALLET             ${formatTZS(order.wallet_paid ?? 0).padStart(13)}`);
+    lines.push(`CASH               ${formatTZS(order.cash_paid ?? 0).padStart(13)}`);
+  }
   if (extras.paymentMode === "cash" && extras.cashReceived != null) {
     lines.push(`CASH               ${formatTZS(extras.cashReceived).padStart(13)}`);
     lines.push(`CHANGE             ${formatTZS(extras.change ?? 0).padStart(13)}`);
+  }
+  if ((order.loyalty_earned ?? 0) > 0) {
+    lines.push(`Loyalty earned     ${formatTZS(order.loyalty_earned ?? 0).padStart(13)}`);
   }
   lines.push(line);
   lines.push("     Thank you & enjoy!");
