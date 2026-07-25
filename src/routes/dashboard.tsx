@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Wallet, ShoppingBag, ClipboardList, ArrowUpCircle, ArrowRight, Clock, CheckCircle2, ChefHat, Bell } from "lucide-react";
+import { Wallet, ShoppingBag, ClipboardList, ArrowUpCircle, ArrowRight, Clock, CheckCircle2, ChefHat, Bell, Download, Printer } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
+import { downloadReceipt, printReceipt } from "@/lib/receipt";
 import { CustomerShell } from "@/components/customer-shell";
 
 export const Route = createFileRoute("/dashboard")({
