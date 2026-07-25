@@ -115,6 +115,7 @@ type Ctx = {
   purchases: Purchase[];
   expenses: Expense[];
   cash: number;
+  bank: number;
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
