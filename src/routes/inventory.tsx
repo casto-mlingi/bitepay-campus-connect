@@ -176,8 +176,9 @@ function BatchesPanel() {
   const unitCost = plates > 0 ? Math.round(rawCost / plates) : 0;
 
   const addIng = () => {
-    const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id));
-    if (avail) setIngs([...ings, { raw_id: avail.id, qty: 1 }]);
+    if (rawMaterials.length === 0) return;
+    const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id)) ?? rawMaterials[0];
+    setIngs([...ings, { raw_id: avail.id, qty: 1 }]);
   };
   const updateIng = (i: number, patch: Partial<BatchIngredient>) => setIngs(ings.map((x, idx) => idx === i ? { ...x, ...patch } : x));
   const removeIng = (i: number) => setIngs(ings.filter((_, idx) => idx !== i));
