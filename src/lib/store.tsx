@@ -215,6 +215,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cash, setCash] = useState<number>(500000);
   const [bank, setBank] = useState<number>(1500000);
+  const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
+
+  const nextReceiptNo = () => {
+    const day = todayKey();
+    let no = "";
+    setReceiptSeq((prev) => {
+      const next = prev.day === day ? { day, n: prev.n + 1 } : { day, n: 1 };
+      no = `R-${day}-${pad(next.n)}`;
+      return next;
+    });
+    // fallback synchronous compute
+    const nextN = receiptSeq.day === day ? receiptSeq.n + 1 : 1;
+    return no || `R-${day}-${pad(nextN)}`;
+  };
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
 
