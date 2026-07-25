@@ -185,6 +185,13 @@ const seedTx: Transaction[] = [
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
 
+const pad = (n: number, w = 3) => String(n).padStart(w, "0");
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
+};
+const LOYALTY_RATE = 0.01; // 1% cashback on every sale (paid portion)
+
 const seedRaw: RawMaterial[] = [
   { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
   { id: "r2", name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
