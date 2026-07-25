@@ -318,7 +318,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Weighted average cost recalculation
       const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
       setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
-      setCash((c) => c - total_cost);
+      if (payment_method === "bank") setBank((b) => b - total_cost);
+      else setCash((c) => c - total_cost);
       const purchase: Purchase = {
         id: `PO-${Date.now()}`, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
         qty, total_cost, payment_method,
