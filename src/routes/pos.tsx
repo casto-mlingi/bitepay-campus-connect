@@ -263,10 +263,11 @@ function POS() {
           {lastReceipt && (
             <div className="mt-4 rounded-xl border bg-muted/30 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.id}
+                <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.receipt_no ?? lastReceipt.order.id}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
+                {(lastReceipt.order.loyalty_earned ?? 0) > 0 && <span className="text-success"> · +{formatTZS(lastReceipt.order.loyalty_earned ?? 0)} loyalty</span>}
               </div>
               <div className="flex gap-2 mt-2">
                 <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}>
