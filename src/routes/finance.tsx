@@ -124,10 +124,29 @@ function Treasury({
   cash: number; bank: number; totalInventoryValue: number; rawInventoryValue: number; finishedGoodsValue: number;
   walletLiabilities: number; netProfit: number; grossRevenue: number; cogs: number; opex: number;
 }) {
+  const { transferFunds } = useStore();
   const totalAssets = cash + bank + totalInventoryValue;
+  const [transferOpen, setTransferOpen] = useState(false);
   return (
     <>
+      <div className="flex items-center justify-end mb-4">
+        <button
+          onClick={() => setTransferOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white font-semibold text-sm hover:opacity-90"
+        >
+          <ArrowLeftRight className="w-4 h-4" /> Transfer Funds
+        </button>
+      </div>
+      {transferOpen && (
+        <TransferModal
+          cash={cash}
+          bank={bank}
+          onClose={() => setTransferOpen(false)}
+          onTransfer={transferFunds}
+        />
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+
         <MetricCard
           label="Cash on Hand"
           sublabel="Working capital (cash)"
