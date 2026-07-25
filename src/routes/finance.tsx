@@ -76,6 +76,7 @@ function FinancePage() {
       {tab === "treasury" && (
         <Treasury
           cash={cash}
+          bank={bank}
           totalInventoryValue={totalInventoryValue}
           rawInventoryValue={rawInventoryValue}
           finishedGoodsValue={finishedGoodsValue}
