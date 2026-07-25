@@ -184,7 +184,7 @@ function BatchesPanel() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const b = createBatch({ product_id: productId, ingredients: ings, labor_cost: labor, plates });
+    const b = createBatch({ product_id: productId, ingredients: ings, labor_cost: 0, plates });
     if (!b) { setFlash("⚠️ Not enough stock or invalid input"); return; }
     setFlash(`✅ Batch ${b.id} created — cost ${formatTZS(b.unit_cost)} / plate`);
     setIngs([]);
