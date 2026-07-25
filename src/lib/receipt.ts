@@ -20,7 +20,8 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
   lines.push(`Date    : ${date}`);
   lines.push(`Customer: ${order.customer_name}`);
   if (extras.cashierName) lines.push(`Cashier : ${extras.cashierName}`);
-  lines.push(`Payment : ${(extras.paymentMode ?? "wallet").toUpperCase()}`);
+  const tenderLabel = order.tender === "mobile" ? "MOBILE MONEY" : (extras.paymentMode ?? "wallet").toUpperCase();
+  lines.push(`Payment : ${tenderLabel}`);
   lines.push(line);
   lines.push("Item                 Qty   Amount");
   order.items.forEach((i) => {
