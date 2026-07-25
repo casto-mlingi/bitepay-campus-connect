@@ -99,7 +99,7 @@ function POS() {
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
-  const canWallet = !!freshCustomer && lines.length > 0 && (freshCustomer.wallet_balance >= total);
+  const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
   const canCash = lines.length > 0 && cashReceived >= total && total > 0;
 
   return (
