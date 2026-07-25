@@ -164,7 +164,6 @@ function RawMaterialsPanel() {
 function BatchesPanel() {
   const { rawMaterials, products, batches, createBatch } = useStore();
   const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [labor, setLabor] = useState(15000);
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
@@ -174,7 +173,7 @@ function BatchesPanel() {
     return s + (r ? r.avg_cost * i.qty : 0);
   }, 0), [ings, rawMaterials]);
 
-  const unitCost = plates > 0 ? Math.round((rawCost + labor) / plates) : 0;
+  const unitCost = plates > 0 ? Math.round(rawCost / plates) : 0;
 
   const addIng = () => {
     const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id));
@@ -185,7 +184,7 @@ function BatchesPanel() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const b = createBatch({ product_id: productId, ingredients: ings, labor_cost: labor, plates });
+    const b = createBatch({ product_id: productId, ingredients: ings, labor_cost: 0, plates });
     if (!b) { setFlash("⚠️ Not enough stock or invalid input"); return; }
     setFlash(`✅ Batch ${b.id} created — cost ${formatTZS(b.unit_cost)} / plate`);
     setIngs([]);
@@ -211,11 +210,8 @@ function BatchesPanel() {
             <div className="text-muted-foreground mb-1">Total Plates Produced</div>
             <input type="number" min={1} value={plates} onChange={(e) => setPlates(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border bg-background" />
           </label>
-          <label className="text-sm md:col-span-2">
-            <div className="text-muted-foreground mb-1">Daily Labor / Overhead Cost (TZS)</div>
-            <input type="number" min={0} value={labor} onChange={(e) => setLabor(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border bg-background" />
-          </label>
         </div>
+
 
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -250,8 +246,8 @@ function BatchesPanel() {
           <div className="text-xs uppercase tracking-wider opacity-80 flex items-center gap-1"><Calculator className="w-3 h-3" /> Live Cost Preview</div>
           <div className="mt-4 space-y-1 text-sm opacity-90">
             <Row label="Raw Materials" value={formatTZS(rawCost)} />
-            <Row label="Labor / Overhead" value={formatTZS(labor)} />
             <Row label="Plates" value={String(plates)} />
+
           </div>
           <div className="mt-4 pt-4 border-t border-white/30">
             <div className="text-xs uppercase opacity-80">Unit Cost per Plate</div>

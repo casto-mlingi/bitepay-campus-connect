@@ -34,7 +34,7 @@ function AnalyticsPage() {
   const todaysOrders = orders.filter((o) => o.created_at >= startOfDay);
   const revenue = todaysOrders.reduce((s, o) => s + o.total_amount, 0);
   const todaysBatches = batches.filter((b) => b.created_at >= startOfDay);
-  const batchCost = todaysBatches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
+  const batchCost = todaysBatches.reduce((s, b) => s + b.raw_cost, 0);
   const profit = revenue - batchCost;
   const margin = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
   const todaysWastage = wastage.filter((w) => w.created_at >= startOfDay);
@@ -92,7 +92,7 @@ function AnalyticsPage() {
                     <div className="font-semibold text-sm">{prod?.emoji} {prod?.name}</div>
                     <div className="text-xs text-muted-foreground">{b.id} · {b.plates_remaining}/{b.plates} left · {formatTZS(b.unit_cost)}/plate</div>
                   </div>
-                  <div className="font-mono text-sm">{formatTZS(b.raw_cost + b.labor_cost)}</div>
+                  <div className="font-mono text-sm">{formatTZS(b.raw_cost)}</div>
                 </li>
               );
             })}
