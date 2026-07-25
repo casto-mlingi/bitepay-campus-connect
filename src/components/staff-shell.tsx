@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 
-export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance";
+export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
   const { currentUser, logout } = useStore();
