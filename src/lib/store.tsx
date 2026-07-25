@@ -331,10 +331,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (amount <= 0) return null;
       const exp: Expense = { id: `EX-${Date.now()}`, date: date ?? Date.now(), category, amount, description, payment_method };
       setExpenses((prev) => [exp, ...prev]);
-      setCash((c) => c - amount);
+      if (payment_method === "bank") setBank((b) => b - amount);
+      else setCash((c) => c - amount);
       return exp;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
