@@ -126,6 +126,7 @@ type Ctx = {
   advanceOrder: (id: string) => void;
   topUp: (customerId: string, amount: number, description?: string) => void;
   posSale: (customerId: string, items: OrderItem[]) => Order | null;
+  posCashSale: (items: OrderItem[], cashReceived: number, customerName?: string) => Order | null;
   findCustomer: (query: string) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
   updateRawStock: (id: string, delta: number) => void;
@@ -271,6 +272,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => [order, ...prev]);
       setProfiles((prev) => prev.map((p) => p.id === cust.id ? { ...p, wallet_balance: p.wallet_balance - total } : p));
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: total, description: `POS ${id}`, created_at: Date.now() }, ...prev]);
+      return order;
+    },
+    posCashSale(items, cashReceived, customerName = "Walk-in Cash") {
+      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+      if (total <= 0 || cashReceived < total) return null;
+      const id = nextOrderId();
+      const order: Order = {
+        id, customer_id: "walkin", customer_name: customerName, items,
+        total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
+        created_at: Date.now(),
+      };
+      setOrders((prev) => [order, ...prev]);
+      setCash((c) => c + total);
       return order;
     },
     findCustomer(query) {
