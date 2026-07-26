@@ -416,7 +416,7 @@ function POS() {
                   </>
                 )}
                 {!lastReceipt.order.is_reversal && !lastReceipt.order.reversed && (
-                  useStore().hasStaffRole("supervisor") ? (
+                  hasStaffRole("supervisor") ? (
                     <Button size="sm" variant="outline" onClick={doRefund} className="text-red-600 border-red-300 hover:bg-red-50">
                       <RotateCcw className="w-3.5 h-3.5 mr-1" /> Refund
                     </Button>
