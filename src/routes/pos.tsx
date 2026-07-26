@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone } from "lucide-react";
+import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck } from "lucide-react";
 import { useStore, formatTZS, type Product, type Profile, type Order } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { QRScannerModal } from "@/components/qr-scanner-modal";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
-  head: () => ({ meta: [{ title: "Walk-in POS — BitePay Staff" }, { name: "description", content: "Point of sale for wallet or cash customers with printable receipts." }] }),
+  head: () => ({ meta: [{ title: "Walk-in POS — BitePay Staff" }, { name: "description", content: "Point of sale with wallet, cash and mobile money (Lipa Namba), receipts, refunds and offline queue." }] }),
 });
 
 type Line = { product: Product; qty: number };
@@ -18,7 +18,8 @@ type Mode = "wallet" | "cash";
 type Tender = "cash" | "mobile";
 
 function POS() {
-  const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp } = useStore();
+  const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
+    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
@@ -28,9 +29,11 @@ function POS() {
   const [category, setCategory] = useState<string>("All");
   const [topupAmt, setTopupAmt] = useState<number>(10000);
   const [topupTender, setTopupTender] = useState<Tender>("cash");
+  const [topupRef, setTopupRef] = useState<string>("");
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
+  const [mobileRef, setMobileRef] = useState<string>("");
   const [toast, setToast] = useState<string>("");
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
 
@@ -55,6 +58,8 @@ function POS() {
   }, [query, profiles, freshCustomer]);
 
   const addLine = (p: Product) => {
+    const plates = availablePlates(p.id);
+    if (plates !== null && plates <= 0) { showToast(`${p.name} is out of stock`); return; }
     setLines((prev) => {
       const f = prev.find((l) => l.product.id === p.id);
       return f ? prev.map((l) => l.product.id === p.id ? { ...l, qty: l.qty + 1 } : l) : [...prev, { product: p, qty: 1 }];
@@ -71,54 +76,120 @@ function POS() {
     else showToast("QR did not match a customer");
   };
 
-  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2500); };
 
   const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
   const [splitCash, setSplitCash] = useState<number>(0);
   useEffect(() => { setSplitCash(walletShort); }, [walletShort]);
 
+  const requireShift = () => {
+    if (!activeShift) { showToast("Open a shift first"); return false; }
+    return true;
+  };
+
   const doWalletSale = () => {
     if (!freshCustomer) return;
+    if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
-    const o = posSale(freshCustomer.id, items, cashPortion, tender);
-    if (!o) { showToast("Insufficient wallet balance"); return; }
+    if (!isOnline) {
+      enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: mobileRef });
+      showToast("Offline — sale queued to outbox");
+      setLines([]); setSplitCash(0); setMobileRef("");
+      return;
+    }
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef });
+    if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
-    setLastReceipt({ order: o, extras });
-    printReceipt(o, extras);
-    setLines([]);
-    setSplitCash(0);
-    showToast(`Sale ${o.receipt_no ?? o.id} — receipt printed`);
+    setLastReceipt({ order: res.order, extras });
+    printReceipt(res.order, extras);
+    setLines([]); setSplitCash(0); setMobileRef("");
+    showToast(`Sale ${res.order.receipt_no ?? res.order.id} — receipt printed`);
   };
 
   const doCashSale = () => {
     if (lines.length === 0) return;
+    if (!requireShift()) return;
     const effectiveReceived = tender === "mobile" ? total : cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    const o = posCashSale(items, effectiveReceived, cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender);
-    if (!o) { showToast("Amount received is less than total"); return; }
+    if (!isOnline) {
+      enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: mobileRef });
+      showToast("Offline — sale queued to outbox");
+      setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
+      return;
+    }
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef });
+    if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
-    setLastReceipt({ order: o, extras });
-    printReceipt(o, extras);
-    setLines([]);
-    setCashReceived(0);
-    setCashName("");
-    showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${o.receipt_no ?? o.id}`);
+    setLastReceipt({ order: res.order, extras });
+    printReceipt(res.order, extras);
+    setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
+    showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${res.order.receipt_no ?? res.order.id}`);
   };
 
   const doTopUp = () => {
     if (!freshCustomer || topupAmt <= 0) return;
-    topUp(freshCustomer.id, topupAmt, topupTender === "mobile" ? "Mobile money top-up" : "Cash top-up at counter", topupTender);
-    showToast(`Topped up ${formatTZS(topupAmt)} (${topupTender === "mobile" ? "Mobile" : "Cash"}) to ${freshCustomer.full_name}`);
+    if (topupTender === "mobile" && !topupRef.trim()) { showToast("Mobile reference required"); return; }
+    topUp(freshCustomer.id, topupAmt, topupTender === "mobile" ? "Mobile money top-up" : "Cash top-up at counter", topupTender, topupRef);
+    showToast(`Topped up ${formatTZS(topupAmt)} to ${freshCustomer.full_name}`);
+    setTopupRef("");
+  };
+
+  const doRefund = () => {
+    if (!lastReceipt) return;
+    const reason = window.prompt("Reason for refund/reversal?", "Customer refund") ?? "";
+    if (!reason) return;
+    const res = reverseSale(lastReceipt.order.id, reason);
+    if (!res.ok) { showToast(res.reason); return; }
+    printReceipt(res.order, { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name });
+    setLastReceipt({ order: res.order, extras: { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name } });
+    showToast(`Credit note ${res.order.receipt_no ?? res.order.id} issued`);
+  };
+
+  const doSendReceipt = (channel: "sms" | "whatsapp") => {
+    if (!lastReceipt) return;
+    const log = sendReceiptMessage(lastReceipt.order, channel);
+    if (!log) { showToast("No phone on file for this customer"); return; }
+    showToast(`${channel === "sms" ? "SMS" : "WhatsApp"} receipt sent to ${log.to_phone}`);
+  };
+
+  const doSync = () => {
+    const r = syncOutbox();
+    showToast(`Synced ${r.synced} sale${r.synced === 1 ? "" : "s"}${r.failed ? ` · ${r.failed} failed` : ""}`);
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
   const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
-  const canCash = lines.length > 0 && total > 0 && (tender === "mobile" ? true : cashReceived >= total);
+  const canCash = lines.length > 0 && total > 0 && (tender === "mobile" ? mobileRef.trim().length > 0 : cashReceived >= total);
 
   return (
     <StaffShell active="pos">
+      {!activeShift && (
+        <div className="mb-4 rounded-2xl border border-amber-400/60 bg-amber-50 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <ClipboardCheck className="w-4 h-4" />
+            <span>No shift is open. Sales are disabled until you open one.</span>
+          </div>
+          <Link to="/shift" className="text-sm font-bold text-amber-900 underline">Open shift →</Link>
+        </div>
+      )}
+      {!isOnline && (
+        <div className="mb-4 rounded-2xl border border-red-300 bg-red-50 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-red-700">
+            <WifiOff className="w-4 h-4" /> You're offline — sales go to the outbox ({pendingSales.length} queued).
+          </div>
+        </div>
+      )}
+      {isOnline && pendingSales.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-primary">
+            <CloudUpload className="w-4 h-4" /> {pendingSales.length} queued sale{pendingSales.length === 1 ? "" : "s"} ready to sync.
+          </div>
+          <Button size="sm" onClick={doSync}>Sync now</Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
         <section>
           <h1 className="text-2xl font-bold">Walk-in POS</h1>
@@ -132,15 +203,22 @@ function POS() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            {filtered.map((p) => (
-              <button key={p.id} onClick={() => addLine(p)}
-                className="bg-surface border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition active:scale-[0.98]">
-                <div className={`h-20 rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-4xl mb-2`}>{p.emoji}</div>
-                <div className="font-semibold text-sm leading-tight">{p.name}</div>
-                <div className="text-xs text-muted-foreground">{p.category}</div>
-                <div className="mt-1 font-bold text-primary text-sm">{formatTZS(p.price)}</div>
-              </button>
-            ))}
+            {filtered.map((p) => {
+              const plates = availablePlates(p.id);
+              const soldOut = plates !== null && plates <= 0;
+              return (
+                <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
+                  className={`bg-surface border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition active:scale-[0.98] ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
+                  <div className={`h-20 rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-4xl mb-2`}>{p.emoji}</div>
+                  <div className="font-semibold text-sm leading-tight">{p.name}</div>
+                  <div className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>{p.category}</span>
+                    {plates !== null && <span className={`font-semibold ${soldOut ? "text-red-500" : "text-emerald-600"}`}>{plates} left</span>}
+                  </div>
+                  <div className="mt-1 font-bold text-primary text-sm">{formatTZS(p.price)}</div>
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -154,7 +232,7 @@ function POS() {
             </button>
             <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
-              <Banknote className="w-4 h-4" /> Cash Customer
+              <Banknote className="w-4 h-4" /> Walk-in
             </button>
           </div>
 
@@ -164,8 +242,7 @@ function POS() {
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={query} onChange={(e) => { setQuery(e.target.value); }}
-                      placeholder="Search by name, phone or ID" className="pl-9" />
+                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className="pl-9" />
                   </div>
                   <Button type="button" variant="outline" onClick={() => setShowScanner(true)} title="Scan QR ID">
                     <QrCode className="w-4 h-4" />
@@ -188,9 +265,6 @@ function POS() {
                       </li>
                     ))}
                   </ul>
-                )}
-                {query && !freshCustomer && suggestions.length === 0 && (
-                  <div className="text-xs text-muted-foreground mt-2">No matching customer. Try scanning the QR, or add them in <button className="underline" onClick={() => navigate({ to: "/customers" })}>Customers</button>.</div>
                 )}
               </div>
 
@@ -215,13 +289,12 @@ function POS() {
                       </div>
                       <label className="block">
                         <span className="text-xs text-muted-foreground">Extra pay for this sale (TZS)</span>
-                        <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)}
-                          className="mt-1 font-semibold bg-background" />
+                        <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)} className="mt-1 font-semibold bg-background" />
                       </label>
                       <TenderPicker tender={tender} onChange={setTender} />
-                      <div className="text-xs text-muted-foreground">
-                        Wallet pays {formatTZS(Math.max(0, total - Math.max(splitCash, walletShort)))} · {tender === "mobile" ? "Mobile" : "Cash"} pays {formatTZS(Math.max(splitCash, walletShort))}
-                      </div>
+                      {tender === "mobile" && (
+                        <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba / confirmation code" className="bg-background" />
+                      )}
                     </div>
                   )}
                 </>
@@ -273,13 +346,11 @@ function POS() {
                 <>
                   <label className="block">
                     <span className="text-xs text-muted-foreground">Cash Received (TZS)</span>
-                    <Input type="number" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
-                      placeholder="0" className="mt-1 font-semibold" />
+                    <Input type="number" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)} placeholder="0" className="mt-1 font-semibold" />
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
-                      <button key={v} onClick={() => setCashReceived(v)}
-                        className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
+                      <button key={v} onClick={() => setCashReceived(v)} className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
                         {formatTZS(v)}
                       </button>
                     ))}
@@ -290,21 +361,25 @@ function POS() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-lg bg-primary/5 text-primary p-2.5 text-xs">
-                  Charge <span className="font-bold">{formatTZS(total)}</span> via M-Pesa / Tigo Pesa / Airtel Money. Amount will be credited to the Bank account.
-                </div>
+                <>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Lipa Namba / confirmation code</span>
+                    <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="e.g. CFT8H9K12L" className="mt-1 font-mono" />
+                  </label>
+                  <div className="rounded-lg bg-primary/5 text-primary p-2.5 text-xs">
+                    Charge <span className="font-bold">{formatTZS(total)}</span> via mobile money (Lipa Namba). Amount will be credited to the Bank account.
+                  </div>
+                </>
               )}
             </div>
           )}
 
           {mode === "wallet" ? (
-            <Button disabled={!canWallet} onClick={doWalletSale}
-              className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
+            <Button disabled={!canWallet || !activeShift} onClick={doWalletSale} className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
               <Printer className="w-4 h-4 mr-2" /> Deduct Balance & Print
             </Button>
           ) : (
-            <Button disabled={!canCash} onClick={doCashSale}
-              className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
+            <Button disabled={!canCash || !activeShift} onClick={doCashSale} className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
               <Printer className="w-4 h-4 mr-2" />
               {tender === "mobile" ? "Confirm Mobile Payment & Print" : "Collect Cash & Print"}
             </Button>
@@ -314,19 +389,41 @@ function POS() {
             <div className="mt-4 rounded-xl border bg-muted/30 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.receipt_no ?? lastReceipt.order.id}
+                {lastReceipt.order.is_reversal && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase font-bold">Credit note</span>}
+                {lastReceipt.order.reversed && <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded uppercase font-bold">Reversed</span>}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
                 {lastReceipt.order.tender && <span> · {lastReceipt.order.tender === "mobile" ? "Mobile" : "Cash"}</span>}
+                {lastReceipt.order.reference && <span className="font-mono"> · ref {lastReceipt.order.reference}</span>}
                 {(lastReceipt.order.loyalty_earned ?? 0) > 0 && <span className="text-success"> · +{formatTZS(lastReceipt.order.loyalty_earned ?? 0)} loyalty</span>}
               </div>
-              <div className="flex gap-2 mt-2">
+              <div className="flex flex-wrap gap-1.5 mt-2">
                 <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}>
                   <Printer className="w-3.5 h-3.5 mr-1" /> Reprint
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => downloadReceipt(lastReceipt.order, lastReceipt.extras)}>
                   <Download className="w-3.5 h-3.5 mr-1" /> Download
                 </Button>
+                {lastReceipt.order.customer_id !== "walkin" && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => doSendReceipt("sms")}>
+                      <MessageSquare className="w-3.5 h-3.5 mr-1" /> SMS
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => doSendReceipt("whatsapp")}>
+                      <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                    </Button>
+                  </>
+                )}
+                {!lastReceipt.order.is_reversal && !lastReceipt.order.reversed && (
+                  useStore().hasStaffRole("supervisor") ? (
+                    <Button size="sm" variant="outline" onClick={doRefund} className="text-red-600 border-red-300 hover:bg-red-50">
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Refund
+                    </Button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground self-center">Refund requires supervisor</span>
+                  )
+                )}
               </div>
             </div>
           )}
@@ -335,6 +432,9 @@ function POS() {
             <div className="mt-5 border-t pt-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Accept Top-Up</div>
               <TenderPicker tender={topupTender} onChange={setTopupTender} />
+              {topupTender === "mobile" && (
+                <Input value={topupRef} onChange={(e) => setTopupRef(e.target.value)} placeholder="Lipa Namba / confirmation code" className="mt-2 font-mono" />
+              )}
               <div className="flex gap-2 mt-2">
                 <div className="flex-1 flex items-center border rounded-lg px-3">
                   <span className="text-xs text-muted-foreground mr-2">TZS</span>
@@ -370,7 +470,7 @@ function TenderPicker({ tender, onChange }: { tender: Tender; onChange: (t: Tend
       </button>
       <button type="button" onClick={() => onChange("mobile")}
         className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${tender === "mobile" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
-        <Smartphone className="w-3.5 h-3.5" /> Mobile Money
+        <Smartphone className="w-3.5 h-3.5" /> Mobile · Lipa Namba
       </button>
     </div>
   );
