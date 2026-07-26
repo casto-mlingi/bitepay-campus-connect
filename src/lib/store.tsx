@@ -413,6 +413,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
+    topUpRequests,
+    submitTopUpRequest({ amount, reference, note }) {
+      if (!currentUser || currentUser.role !== "customer") return null;
+      if (amount <= 0 || !reference.trim()) return null;
+      const req: TopUpRequest = {
+        id: `TR-${Date.now()}`, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        customer_phone: currentUser.phone, amount, reference: reference.trim(), note,
+        status: "pending", created_at: Date.now(),
+      };
+      setTopUpRequests((prev) => [req, ...prev]);
+      return req;
+    },
+    rejectTopUpRequest(id, reason) {
+      setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
+    },
+    setStaffPin(currentPin, newPin) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
+      if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
+      if (currentUser.staff_pin && currentUser.staff_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, staff_pin: newPin } : p));
+      return { ok: true };
+    },
+    staffTopUp({ customerId, amount, tender, reference, pin, requestId }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not signed in as staff" };
+      if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
+      if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
+      if (amount <= 0) return { ok: false, reason: "Enter an amount" };
+      if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
+      const cust = profiles.find((p) => p.id === customerId);
+      if (!cust) return { ok: false, reason: "Customer not found" };
+      const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
+      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
+      if (tender === "mobile") setBank((b) => b + amount);
+      else setCash((c) => c + amount);
+      if (requestId) {
+        setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
+      }
+      return { ok: true };
+    },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
