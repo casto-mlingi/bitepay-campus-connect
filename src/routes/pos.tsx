@@ -19,7 +19,7 @@ type Tender = "cash" | "mobile";
 
 function POS() {
   const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
-    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox } = useStore();
+    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
