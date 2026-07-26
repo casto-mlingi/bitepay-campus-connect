@@ -313,6 +313,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
