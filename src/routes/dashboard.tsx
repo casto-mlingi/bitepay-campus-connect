@@ -1,18 +1,20 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { Wallet, ShoppingBag, ClipboardList, ArrowUpCircle, ArrowRight, Clock, CheckCircle2, ChefHat, Bell, Download, Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Wallet, ShoppingBag, ClipboardList, ArrowUpCircle, ArrowRight, Clock, CheckCircle2, ChefHat, Bell, Download, Printer, QrCode, AlertTriangle, X } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useStore, formatTZS } from "@/lib/store";
 import { downloadReceipt, printReceipt } from "@/lib/receipt";
 import { CustomerShell } from "@/components/customer-shell";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
-  head: () => ({ meta: [{ title: "Dashboard — BitePay" }, { name: "description", content: "Your BitePay wallet, quick actions and recent orders." }] }),
+  head: () => ({ meta: [{ title: "Dashboard — BitePay" }, { name: "description", content: "Your BitePay wallet, quick actions, digital ID and recent orders." }] }),
 });
 
 function Dashboard() {
-  const { currentUser, orders, products } = useStore();
+  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD } = useStore();
   const navigate = useNavigate();
+  const [showId, setShowId] = useState(false);
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
@@ -23,6 +25,7 @@ function Dashboard() {
 
   const myOrders = orders.filter((o) => o.customer_id === currentUser.id).slice(0, 4);
   const featured = products.slice(0, 6);
+  const isLow = currentUser.wallet_balance < LOW_BALANCE_THRESHOLD;
 
   return (
     <CustomerShell active="home">
@@ -31,12 +34,27 @@ function Dashboard() {
           <p className="text-sm text-muted-foreground">Good day,</p>
           <h1 className="text-2xl font-bold">{currentUser.full_name.split(" ")[0]} 👋</h1>
         </div>
-        <button aria-label="Notifications" className="w-10 h-10 rounded-full bg-surface border grid place-items-center">
-          <Bell className="w-4 h-4" />
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowId(true)} aria-label="My QR ID" className="w-10 h-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-md shadow-orange-500/30">
+            <QrCode className="w-4 h-4" />
+          </button>
+          <button aria-label="Notifications" className="w-10 h-10 rounded-full bg-surface border grid place-items-center">
+            <Bell className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Wallet card */}
+      {isLow && (
+        <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm text-amber-800">Wallet running low</div>
+            <div className="text-xs text-amber-700">Top up via Lipa Namba to keep ordering.</div>
+          </div>
+          <Link to="/topup" className="text-xs font-bold text-primary underline whitespace-nowrap">Top up now</Link>
+        </div>
+      )}
+
       <div className="mt-5 relative overflow-hidden rounded-3xl bg-gradient-to-br from-success to-emerald-600 text-white p-6 shadow-lg shadow-emerald-500/25">
         <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/10" />
         <div className="absolute -right-14 top-20 w-32 h-32 rounded-full bg-white/10" />
@@ -58,29 +76,24 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Promo hero — Special For You */}
-      <div className="mt-6 rounded-3xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 p-5 flex items-center gap-4 overflow-hidden">
+      <button onClick={() => setShowId(true)} className="mt-4 w-full rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-4 flex items-center gap-4 text-left hover:bg-primary/10 transition">
+        <div className="w-14 h-14 rounded-xl bg-white grid place-items-center shrink-0">
+          <QRCodeSVG value={currentUser.id} size={48} level="M" />
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold text-primary uppercase tracking-wider">Special For You</div>
-          <div className="mt-1 font-bold text-lg leading-tight">Chicken Teriyaki Combo</div>
-          <div className="text-xs text-muted-foreground mt-0.5">25% off — today only</div>
-          <Link to="/menu" className="inline-flex items-center gap-1 mt-3 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-lg">
-            Order Now <ArrowRight className="w-3 h-3" />
-          </Link>
+          <div className="text-xs font-bold text-primary uppercase tracking-wider">Your BitePay ID</div>
+          <div className="font-bold truncate">{currentUser.full_name}</div>
+          <div className="text-xs text-muted-foreground">Show at POS to pay from wallet</div>
         </div>
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-orange-400 to-red-500 grid place-items-center text-5xl shrink-0 shadow-lg shadow-orange-500/30">
-          🍱
-        </div>
-      </div>
+        <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+      </button>
 
-      {/* Quick actions */}
       <div className="mt-6 grid grid-cols-3 gap-3">
         <QuickAction to="/menu" icon={<ShoppingBag className="w-5 h-5" />} label="Order" tint="bg-primary/10 text-primary" />
         <QuickAction to="/history" icon={<ClipboardList className="w-5 h-5" />} label="History" tint="bg-slate-900/5 text-foreground" />
         <QuickAction to="/topup" icon={<ArrowUpCircle className="w-5 h-5" />} label="Top-Up" tint="bg-emerald-500/10 text-emerald-600" />
       </div>
 
-      {/* Top of week */}
       <section className="mt-8">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold">Top of Week</h2>
@@ -99,7 +112,6 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* Recent orders / receipts */}
       <section className="mt-8">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold">Recent Receipts</h2>
@@ -116,7 +128,7 @@ function Dashboard() {
               <li key={o.id} className="bg-surface rounded-2xl p-4 border">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold">{o.id}</div>
+                    <div className="font-semibold">{o.receipt_no ?? o.id}</div>
                     <div className="text-xs text-muted-foreground truncate">
                       {o.items.map((i) => `${i.qty}× ${i.name}`).join(", ")}
                     </div>
@@ -127,16 +139,12 @@ function Dashboard() {
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-dashed flex gap-2">
-                  <button
-                    onClick={() => downloadReceipt(o, { paymentMode: "wallet" })}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70"
-                  >
+                  <button onClick={() => downloadReceipt(o, { paymentMode: "wallet" })}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70">
                     <Download className="w-3.5 h-3.5" /> Download
                   </button>
-                  <button
-                    onClick={() => printReceipt(o, { paymentMode: "wallet" })}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70"
-                  >
+                  <button onClick={() => printReceipt(o, { paymentMode: "wallet" })}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70">
                     <Printer className="w-3.5 h-3.5" /> Print
                   </button>
                 </div>
@@ -145,6 +153,24 @@ function Dashboard() {
           </ul>
         )}
       </section>
+
+      {showId && (
+        <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4" onClick={() => setShowId(false)}>
+          <div className="bg-background rounded-3xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-bold text-primary uppercase tracking-wider">My BitePay ID</div>
+              <button onClick={() => setShowId(false)} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="bg-white p-5 rounded-2xl inline-block">
+              <QRCodeSVG value={currentUser.id} size={220} level="H" />
+            </div>
+            <div className="mt-4 font-bold text-lg">{currentUser.full_name}</div>
+            <div className="text-xs text-muted-foreground">{currentUser.phone}</div>
+            <div className="mt-2 inline-block font-mono text-xs bg-muted px-2 py-1 rounded">{currentUser.id}</div>
+            <p className="mt-4 text-xs text-muted-foreground">Show this to the cashier — they'll scan to charge your wallet. No printed card needed.</p>
+          </div>
+        </div>
+      )}
     </CustomerShell>
   );
 }

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as StaffRouteImport } from './routes/staff'
+import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -30,6 +31,11 @@ const TopupRoute = TopupRouteImport.update({
 const StaffRoute = StaffRouteImport.update({
   id: '/staff',
   path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShiftRoute = ShiftRouteImport.update({
+  id: '/shift',
+  path: '/shift',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PosRoute = PosRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
   '/topup': typeof TopupRoute
 }
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/shift'
     | '/staff'
     | '/topup'
   fileRoutesByTo: FileRoutesByTo
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/shift'
     | '/staff'
     | '/topup'
   id:
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/shift'
     | '/staff'
     | '/topup'
   fileRoutesById: FileRoutesById
@@ -182,6 +194,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
+  ShiftRoute: typeof ShiftRoute
   StaffRoute: typeof StaffRoute
   TopupRoute: typeof TopupRoute
 }
@@ -200,6 +213,13 @@ declare module '@tanstack/react-router' {
       path: '/staff'
       fullPath: '/staff'
       preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shift': {
+      id: '/shift'
+      path: '/shift'
+      fullPath: '/shift'
+      preLoaderRoute: typeof ShiftRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pos': {
@@ -286,19 +306,10 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
+  ShiftRoute: ShiftRoute,
   StaffRoute: StaffRoute,
   TopupRoute: TopupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

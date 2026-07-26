@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X,
+  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
@@ -12,19 +12,19 @@ export const Route = createFileRoute("/finance")({
   head: () => ({
     meta: [
       { title: "Finance & Treasury — BitePay Staff" },
-      { name: "description", content: "Treasury dashboard, procurement, expenses, and P&L for BitePay canteen." },
+      { name: "description", content: "Treasury dashboard, procurement, expenses, journal and P&L for BitePay canteen." },
       { property: "og:title", content: "Finance & Treasury — BitePay Staff" },
       { property: "og:description", content: "Double-entry style treasury and P&L for the canteen." },
     ],
   }),
 });
 
-type Tab = "treasury" | "procurement" | "expenses" | "pnl";
+type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal";
 
 function FinancePage() {
   const {
     currentUser, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
-    recordPurchase, recordExpense,
+    recordPurchase, recordExpense, hasStaffRole,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
@@ -32,9 +32,9 @@ function FinancePage() {
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
     else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
-  }, [currentUser, navigate]);
+    else if (!hasStaffRole("supervisor")) navigate({ to: "/staff" });
+  }, [currentUser, navigate, hasStaffRole]);
 
-  // Financial metrics
   const rawInventoryValue = useMemo(
     () => rawMaterials.reduce((s, r) => s + r.stock * r.avg_cost, 0),
     [rawMaterials]
@@ -55,7 +55,7 @@ function FinancePage() {
   const opex = expenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = grossProfit - opex;
 
-  if (!currentUser || currentUser.role !== "staff") return null;
+  if (!currentUser || currentUser.role !== "staff" || !hasStaffRole("supervisor")) return null;
 
   return (
     <StaffShell active="finance">
@@ -70,37 +70,126 @@ function FinancePage() {
         <TabBtn active={tab === "treasury"} onClick={() => setTab("treasury")} icon={<Wallet className="w-4 h-4" />} label="Treasury" />
         <TabBtn active={tab === "procurement"} onClick={() => setTab("procurement")} icon={<ShoppingCart className="w-4 h-4" />} label="Procurement" />
         <TabBtn active={tab === "expenses"} onClick={() => setTab("expenses")} icon={<Receipt className="w-4 h-4" />} label="Expenses" />
+        <TabBtn active={tab === "journal"} onClick={() => setTab("journal")} icon={<BookOpen className="w-4 h-4" />} label="Daily Journal" />
         <TabBtn active={tab === "pnl"} onClick={() => setTab("pnl")} icon={<FileBarChart className="w-4 h-4" />} label="Income Statement" />
       </div>
 
       {tab === "treasury" && (
         <Treasury
-          cash={cash}
-          bank={bank}
-          totalInventoryValue={totalInventoryValue}
-          rawInventoryValue={rawInventoryValue}
-          finishedGoodsValue={finishedGoodsValue}
-          walletLiabilities={walletLiabilities}
-          netProfit={netProfit}
-          grossRevenue={grossRevenue}
-          cogs={cogs}
-          opex={opex}
+          cash={cash} bank={bank} totalInventoryValue={totalInventoryValue}
+          rawInventoryValue={rawInventoryValue} finishedGoodsValue={finishedGoodsValue}
+          walletLiabilities={walletLiabilities} netProfit={netProfit}
+          grossRevenue={grossRevenue} cogs={cogs} opex={opex}
         />
       )}
       {tab === "procurement" && <Procurement onSubmit={recordPurchase} />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
+      {tab === "journal" && <Journal />}
       {tab === "pnl" && (
         <IncomeStatement
-          grossRevenue={grossRevenue}
-          cogs={cogs}
-          grossProfit={grossProfit}
-          opex={opex}
-          netProfit={netProfit}
-          purchases={purchases}
-          expenses={expenses}
+          grossRevenue={grossRevenue} cogs={cogs} grossProfit={grossProfit}
+          opex={opex} netProfit={netProfit} purchases={purchases} expenses={expenses}
         />
       )}
     </StaffShell>
+  );
+}
+
+function Journal() {
+  const { orders, purchases, expenses, batches } = useStore();
+
+  type Entry = { date: number; day: string; dr: string; cr: string; amount: number; memo: string };
+  const days = useMemo(() => {
+    const entries: Entry[] = [];
+    const dayKey = (t: number) => new Date(t).toISOString().slice(0, 10);
+    for (const o of orders) {
+      const cash = o.cash_paid ?? 0;
+      const wallet = o.wallet_paid ?? 0;
+      if (cash !== 0) {
+        entries.push({
+          date: o.created_at, day: dayKey(o.created_at),
+          dr: o.tender === "mobile" ? "Mobile Settlement (T+1)" : "Cash on Hand",
+          cr: "Sales Revenue", amount: cash,
+          memo: `${o.receipt_no ?? o.id} · ${o.customer_name}${o.reference ? ` · ref ${o.reference}` : ""}`,
+        });
+      }
+      if (wallet !== 0) {
+        entries.push({
+          date: o.created_at, day: dayKey(o.created_at),
+          dr: "Wallet Liability", cr: "Sales Revenue", amount: wallet,
+          memo: `${o.receipt_no ?? o.id} · ${o.customer_name}`,
+        });
+      }
+      if ((o.loyalty_earned ?? 0) !== 0) {
+        entries.push({
+          date: o.created_at, day: dayKey(o.created_at),
+          dr: "Marketing Expense", cr: "Wallet Liability", amount: o.loyalty_earned ?? 0,
+          memo: `Loyalty ${o.receipt_no ?? o.id}`,
+        });
+      }
+    }
+    for (const b of batches) {
+      if (b.raw_cost > 0) entries.push({
+        date: b.created_at, day: dayKey(b.created_at),
+        dr: "COGS (Raw Materials)", cr: "Inventory", amount: b.raw_cost, memo: `Batch ${b.id}`,
+      });
+    }
+    for (const p of purchases) entries.push({
+      date: p.date, day: dayKey(p.date),
+      dr: "Inventory", cr: p.payment_method === "bank" ? "Bank" : "Cash on Hand",
+      amount: p.total_cost, memo: `${p.id} · ${p.supplier} · ${p.raw_name}`,
+    });
+    for (const e of expenses) entries.push({
+      date: e.date, day: dayKey(e.date),
+      dr: `Expense — ${e.category}`, cr: e.payment_method === "bank" ? "Bank" : "Cash on Hand",
+      amount: e.amount, memo: `${e.id} · ${e.description || ""}`,
+    });
+    const grouped = new Map<string, Entry[]>();
+    for (const e of entries) {
+      if (!grouped.has(e.day)) grouped.set(e.day, []);
+      grouped.get(e.day)!.push(e);
+    }
+    return Array.from(grouped.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [orders, purchases, expenses, batches]);
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-surface border rounded-2xl p-5">
+        <h2 className="font-bold text-lg flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> Daily Settlement Journal</h2>
+        <p className="text-xs text-muted-foreground mt-1">Auto-posted double-entry journal. Mobile money is booked to <b>Mobile Settlement (T+1)</b> and cleared once the provider settles the next business day.</p>
+      </div>
+      {days.length === 0 && <div className="bg-surface border rounded-2xl p-8 text-center text-sm text-muted-foreground">No journal entries yet.</div>}
+      {days.map(([day, entries]) => {
+        const totalDr = entries.reduce((s, e) => s + e.amount, 0);
+        const mobile = entries.filter((e) => e.dr === "Mobile Settlement (T+1)").reduce((s, e) => s + e.amount, 0);
+        return (
+          <div key={day} className="bg-surface border rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b flex items-center justify-between bg-muted/30">
+              <div className="font-bold flex items-center gap-2"><FileBarChart className="w-4 h-4 text-primary" /> {new Date(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
+              <div className="text-xs text-muted-foreground">Posted total <span className="font-mono font-semibold text-foreground">{formatTZS(totalDr)}</span>{mobile > 0 && <> · <Smartphone className="inline w-3 h-3" /> Mobile pending <span className="font-mono font-semibold text-foreground">{formatTZS(mobile)}</span></>}</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b">
+                  <tr className="text-left"><th className="px-4 py-2">Time</th><th>Dr</th><th>Cr</th><th className="text-right pr-4">Amount</th><th className="pr-4">Memo</th></tr>
+                </thead>
+                <tbody className="divide-y">
+                  {entries.sort((a, b) => a.date - b.date).map((e, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2 text-muted-foreground text-xs">{new Date(e.date).toLocaleTimeString()}</td>
+                      <td className="text-emerald-700">{e.dr}</td>
+                      <td className="text-red-600">{e.cr}</td>
+                      <td className="text-right pr-4 font-mono font-semibold">{formatTZS(e.amount)}</td>
+                      <td className="pr-4 text-xs text-muted-foreground">{e.memo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
