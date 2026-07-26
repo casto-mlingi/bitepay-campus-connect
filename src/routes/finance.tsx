@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X,
+  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Lock, Smartphone,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/finance")({
   head: () => ({
     meta: [
       { title: "Finance & Treasury — BitePay Staff" },
-      { name: "description", content: "Treasury dashboard, procurement, expenses, and P&L for BitePay canteen." },
+      { name: "description", content: "Treasury dashboard, procurement, expenses, journal and P&L for BitePay canteen." },
       { property: "og:title", content: "Finance & Treasury — BitePay Staff" },
       { property: "og:description", content: "Double-entry style treasury and P&L for the canteen." },
     ],
