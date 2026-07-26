@@ -246,9 +246,9 @@ const seedProducts: Product[] = [
 
 const seedProfiles: Profile[] = [
   { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
-  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor" },
-  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier" },
-  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner" },
+  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor", staff_pin: "1234" },
+  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier", staff_pin: "1234" },
+  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner", staff_pin: "1234" },
 ];
 
 const seedOrders: Order[] = [
