@@ -58,7 +58,7 @@ function AuthPage() {
       </div>
 
       {/* Form card */}
-      <div className="flex-1 -mt-10 px-5 pb-8">
+      <div className="flex-1 -mt-10 px-5 pb-8 relative z-10">
         <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-6 sm:p-8 border">
           <h2 className="text-2xl font-bold">
             {mode === "login" ? "Welcome back 👋" : "Create account"}
