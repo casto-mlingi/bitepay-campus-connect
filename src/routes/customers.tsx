@@ -13,13 +13,17 @@ export const Route = createFileRoute("/customers")({
 });
 
 function Customers() {
-  const { currentUser, profiles, transactions, addCustomer, topUp } = useStore();
+  const { currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin } = useStore();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showQR, setShowQR] = useState<Profile | null>(null);
   const [topupAmt, setTopupAmt] = useState<number>(10000);
+  const [topupTender, setTopupTender] = useState<"cash" | "mobile">("cash");
+  const [topupRef, setTopupRef] = useState("");
+  const [pinPrompt, setPinPrompt] = useState<null | { title: string; onSubmit: (pin: string) => void }>(null);
+  const [showPinSetup, setShowPinSetup] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -34,6 +38,8 @@ function Customers() {
     return customers.filter((c) => c.full_name.toLowerCase().includes(q) || c.phone.includes(q) || c.id.toLowerCase().includes(q));
   }, [customers, query]);
 
+  const pendingRequests = useMemo(() => topUpRequests.filter((r) => r.status === "pending"), [topUpRequests]);
+
   const totalLiability = customers.reduce((s, c) => s + c.wallet_balance, 0);
   const activeToday = new Set(
     transactions.filter((t) => Date.now() - t.created_at < 24 * 3600 * 1000).map((t) => t.customer_id)
@@ -42,16 +48,35 @@ function Customers() {
   const selected = customers.find((c) => c.id === selectedId) ?? null;
   const selectedTx = selected ? transactions.filter((t) => t.customer_id === selected.id).slice(0, 12) : [];
 
-  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2500); };
+
+  const requestPin = (title: string, onSubmit: (pin: string) => void) => {
+    if (!currentUser?.staff_pin) { setShowPinSetup(true); return; }
+    setPinPrompt({ title, onSubmit });
+  };
 
   const doTopUp = () => {
     if (!selected || topupAmt <= 0) return;
-    topUp(selected.id, topupAmt);
-    showToast(`Added ${formatTZS(topupAmt)} to ${selected.full_name}`);
-    setTopupAmt(10000);
+    if (topupTender === "mobile" && !topupRef.trim()) { showToast("Enter mobile payment reference"); return; }
+    requestPin(`Confirm top-up of ${formatTZS(topupAmt)} for ${selected.full_name}`, (pin) => {
+      const res = staffTopUp({ customerId: selected.id, amount: topupAmt, tender: topupTender, reference: topupRef.trim() || undefined, pin });
+      if (!res.ok) { showToast(res.reason); return; }
+      showToast(`Added ${formatTZS(topupAmt)} to ${selected.full_name}`);
+      setTopupAmt(10000); setTopupRef(""); setPinPrompt(null);
+    });
+  };
+
+  const approveRequest = (r: TopUpRequest) => {
+    requestPin(`Approve ${formatTZS(r.amount)} for ${r.customer_name} (ref ${r.reference})`, (pin) => {
+      const res = staffTopUp({ customerId: r.customer_id, amount: r.amount, tender: "mobile", reference: r.reference, pin, requestId: r.id });
+      if (!res.ok) { showToast(res.reason); return; }
+      showToast(`Approved ${formatTZS(r.amount)} for ${r.customer_name}`);
+      setPinPrompt(null);
+    });
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
+
 
   return (
     <StaffShell active="customers">
