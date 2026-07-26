@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone } from "lucide-react";
+import { Search, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone, KeyRound, Hash, Inbox, Clock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useStore, formatTZS, type Profile } from "@/lib/store";
+import { useStore, formatTZS, type Profile, type TopUpRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
