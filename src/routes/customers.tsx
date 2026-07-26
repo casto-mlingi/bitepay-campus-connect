@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone } from "lucide-react";
+import { Search, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone, KeyRound, Hash, Inbox, Clock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useStore, formatTZS, type Profile } from "@/lib/store";
+import { useStore, formatTZS, type Profile, type TopUpRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +13,17 @@ export const Route = createFileRoute("/customers")({
 });
 
 function Customers() {
-  const { currentUser, profiles, transactions, addCustomer, topUp } = useStore();
+  const { currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin } = useStore();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showQR, setShowQR] = useState<Profile | null>(null);
   const [topupAmt, setTopupAmt] = useState<number>(10000);
+  const [topupTender, setTopupTender] = useState<"cash" | "mobile">("cash");
+  const [topupRef, setTopupRef] = useState("");
+  const [pinPrompt, setPinPrompt] = useState<null | { title: string; onSubmit: (pin: string) => void }>(null);
+  const [showPinSetup, setShowPinSetup] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -34,6 +38,8 @@ function Customers() {
     return customers.filter((c) => c.full_name.toLowerCase().includes(q) || c.phone.includes(q) || c.id.toLowerCase().includes(q));
   }, [customers, query]);
 
+  const pendingRequests = useMemo(() => topUpRequests.filter((r) => r.status === "pending"), [topUpRequests]);
+
   const totalLiability = customers.reduce((s, c) => s + c.wallet_balance, 0);
   const activeToday = new Set(
     transactions.filter((t) => Date.now() - t.created_at < 24 * 3600 * 1000).map((t) => t.customer_id)
@@ -42,16 +48,35 @@ function Customers() {
   const selected = customers.find((c) => c.id === selectedId) ?? null;
   const selectedTx = selected ? transactions.filter((t) => t.customer_id === selected.id).slice(0, 12) : [];
 
-  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2500); };
+
+  const requestPin = (title: string, onSubmit: (pin: string) => void) => {
+    if (!currentUser?.staff_pin) { setShowPinSetup(true); return; }
+    setPinPrompt({ title, onSubmit });
+  };
 
   const doTopUp = () => {
     if (!selected || topupAmt <= 0) return;
-    topUp(selected.id, topupAmt);
-    showToast(`Added ${formatTZS(topupAmt)} to ${selected.full_name}`);
-    setTopupAmt(10000);
+    if (topupTender === "mobile" && !topupRef.trim()) { showToast("Enter mobile payment reference"); return; }
+    requestPin(`Confirm top-up of ${formatTZS(topupAmt)} for ${selected.full_name}`, (pin) => {
+      const res = staffTopUp({ customerId: selected.id, amount: topupAmt, tender: topupTender, reference: topupRef.trim() || undefined, pin });
+      if (!res.ok) { showToast(res.reason); return; }
+      showToast(`Added ${formatTZS(topupAmt)} to ${selected.full_name}`);
+      setTopupAmt(10000); setTopupRef(""); setPinPrompt(null);
+    });
+  };
+
+  const approveRequest = (r: TopUpRequest) => {
+    requestPin(`Approve ${formatTZS(r.amount)} for ${r.customer_name} (ref ${r.reference})`, (pin) => {
+      const res = staffTopUp({ customerId: r.customer_id, amount: r.amount, tender: "mobile", reference: r.reference, pin, requestId: r.id });
+      if (!res.ok) { showToast(res.reason); return; }
+      showToast(`Approved ${formatTZS(r.amount)} for ${r.customer_name}`);
+      setPinPrompt(null);
+    });
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
+
 
   return (
     <StaffShell active="customers">
@@ -70,6 +95,39 @@ function Customers() {
         <StatCard icon={<Wallet className="w-4 h-4" />} label="Wallet liability" value={formatTZS(totalLiability)} tone="success" />
         <StatCard icon={<TrendingUp className="w-4 h-4" />} label="Active (24h)" value={String(activeToday)} tone="amber" />
       </div>
+
+      {pendingRequests.length > 0 && (
+        <section className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Inbox className="w-4 h-4 text-amber-700" />
+            <h2 className="font-bold text-amber-900">Pending top-up requests</h2>
+            <span className="ml-auto text-xs font-bold text-amber-700">{pendingRequests.length}</span>
+          </div>
+          <ul className="space-y-2">
+            {pendingRequests.map((r) => (
+              <li key={r.id} className="bg-white border border-amber-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[180px]">
+                  <div className="font-semibold">{r.customer_name} <span className="text-xs text-muted-foreground font-normal">· {r.customer_phone}</span></div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                    <Clock className="w-3 h-3" /> {new Date(r.created_at).toLocaleString()}
+                    <span className="inline-flex items-center gap-1"><Hash className="w-3 h-3" />{r.reference}</span>
+                  </div>
+                  {r.note && <div className="text-xs text-muted-foreground mt-1 italic">"{r.note}"</div>}
+                </div>
+                <div className="text-lg font-bold text-emerald-700">{formatTZS(r.amount)}</div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => approveRequest(r)}>Approve</Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const reason = window.prompt("Reason for rejection?", "Reference not found");
+                    if (reason) { rejectTopUpRequest(r.id, reason); showToast("Request rejected"); }
+                  }}>Reject</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
         <section className="bg-surface border rounded-2xl overflow-hidden">
@@ -150,7 +208,14 @@ function Customers() {
               </div>
 
               <div className="mt-4 border rounded-xl p-3">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Cash top-up</div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center justify-between">
+                  <span>Top-up wallet</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary"><KeyRound className="w-3 h-3" /> PIN required</span>
+                </div>
+                <div className="flex gap-1 mb-2">
+                  <button onClick={() => setTopupTender("cash")} className={`flex-1 py-1.5 rounded-md text-xs font-semibold border ${topupTender === "cash" ? "bg-primary text-primary-foreground border-primary" : "bg-muted border-transparent"}`}>Cash</button>
+                  <button onClick={() => setTopupTender("mobile")} className={`flex-1 py-1.5 rounded-md text-xs font-semibold border ${topupTender === "mobile" ? "bg-primary text-primary-foreground border-primary" : "bg-muted border-transparent"}`}>Mobile Money</button>
+                </div>
                 <div className="flex gap-2">
                   <div className="flex-1 flex items-center border rounded-lg px-3">
                     <span className="text-xs text-muted-foreground mr-2">TZS</span>
@@ -161,6 +226,13 @@ function Customers() {
                     <ArrowUpCircle className="w-4 h-4 mr-1.5" /> Top-Up
                   </Button>
                 </div>
+                {topupTender === "mobile" && (
+                  <div className="mt-2 flex items-center border rounded-lg px-3">
+                    <Hash className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+                    <input value={topupRef} onChange={(e) => setTopupRef(e.target.value.toUpperCase())} placeholder="Payment reference"
+                      className="flex-1 py-2 bg-transparent outline-none text-sm" />
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {[5000, 10000, 20000, 50000].map((v) => (
                     <button key={v} onClick={() => setTopupAmt(v)} className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
@@ -168,7 +240,11 @@ function Customers() {
                     </button>
                   ))}
                 </div>
+                <button onClick={() => setShowPinSetup(true)} className="mt-2 text-[11px] text-muted-foreground hover:text-primary underline">
+                  {currentUser.staff_pin ? "Change my staff PIN" : "Set my staff PIN"}
+                </button>
               </div>
+
 
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Recent activity</div>
@@ -209,6 +285,28 @@ function Customers() {
       )}
 
       {showQR && <IDCardModal customer={showQR} onClose={() => setShowQR(null)} />}
+
+      {pinPrompt && (
+        <PinModal
+          title={pinPrompt.title}
+          onClose={() => setPinPrompt(null)}
+          onSubmit={(pin) => pinPrompt.onSubmit(pin)}
+        />
+      )}
+
+      {showPinSetup && (
+        <PinSetupModal
+          hasPin={!!currentUser.staff_pin}
+          onClose={() => setShowPinSetup(false)}
+          onSave={(cur, next) => {
+            const res = setStaffPin(cur || null, next);
+            if (!res.ok) { showToast(res.reason); return; }
+            showToast("Staff PIN updated");
+            setShowPinSetup(false);
+          }}
+        />
+      )}
+
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
@@ -306,6 +404,72 @@ function IDCardModal({ customer, onClose }: { customer: Profile; onClose: () => 
           <div className="text-xs text-muted-foreground mt-2">Scan at any BitePay POS</div>
         </div>
         <Button onClick={printCard} className="w-full mt-4"><Printer className="w-4 h-4 mr-2" /> Print ID Card</Button>
+      </div>
+    </div>
+  );
+}
+
+function PinModal({ title, onClose, onSubmit }: { title: string; onClose: () => void; onSubmit: (pin: string) => void }) {
+  const [pin, setPin] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-1">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h3 className="font-bold">Enter Staff PIN</h3>
+          <button onClick={onClose} className="ml-auto p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">{title}</p>
+        <Input
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          placeholder="••••"
+          className="text-center text-2xl tracking-[0.6em] h-14"
+        />
+        <Button onClick={() => onSubmit(pin)} disabled={pin.length < 4} className="w-full mt-4 h-11">Confirm</Button>
+      </div>
+    </div>
+  );
+}
+
+function PinSetupModal({ hasPin, onClose, onSave }: { hasPin: boolean; onClose: () => void; onSave: (cur: string, next: string) => void }) {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState("");
+  const submit = () => {
+    setErr("");
+    if (next !== confirm) { setErr("PINs don't match"); return; }
+    if (!/^\d{4,6}$/.test(next)) { setErr("PIN must be 4–6 digits"); return; }
+    onSave(cur, next);
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h3 className="font-bold">{hasPin ? "Change staff PIN" : "Set staff PIN"}</h3>
+          <button onClick={onClose} className="ml-auto p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+        </div>
+        {hasPin && (
+          <label className="block mb-3">
+            <span className="text-xs font-semibold text-muted-foreground">Current PIN</span>
+            <Input type="password" inputMode="numeric" value={cur} onChange={(e) => setCur(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+          </label>
+        )}
+        <label className="block mb-3">
+          <span className="text-xs font-semibold text-muted-foreground">New PIN (4–6 digits)</span>
+          <Input type="password" inputMode="numeric" value={next} onChange={(e) => setNext(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold text-muted-foreground">Confirm new PIN</span>
+          <Input type="password" inputMode="numeric" value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+        </label>
+        {err && <div className="mt-3 text-sm text-destructive">{err}</div>}
+        <Button onClick={submit} className="w-full mt-4 h-11">Save PIN</Button>
       </div>
     </div>
   );

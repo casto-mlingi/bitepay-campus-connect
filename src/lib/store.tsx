@@ -10,6 +10,23 @@ export type Profile = {
   wallet_balance: number;
   role: Role;
   staff_role?: StaffRole;
+  staff_pin?: string;
+};
+
+export type TopUpRequestStatus = "pending" | "approved" | "rejected";
+export type TopUpRequest = {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  amount: number;
+  reference: string;
+  note?: string;
+  status: TopUpRequestStatus;
+  created_at: number;
+  resolved_at?: number;
+  resolved_by?: string;
+  reject_reason?: string;
 };
 
 export type Product = {
@@ -188,6 +205,11 @@ type Ctx = {
   placeOrder: (deliveryType: DeliveryType) => Order | null;
   advanceOrder: (id: string) => void;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
+  staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => { ok: true } | { ok: false; reason: string };
+  topUpRequests: TopUpRequest[];
+  submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
+  rejectTopUpRequest: (id: string, reason: string) => void;
+  setStaffPin: (currentPin: string | null, newPin: string) => { ok: true } | { ok: false; reason: string };
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
@@ -224,9 +246,9 @@ const seedProducts: Product[] = [
 
 const seedProfiles: Profile[] = [
   { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
-  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor" },
-  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier" },
-  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner" },
+  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor", staff_pin: "1234" },
+  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier", staff_pin: "1234" },
+  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner", staff_pin: "1234" },
 ];
 
 const seedOrders: Order[] = [
@@ -291,6 +313,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
@@ -390,6 +413,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
+    topUpRequests,
+    submitTopUpRequest({ amount, reference, note }) {
+      if (!currentUser || currentUser.role !== "customer") return null;
+      if (amount <= 0 || !reference.trim()) return null;
+      const req: TopUpRequest = {
+        id: `TR-${Date.now()}`, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        customer_phone: currentUser.phone, amount, reference: reference.trim(), note,
+        status: "pending", created_at: Date.now(),
+      };
+      setTopUpRequests((prev) => [req, ...prev]);
+      return req;
+    },
+    rejectTopUpRequest(id, reason) {
+      setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
+    },
+    setStaffPin(currentPin, newPin) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
+      if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
+      if (currentUser.staff_pin && currentUser.staff_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, staff_pin: newPin } : p));
+      return { ok: true };
+    },
+    staffTopUp({ customerId, amount, tender, reference, pin, requestId }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not signed in as staff" };
+      if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
+      if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
+      if (amount <= 0) return { ok: false, reason: "Enter an amount" };
+      if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
+      const cust = profiles.find((p) => p.id === customerId);
+      if (!cust) return { ok: false, reason: "Customer not found" };
+      const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
+      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
+      if (tender === "mobile") setBank((b) => b + amount);
+      else setCash((c) => c + amount);
+      if (requestId) {
+        setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
+      }
+      return { ok: true };
+    },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
@@ -628,7 +691,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, topUpRequests, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
