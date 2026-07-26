@@ -175,7 +175,14 @@ function Customers() {
               </div>
 
               <div className="mt-4 border rounded-xl p-3">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Cash top-up</div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center justify-between">
+                  <span>Top-up wallet</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary"><KeyRound className="w-3 h-3" /> PIN required</span>
+                </div>
+                <div className="flex gap-1 mb-2">
+                  <button onClick={() => setTopupTender("cash")} className={`flex-1 py-1.5 rounded-md text-xs font-semibold border ${topupTender === "cash" ? "bg-primary text-primary-foreground border-primary" : "bg-muted border-transparent"}`}>Cash</button>
+                  <button onClick={() => setTopupTender("mobile")} className={`flex-1 py-1.5 rounded-md text-xs font-semibold border ${topupTender === "mobile" ? "bg-primary text-primary-foreground border-primary" : "bg-muted border-transparent"}`}>Mobile Money</button>
+                </div>
                 <div className="flex gap-2">
                   <div className="flex-1 flex items-center border rounded-lg px-3">
                     <span className="text-xs text-muted-foreground mr-2">TZS</span>
@@ -186,6 +193,13 @@ function Customers() {
                     <ArrowUpCircle className="w-4 h-4 mr-1.5" /> Top-Up
                   </Button>
                 </div>
+                {topupTender === "mobile" && (
+                  <div className="mt-2 flex items-center border rounded-lg px-3">
+                    <Hash className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+                    <input value={topupRef} onChange={(e) => setTopupRef(e.target.value.toUpperCase())} placeholder="Payment reference"
+                      className="flex-1 py-2 bg-transparent outline-none text-sm" />
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {[5000, 10000, 20000, 50000].map((v) => (
                     <button key={v} onClick={() => setTopupAmt(v)} className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
@@ -193,7 +207,11 @@ function Customers() {
                     </button>
                   ))}
                 </div>
+                <button onClick={() => setShowPinSetup(true)} className="mt-2 text-[11px] text-muted-foreground hover:text-primary underline">
+                  {currentUser.staff_pin ? "Change my staff PIN" : "Set my staff PIN"}
+                </button>
               </div>
+
 
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Recent activity</div>
