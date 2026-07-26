@@ -286,6 +286,28 @@ function Customers() {
 
       {showQR && <IDCardModal customer={showQR} onClose={() => setShowQR(null)} />}
 
+      {pinPrompt && (
+        <PinModal
+          title={pinPrompt.title}
+          onClose={() => setPinPrompt(null)}
+          onSubmit={(pin) => pinPrompt.onSubmit(pin)}
+        />
+      )}
+
+      {showPinSetup && (
+        <PinSetupModal
+          hasPin={!!currentUser.staff_pin}
+          onClose={() => setShowPinSetup(false)}
+          onSave={(cur, next) => {
+            const res = setStaffPin(cur || null, next);
+            if (!res.ok) { showToast(res.reason); return; }
+            showToast("Staff PIN updated");
+            setShowPinSetup(false);
+          }}
+        />
+      )}
+
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
           <CheckCircle2 className="w-4 h-4 text-success" /> {toast}
