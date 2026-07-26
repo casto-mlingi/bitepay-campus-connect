@@ -205,6 +205,11 @@ type Ctx = {
   placeOrder: (deliveryType: DeliveryType) => Order | null;
   advanceOrder: (id: string) => void;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
+  staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => { ok: true } | { ok: false; reason: string };
+  topUpRequests: TopUpRequest[];
+  submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
+  rejectTopUpRequest: (id: string, reason: string) => void;
+  setStaffPin: (currentPin: string | null, newPin: string) => { ok: true } | { ok: false; reason: string };
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
