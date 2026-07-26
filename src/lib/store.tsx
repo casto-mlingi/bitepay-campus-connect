@@ -10,6 +10,23 @@ export type Profile = {
   wallet_balance: number;
   role: Role;
   staff_role?: StaffRole;
+  staff_pin?: string;
+};
+
+export type TopUpRequestStatus = "pending" | "approved" | "rejected";
+export type TopUpRequest = {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  amount: number;
+  reference: string;
+  note?: string;
+  status: TopUpRequestStatus;
+  created_at: number;
+  resolved_at?: number;
+  resolved_by?: string;
+  reject_reason?: string;
 };
 
 export type Product = {
