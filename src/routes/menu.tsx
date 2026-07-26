@@ -10,15 +10,19 @@ export const Route = createFileRoute("/menu")({
 });
 
 function MenuPage() {
-  const { currentUser, products, cart, addToCart, setQty } = useStore();
+  const { currentUser, products, cart, addToCart, setQty, availablePlates } = useStore();
   const navigate = useNavigate();
   const [category, setCategory] = useState<string>("All");
   const [query, setQuery] = useState("");
 
   useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
-  const filtered = products.filter((p) =>
+  const available = useMemo(() => products.filter((p) => {
+    const plates = availablePlates(p.id);
+    return plates === null || plates > 0;
+  }), [products, availablePlates]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set(available.map((p) => p.category)))], [available]);
+  const filtered = available.filter((p) =>
     (category === "All" || p.category === category) &&
     (query === "" || p.name.toLowerCase().includes(query.toLowerCase()))
   );
