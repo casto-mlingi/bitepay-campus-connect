@@ -691,7 +691,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, topUpRequests, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
