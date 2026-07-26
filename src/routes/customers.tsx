@@ -408,3 +408,69 @@ function IDCardModal({ customer, onClose }: { customer: Profile; onClose: () => 
     </div>
   );
 }
+
+function PinModal({ title, onClose, onSubmit }: { title: string; onClose: () => void; onSubmit: (pin: string) => void }) {
+  const [pin, setPin] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-1">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h3 className="font-bold">Enter Staff PIN</h3>
+          <button onClick={onClose} className="ml-auto p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">{title}</p>
+        <Input
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          placeholder="••••"
+          className="text-center text-2xl tracking-[0.6em] h-14"
+        />
+        <Button onClick={() => onSubmit(pin)} disabled={pin.length < 4} className="w-full mt-4 h-11">Confirm</Button>
+      </div>
+    </div>
+  );
+}
+
+function PinSetupModal({ hasPin, onClose, onSave }: { hasPin: boolean; onClose: () => void; onSave: (cur: string, next: string) => void }) {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState("");
+  const submit = () => {
+    setErr("");
+    if (next !== confirm) { setErr("PINs don't match"); return; }
+    if (!/^\d{4,6}$/.test(next)) { setErr("PIN must be 4–6 digits"); return; }
+    onSave(cur, next);
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h3 className="font-bold">{hasPin ? "Change staff PIN" : "Set staff PIN"}</h3>
+          <button onClick={onClose} className="ml-auto p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+        </div>
+        {hasPin && (
+          <label className="block mb-3">
+            <span className="text-xs font-semibold text-muted-foreground">Current PIN</span>
+            <Input type="password" inputMode="numeric" value={cur} onChange={(e) => setCur(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+          </label>
+        )}
+        <label className="block mb-3">
+          <span className="text-xs font-semibold text-muted-foreground">New PIN (4–6 digits)</span>
+          <Input type="password" inputMode="numeric" value={next} onChange={(e) => setNext(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold text-muted-foreground">Confirm new PIN</span>
+          <Input type="password" inputMode="numeric" value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1" />
+        </label>
+        {err && <div className="mt-3 text-sm text-destructive">{err}</div>}
+        <Button onClick={submit} className="w-full mt-4 h-11">Save PIN</Button>
+      </div>
+    </div>
+  );
+}
