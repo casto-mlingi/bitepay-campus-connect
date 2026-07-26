@@ -96,6 +96,39 @@ function Customers() {
         <StatCard icon={<TrendingUp className="w-4 h-4" />} label="Active (24h)" value={String(activeToday)} tone="amber" />
       </div>
 
+      {pendingRequests.length > 0 && (
+        <section className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Inbox className="w-4 h-4 text-amber-700" />
+            <h2 className="font-bold text-amber-900">Pending top-up requests</h2>
+            <span className="ml-auto text-xs font-bold text-amber-700">{pendingRequests.length}</span>
+          </div>
+          <ul className="space-y-2">
+            {pendingRequests.map((r) => (
+              <li key={r.id} className="bg-white border border-amber-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[180px]">
+                  <div className="font-semibold">{r.customer_name} <span className="text-xs text-muted-foreground font-normal">· {r.customer_phone}</span></div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                    <Clock className="w-3 h-3" /> {new Date(r.created_at).toLocaleString()}
+                    <span className="inline-flex items-center gap-1"><Hash className="w-3 h-3" />{r.reference}</span>
+                  </div>
+                  {r.note && <div className="text-xs text-muted-foreground mt-1 italic">"{r.note}"</div>}
+                </div>
+                <div className="text-lg font-bold text-emerald-700">{formatTZS(r.amount)}</div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => approveRequest(r)}>Approve</Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const reason = window.prompt("Reason for rejection?", "Reference not found");
+                    if (reason) { rejectTopUpRequest(r.id, reason); showToast("Request rejected"); }
+                  }}>Reject</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
         <section className="bg-surface border rounded-2xl overflow-hidden">
           <div className="p-4 border-b flex items-center gap-2">
