@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
+export type StaffRole = "cashier" | "supervisor" | "owner";
 export type Profile = {
   id: string;
   full_name: string;
@@ -8,6 +9,7 @@ export type Profile = {
   password: string;
   wallet_balance: number;
   role: Role;
+  staff_role?: StaffRole;
 };
 
 export type Product = {
@@ -39,6 +41,13 @@ export type Order = {
   wallet_paid?: number;
   loyalty_earned?: number;
   tender?: "cash" | "mobile";
+  reference?: string;              // Mobile money confirmation / Lipa Namba code
+  reversed?: boolean;
+  reversal_of?: string;            // pointer to reversed order
+  is_reversal?: boolean;           // this order IS a credit-note
+  cashier_id?: string;
+  cashier_name?: string;
+  shift_id?: string;
 };
 
 export type Transaction = {
@@ -49,6 +58,7 @@ export type Transaction = {
   amount: number;
   description: string;
   created_at: number;
+  reference?: string;
 };
 
 export type RawMaterial = {
@@ -107,6 +117,47 @@ export type Expense = {
 
 export type CartItem = { product: Product; qty: number };
 
+export type Shift = {
+  id: string;
+  cashier_id: string;
+  cashier_name: string;
+  opened_at: number;
+  closed_at?: number;
+  opening_float: number;
+  counted_cash?: number;
+  counted_mobile?: number;
+  cash_variance?: number;
+  mobile_variance?: number;
+  notes?: string;
+};
+
+export type PendingSaleKind = "wallet" | "cash";
+export type PendingSale = {
+  id: string;
+  queued_at: number;
+  kind: PendingSaleKind;
+  customer_id?: string;
+  customer_name?: string;
+  items: OrderItem[];
+  cash_portion?: number;
+  cash_received?: number;
+  tender: "cash" | "mobile";
+  reference?: string;
+};
+
+export type SmsChannel = "sms" | "whatsapp";
+export type SmsLog = {
+  id: string;
+  channel: SmsChannel;
+  to_phone: string;
+  to_name: string;
+  message: string;
+  kind: "receipt" | "nudge";
+  created_at: number;
+};
+
+type SaleResult = { ok: true; order: Order } | { ok: false; reason: string };
+
 type Ctx = {
   currentUser: Profile | null;
   profiles: Profile[];
@@ -121,17 +172,25 @@ type Ctx = {
   expenses: Expense[];
   cash: number;
   bank: number;
+  shifts: Shift[];
+  activeShift: Shift | null;
+  pendingSales: PendingSale[];
+  smsLogs: SmsLog[];
+  isOnline: boolean;
+  LOW_BALANCE_THRESHOLD: number;
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
+  hasStaffRole: (min: StaffRole) => boolean;
   addToCart: (p: Product) => void;
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
   placeOrder: (deliveryType: DeliveryType) => Order | null;
   advanceOrder: (id: string) => void;
-  topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile") => void;
-  posSale: (customerId: string, items: OrderItem[], cashPortion?: number, tender?: "cash" | "mobile") => Order | null;
-  posCashSale: (items: OrderItem[], cashReceived: number, customerName?: string, tender?: "cash" | "mobile") => Order | null;
+  topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
+  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
+  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
+  reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
@@ -141,6 +200,12 @@ type Ctx = {
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
+  availablePlates: (product_id: string) => number | null; // null = no batch tracking, unlimited
+  openShift: (opening_float: number) => Shift | null;
+  closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
+  enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at">) => void;
+  syncOutbox: () => { synced: number; failed: number };
+  sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -159,7 +224,9 @@ const seedProducts: Product[] = [
 
 const seedProfiles: Profile[] = [
   { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
-  { id: "u2", full_name: "Staff Cashier", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff" },
+  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor" },
+  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier" },
+  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner" },
 ];
 
 const seedOrders: Order[] = [
@@ -191,7 +258,10 @@ const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
-const LOYALTY_RATE = 0.01; // 1% cashback on every sale (paid portion)
+const LOYALTY_RATE = 0.01;
+const LOW_BALANCE_THRESHOLD = 3000;
+
+const roleRank: Record<StaffRole, number> = { cashier: 1, supervisor: 2, owner: 3 };
 
 const seedRaw: RawMaterial[] = [
   { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
@@ -217,6 +287,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [cash, setCash] = useState<number>(500000);
   const [bank, setBank] = useState<number>(1500000);
   const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
+  const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
+  const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
 
   const nextReceiptNo = () => {
     const day = todayKey();
@@ -226,16 +310,86 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       no = `R-${day}-${pad(next.n)}`;
       return next;
     });
-    // fallback synchronous compute
     const nextN = receiptSeq.day === day ? receiptSeq.n + 1 : 1;
     return no || `R-${day}-${pad(nextN)}`;
   };
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
+  const activeShift = shifts.find((s) => s.id === activeShiftId && !s.closed_at) ?? null;
+
+  const hasStaffRole = useCallback((min: StaffRole) => {
+    if (!currentUser || currentUser.role !== "staff") return false;
+    const rank = roleRank[currentUser.staff_role ?? "cashier"];
+    return rank >= roleRank[min];
+  }, [currentUser]);
+
+  const pushNudgeIfLow = useCallback((customer: Profile) => {
+    if (customer.wallet_balance >= LOW_BALANCE_THRESHOLD) return;
+    setSmsLogs((prev) => [{
+      id: `sms${Date.now()}`, channel: "sms", to_phone: customer.phone, to_name: customer.full_name,
+      message: `Hi ${customer.full_name.split(" ")[0]}, your BitePay wallet is low (TZS ${customer.wallet_balance.toLocaleString()}). Top up via Lipa Namba to keep ordering.`,
+      kind: "nudge", created_at: Date.now(),
+    }, ...prev]);
+  }, []);
+
+  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
+    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+    const cust = profiles.find((p) => p.id === customerId);
+    if (!cust) return { ok: false, reason: "Customer not found" };
+    const cashPart = Math.max(0, Math.min(cashPortion, total));
+    const walletPart = total - cashPart;
+    if (cust.wallet_balance < walletPart) return { ok: false, reason: "Insufficient wallet balance" };
+    if (tender === "mobile" && cashPart > 0 && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
+    const id = nextOrderId();
+    const receipt_no = nextReceiptNo();
+    const loyalty = Math.round(total * LOYALTY_RATE);
+    const order: Order = {
+      id, customer_id: cust.id, customer_name: cust.full_name, items,
+      total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
+      created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
+      tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
+      cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+    };
+    setOrders((prev) => [order, ...prev]);
+    const nextCust = { ...cust, wallet_balance: cust.wallet_balance - walletPart + loyalty };
+    setProfiles((prev) => prev.map((p) => p.id === cust.id ? nextCust : p));
+    setTransactions((prev) => {
+      const tx: Transaction[] = [];
+      if (walletPart > 0) tx.push({ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
+      if (loyalty > 0) tx.push({ id: `tl${Date.now()}`, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
+      return [...tx, ...prev];
+    });
+    if (cashPart > 0) {
+      if (tender === "mobile") setBank((b) => b + cashPart);
+      else setCash((c) => c + cashPart);
+    }
+    pushNudgeIfLow(nextCust);
+    return { ok: true, order };
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow]);
+
+  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
+    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+    if (total <= 0) return { ok: false, reason: "Cart empty" };
+    if (tender === "cash" && cashReceived < total) return { ok: false, reason: "Amount received is less than total" };
+    if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
+    const id = nextOrderId();
+    const receipt_no = nextReceiptNo();
+    const order: Order = {
+      id, customer_id: "walkin", customer_name: customerName, items,
+      total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
+      created_at: Date.now(), receipt_no, cash_paid: tender === "cash" ? cashReceived : total, wallet_paid: 0, tender,
+      reference: tender === "mobile" ? reference : undefined,
+      cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+    };
+    setOrders((prev) => [order, ...prev]);
+    if (tender === "mobile") setBank((b) => b + total);
+    else setCash((c) => c + total);
+    return { ok: true, order };
+  }, [currentUser, activeShift]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
-    purchases, expenses, cash, bank,
+    purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (u) setCurrentUserId(u.id);
@@ -249,6 +403,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return u;
     },
     logout() { setCurrentUserId(null); setCart([]); },
+    hasStaffRole,
     addToCart(p) {
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);
@@ -272,65 +427,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         created_at: Date.now(),
       };
       setOrders((prev) => [order, ...prev]);
-      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, wallet_balance: p.wallet_balance - total } : p));
+      const nextUser = { ...currentUser, wallet_balance: currentUser.wallet_balance - total };
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? nextUser : p));
       setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
+      pushNudgeIfLow(nextUser);
       return order;
     },
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
     },
-    topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash") {
+    topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
-      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description, created_at: Date.now() }, ...prev]);
+      const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
+      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
       if (tender === "mobile") setBank((b) => b + amount);
       else setCash((c) => c + amount);
     },
-    posSale(customerId, items, cashPortion = 0, tender = "cash") {
-      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-      const cust = profiles.find((p) => p.id === customerId);
-      if (!cust) return null;
-      const cashPart = Math.max(0, Math.min(cashPortion, total));
-      const walletPart = total - cashPart;
-      if (cust.wallet_balance < walletPart) return null;
-      const id = nextOrderId();
-      const receipt_no = nextReceiptNo();
-      const loyalty = Math.round(total * LOYALTY_RATE);
-      const order: Order = {
-        id, customer_id: cust.id, customer_name: cust.full_name, items,
-        total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
-        created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
-        tender: cashPart > 0 ? tender : undefined,
-      };
-      setOrders((prev) => [order, ...prev]);
-      setProfiles((prev) => prev.map((p) => p.id === cust.id ? { ...p, wallet_balance: p.wallet_balance - walletPart + loyalty } : p));
-      setTransactions((prev) => {
-        const tx: Transaction[] = [];
-        if (walletPart > 0) tx.push({ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
-        if (loyalty > 0) tx.push({ id: `tl${Date.now()}`, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
-        return [...tx, ...prev];
-      });
-      if (cashPart > 0) {
-        if (tender === "mobile") setBank((b) => b + cashPart);
-        else setCash((c) => c + cashPart);
-      }
-      return order;
+    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
+      return _executePosSale(customerId, items, cashPortion, tender, reference);
     },
-    posCashSale(items, cashReceived, customerName = "Walk-in Cash", tender = "cash") {
-      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-      if (total <= 0 || cashReceived < total) return null;
+    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference }) {
+      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference);
+    },
+    reverseSale(orderId, reason) {
+      const original = orders.find((o) => o.id === orderId);
+      if (!original) return { ok: false, reason: "Order not found" };
+      if (original.reversed || original.is_reversal) return { ok: false, reason: "Already reversed" };
       const id = nextOrderId();
-      const receipt_no = nextReceiptNo();
-      const order: Order = {
-        id, customer_id: "walkin", customer_name: customerName, items,
-        total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
-        created_at: Date.now(), receipt_no, cash_paid: cashReceived, wallet_paid: 0, tender,
+      const receipt_no = `CN-${todayKey()}-${pad(receiptSeq.n + 1)}`;
+      const credit: Order = {
+        ...original, id, receipt_no,
+        items: original.items.map((i) => ({ ...i, qty: -i.qty })),
+        total_amount: -original.total_amount,
+        cash_paid: -(original.cash_paid ?? 0),
+        wallet_paid: -(original.wallet_paid ?? 0),
+        loyalty_earned: -(original.loyalty_earned ?? 0),
+        created_at: Date.now(), status: "completed",
+        is_reversal: true, reversal_of: original.id,
       };
-      setOrders((prev) => [order, ...prev]);
-      if (tender === "mobile") setBank((b) => b + total);
-      else setCash((c) => c + total);
-      return order;
+      setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
+      // Refund wallet
+      if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
+        setProfiles((prev) => prev.map((p) => p.id === original.customer_id ? { ...p, wallet_balance: p.wallet_balance + (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0) } : p));
+        setTransactions((prev) => [{ id: `tr${Date.now()}`, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
+      }
+      // Refund cash/bank
+      const cashPart = original.cash_paid ?? 0;
+      if (cashPart > 0) {
+        if (original.tender === "mobile") setBank((b) => b - cashPart);
+        else setCash((c) => c - cashPart);
+      }
+      return { ok: true, order: credit };
     },
     findCustomer(query) {
       const q = query.trim().toLowerCase();
@@ -350,12 +499,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return u;
     },
-    addRawMaterial(r) {
-      setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]);
-    },
-    updateRawStock(id, delta) {
-      setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r));
-    },
+    addRawMaterial(r) { setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]); },
+    updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
     createBatch({ product_id, ingredients, labor_cost, plates }) {
       if (plates <= 0 || ingredients.length === 0) return null;
       let raw_cost = 0;
@@ -388,7 +533,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const raw = rawMaterials.find((r) => r.id === raw_id);
       if (!raw) return null;
       const newStock = raw.stock + qty;
-      // Weighted average cost recalculation
       const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
       setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
       if (payment_method === "bank") setBank((b) => b - total_cost);
@@ -412,16 +556,79 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (amount <= 0) return false;
       if (from === "cash") {
         if (cash < amount) return false;
-        setCash((c) => c - amount);
-        setBank((b) => b + amount);
+        setCash((c) => c - amount); setBank((b) => b + amount);
       } else {
         if (bank < amount) return false;
-        setBank((b) => b - amount);
-        setCash((c) => c + amount);
+        setBank((b) => b - amount); setCash((c) => c + amount);
       }
       return true;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq]);
+    availablePlates(product_id) {
+      const rel = batches.filter((b) => b.product_id === product_id);
+      if (rel.length === 0) return null; // untracked → unlimited
+      return rel.reduce((s, b) => s + b.plates_remaining, 0);
+    },
+    openShift(opening_float) {
+      if (!currentUser || currentUser.role !== "staff") return null;
+      if (activeShift) return null;
+      const s: Shift = {
+        id: `SH-${Date.now()}`, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
+        opened_at: Date.now(), opening_float,
+      };
+      setShifts((prev) => [s, ...prev]);
+      setActiveShiftId(s.id);
+      setCash((c) => c + opening_float);
+      return s;
+    },
+    closeShift({ counted_cash, counted_mobile, notes }) {
+      if (!activeShift) return null;
+      const shiftOrders = orders.filter((o) => o.shift_id === activeShift.id && !o.is_reversal);
+      const reversals = orders.filter((o) => o.shift_id === activeShift.id && o.is_reversal);
+      const cashSales = shiftOrders.reduce((s, o) => s + (o.tender === "cash" ? (o.cash_paid ?? 0) : 0), 0)
+        + reversals.reduce((s, o) => s + (o.tender === "cash" ? (o.cash_paid ?? 0) : 0), 0);
+      const mobileSales = shiftOrders.reduce((s, o) => s + (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0), 0)
+        + reversals.reduce((s, o) => s + (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0), 0);
+      const expectedCash = activeShift.opening_float + cashSales;
+      const cash_variance = counted_cash - expectedCash;
+      const mobile_variance = counted_mobile - mobileSales;
+      const closed: Shift = { ...activeShift, closed_at: Date.now(), counted_cash, counted_mobile, cash_variance, mobile_variance, notes };
+      setShifts((prev) => prev.map((s) => s.id === activeShift.id ? closed : s));
+      setActiveShiftId(null);
+      return closed;
+    },
+    enqueueSale(payload) {
+      const p: PendingSale = { id: `PQ-${Date.now()}`, queued_at: Date.now(), ...payload };
+      setPendingSales((prev) => [p, ...prev]);
+    },
+    syncOutbox() {
+      let synced = 0, failed = 0;
+      const rem: PendingSale[] = [];
+      for (const p of [...pendingSales].reverse()) {
+        let res: SaleResult;
+        if (p.kind === "wallet" && p.customer_id) {
+          res = _executePosSale(p.customer_id, p.items, p.cash_portion ?? 0, p.tender, p.reference);
+        } else {
+          res = _executeCashSale(p.items, p.cash_received ?? p.items.reduce((s, i) => s + i.price * i.qty, 0), p.customer_name ?? "Walk-in", p.tender, p.reference);
+        }
+        if (res.ok) synced++; else { failed++; rem.push(p); }
+      }
+      setPendingSales(rem);
+      return { synced, failed };
+    },
+    sendReceiptMessage(order, channel) {
+      const cust = profiles.find((p) => p.id === order.customer_id);
+      const to_phone = cust?.phone ?? "";
+      const to_name = cust?.full_name ?? order.customer_name;
+      if (!to_phone) return null;
+      const log: SmsLog = {
+        id: `sms${Date.now()}`, channel, to_phone, to_name,
+        message: `BitePay receipt ${order.receipt_no ?? order.id} · TZS ${order.total_amount.toLocaleString()} · Thank you!`,
+        kind: "receipt", created_at: Date.now(),
+      };
+      setSmsLogs((prev) => [log, ...prev]);
+      return log;
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
