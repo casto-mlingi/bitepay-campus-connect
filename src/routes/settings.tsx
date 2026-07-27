@@ -1,12 +1,13 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Save, Store as StoreIcon } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { Settings as SettingsIcon, Save, Store as StoreIcon, Sparkles, ArrowUpRight, Clock } from "lucide-react";
+import { useStore, PLAN_LABEL, PLAN_PRICE, PLAN_FEATURES, type SubscriptionPlan } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
