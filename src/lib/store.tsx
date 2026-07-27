@@ -340,7 +340,7 @@ type Ctx = {
   submitTicket: (input: { subject: string; message: string; category: Ticket["category"]; priority: TicketPriority }) => Ticket | null;
   replyToTicket: (ticketId: string, body: string) => Ok | Fail;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
-  superAdmin: SuperAdmin | null;
+  superAdmin: SuperAdmin;
   isAdminSignedIn: boolean;
   adminLogin: (username: string, password: string) => boolean;
   adminLogout: () => void;
