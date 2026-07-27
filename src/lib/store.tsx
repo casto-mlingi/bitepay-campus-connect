@@ -749,10 +749,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     submitTopUpRequest({ amount, reference, note }) {
-      if (!currentUser || currentUser.role !== "customer" || !currentUser.store_id) return null;
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
       if (amount <= 0 || !reference.trim()) return null;
       const req: TopUpRequest = {
-        id: `TR-${Date.now()}`, store_id: currentUser.store_id,
+        id: `TR-${Date.now()}`, store_id: sid,
+
         customer_id: currentUser.id, customer_name: currentUser.full_name,
         customer_phone: currentUser.phone, amount, reference: reference.trim(), note,
         status: "pending", created_at: Date.now(),
