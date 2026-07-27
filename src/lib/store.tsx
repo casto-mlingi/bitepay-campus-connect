@@ -555,7 +555,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         staff_pin: owner.staff_pin, created_at: Date.now(),
       };
       setProfiles((prev) => [...prev, ownerProfile]);
-      setStore({ ...s, name: s.name.trim(), created_at: Date.now() });
+      const now = Date.now();
+      const trialDays = 14;
+      setStore({ ...s, name: s.name.trim(), created_at: now, subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 } });
       setCash(opening_cash);
       setBank(opening_bank);
       setCurrentUserId(ownerProfile.id);
