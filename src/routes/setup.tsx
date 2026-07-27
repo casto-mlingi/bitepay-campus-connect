@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff, Wallet, Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/setup")({
 function SetupWizard() {
   const { hasOwner, completeSetup } = useStore();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
 
@@ -26,6 +26,9 @@ function SetupWizard() {
   const [contactPhone, setContactPhone] = useState("");
   const [currency, setCurrency] = useState("TZS");
   const [lowThreshold, setLowThreshold] = useState<number>(3000);
+
+  const [openingCash, setOpeningCash] = useState<number>(0);
+  const [openingBank, setOpeningBank] = useState<number>(0);
 
   const [ownerName, setOwnerName] = useState("");
   const [ownerPhone, setOwnerPhone] = useState("");
@@ -36,11 +39,18 @@ function SetupWizard() {
     if (hasOwner) navigate({ to: "/" });
   }, [hasOwner, navigate]);
 
-  const goNext = (e: React.FormEvent) => {
+  const goStep2 = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!storeName.trim() || !contactPhone.trim()) return setError("Store name and contact phone are required");
     setStep(2);
+  };
+
+  const goStep3 = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (openingCash < 0 || openingBank < 0) return setError("Opening balances cannot be negative");
+    setStep(3);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -49,6 +59,8 @@ function SetupWizard() {
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
+      opening_cash: openingCash,
+      opening_bank: openingBank,
     });
     if (!res.ok) return setError(res.reason);
     navigate({ to: "/staff" });
@@ -64,19 +76,21 @@ function SetupWizard() {
             <ChefHat className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Set up BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Two quick steps to get your store running.</p>
+          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Three quick steps to get your store running.</p>
           <div className="flex items-center gap-2 mt-5">
             <StepDot n={1} active={step === 1} done={step > 1} label="Store" />
-            <div className="w-8 h-px bg-white/40" />
-            <StepDot n={2} active={step === 2} done={false} label="Owner" />
+            <div className="w-6 h-px bg-white/40" />
+            <StepDot n={2} active={step === 2} done={step > 2} label="Liquidity" />
+            <div className="w-6 h-px bg-white/40" />
+            <StepDot n={3} active={step === 3} done={false} label="Owner" />
           </div>
         </div>
       </div>
 
       <div className="flex-1 -mt-8 px-5 pb-8 relative z-10">
         <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-6 sm:p-8 border">
-          {step === 1 ? (
-            <form onSubmit={goNext} className="space-y-4">
+          {step === 1 && (
+            <form onSubmit={goStep2} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <StoreIcon className="w-5 h-5 text-primary" />
                 <h2 className="text-xl font-bold">Store details</h2>
@@ -94,14 +108,43 @@ function SetupWizard() {
                 <FormRow label="Currency">
                   <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="TZS" className="h-11 rounded-xl" />
                 </FormRow>
-                <FormRow label="Low-balance nudge (TZS)">
+                <FormRow label="Low-balance nudge">
                   <Input type="number" value={lowThreshold} onChange={(e) => setLowThreshold(Number(e.target.value) || 0)} className="h-11 rounded-xl" />
                 </FormRow>
               </div>
+              <p className="text-xs text-muted-foreground flex items-start gap-1.5 -mt-1">
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span><strong>Low-balance nudge</strong> is the wallet balance at which BitePay auto-sends a reminder to top up. If a customer's wallet drops below this amount after a purchase, they'll get an SMS/WhatsApp nudge so they don't get stuck at checkout next time.</span>
+              </p>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
             </form>
-          ) : (
+          )}
+
+          {step === 2 && (
+            <form onSubmit={goStep3} className="space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold">Liquidity accounts</h2>
+              </div>
+              <p className="text-sm text-muted-foreground -mt-1">Opening balances for your treasury. These fund purchases and expenses, and receive sales & top-ups.</p>
+              <FormRow label="Cash on hand (till float)">
+                <Input type="number" min={0} value={openingCash} onChange={(e) => setOpeningCash(Number(e.target.value) || 0)} placeholder="0" className="h-11 rounded-xl" />
+              </FormRow>
+              <p className="text-xs text-muted-foreground -mt-2">Physical cash in the till at the start. Cash sales add to this; cash purchases/expenses reduce it.</p>
+              <FormRow label="Bank / mobile-money balance">
+                <Input type="number" min={0} value={openingBank} onChange={(e) => setOpeningBank(Number(e.target.value) || 0)} placeholder="0" className="h-11 rounded-xl" />
+              </FormRow>
+              <p className="text-xs text-muted-foreground -mt-2">Money in your bank account or Lipa Namba wallet. Mobile-money top-ups & sales settle here.</p>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
+              </div>
+            </form>
+          )}
+
+          {step === 3 && (
             <form onSubmit={submit} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-5 h-5 text-primary" />
@@ -127,7 +170,7 @@ function SetupWizard() {
               </FormRow>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="button" variant="outline" onClick={() => setStep(2)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
                 <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Create store <CheckCircle2 className="ml-2 w-4 h-4" /></Button>
               </div>
             </form>
