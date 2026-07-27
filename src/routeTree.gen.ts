@@ -10,8 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TopupRouteImport } from './routes/topup'
+import { Route as TeamRouteImport } from './routes/team'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as ShiftRouteImport } from './routes/shift'
+import { Route as SetupRouteImport } from './routes/setup'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -28,6 +31,11 @@ const TopupRoute = TopupRouteImport.update({
   path: '/topup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StaffRoute = StaffRouteImport.update({
   id: '/staff',
   path: '/staff',
@@ -36,6 +44,16 @@ const StaffRoute = StaffRouteImport.update({
 const ShiftRoute = ShiftRouteImport.update({
   id: '/shift',
   path: '/shift',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PosRoute = PosRouteImport.update({
@@ -100,8 +118,11 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesByTo {
@@ -115,8 +136,11 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesById {
@@ -131,8 +155,11 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRouteTypes {
@@ -148,8 +175,11 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/settings'
+    | '/setup'
     | '/shift'
     | '/staff'
+    | '/team'
     | '/topup'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -163,8 +193,11 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/settings'
+    | '/setup'
     | '/shift'
     | '/staff'
+    | '/team'
     | '/topup'
   id:
     | '__root__'
@@ -178,8 +211,11 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/menu'
     | '/pos'
+    | '/settings'
+    | '/setup'
     | '/shift'
     | '/staff'
+    | '/team'
     | '/topup'
   fileRoutesById: FileRoutesById
 }
@@ -194,8 +230,11 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
+  SettingsRoute: typeof SettingsRoute
+  SetupRoute: typeof SetupRoute
   ShiftRoute: typeof ShiftRoute
   StaffRoute: typeof StaffRoute
+  TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
 }
 
@@ -206,6 +245,13 @@ declare module '@tanstack/react-router' {
       path: '/topup'
       fullPath: '/topup'
       preLoaderRoute: typeof TopupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/staff': {
@@ -220,6 +266,20 @@ declare module '@tanstack/react-router' {
       path: '/shift'
       fullPath: '/shift'
       preLoaderRoute: typeof ShiftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pos': {
@@ -306,8 +366,11 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
+  SettingsRoute: SettingsRoute,
+  SetupRoute: SetupRoute,
   ShiftRoute: ShiftRoute,
   StaffRoute: StaffRoute,
+  TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
 }
 export const routeTree = rootRouteImport

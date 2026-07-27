@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
 });
 
 function AuthPage() {
-  const { login, signup } = useStore();
+  const { login, signup, hasOwner } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
@@ -21,12 +21,16 @@ function AuthPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!hasOwner) navigate({ to: "/setup" });
+  }, [hasOwner, navigate]);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (mode === "login") {
       const u = login(phone, password);
-      if (!u) return setError("Invalid phone or password");
+      if (!u) return setError("Invalid phone or password (or account disabled)");
       navigate({ to: u.role === "staff" ? "/staff" : "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
@@ -36,11 +40,7 @@ function AuthPage() {
     }
   };
 
-  const quickFill = (role: "customer" | "staff") => {
-    if (role === "customer") { setPhone("0712345678"); setPassword("1234"); }
-    else { setPhone("0700000000"); setPassword("staff"); }
-    setMode("login");
-  };
+  const quickFillCustomer = () => { setPhone("0712345678"); setPassword("1234"); setMode("login"); };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
