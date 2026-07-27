@@ -6,7 +6,8 @@ import { useEffect, useState, type ReactNode } from "react";
 export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
-  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked } = useStore();
+  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests } = useStore();
+  const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
 
