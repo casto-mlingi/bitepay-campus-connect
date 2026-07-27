@@ -1,19 +1,27 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ChefHat, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { ChefHat, ArrowRight, Eye, EyeOff, Store as StoreIcon, User, ShieldCheck, LifeBuoy } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/")({
-  component: AuthPage,
-  head: () => ({ meta: [{ title: "Sign in — BitePay" }, { name: "description", content: "Sign in to your BitePay prepaid canteen wallet." }] }),
+  component: HomePage,
+  head: () => ({ meta: [
+    { title: "BitePay — Sign in" },
+    { name: "description", content: "Sign in to BitePay: customer wallet, staff console, or set up a new store." },
+    { property: "og:title", content: "BitePay — Prepaid Canteen Wallet" },
+    { property: "og:description", content: "One home for customers, staff and store owners." },
+  ] }),
 });
 
-function AuthPage() {
-  const { login, signup, hasOwner } = useStore();
+type Tab = "customer" | "staff";
+
+function HomePage() {
+  const { login, signup, hasOwner, store } = useStore();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("customer");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -21,17 +29,22 @@ function AuthPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!hasOwner) navigate({ to: "/setup" });
-  }, [hasOwner, navigate]);
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (mode === "login") {
+    if (tab === "staff") {
       const u = login(phone, password);
       if (!u) return setError("Invalid phone or password (or account disabled)");
-      navigate({ to: u.role === "staff" ? "/staff" : "/dashboard" });
+      if (u.role !== "staff") return setError("This account is a customer account. Use the Customer tab.");
+      navigate({ to: "/staff" });
+      return;
+    }
+    // customer tab
+    if (mode === "login") {
+      const u = login(phone, password);
+      if (!u) return setError("Invalid phone or password");
+      if (u.role !== "customer") return setError("This account is a staff account. Use the Staff tab.");
+      navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
       const u = signup(name, phone, password);
@@ -40,11 +53,8 @@ function AuthPage() {
     }
   };
 
-  const quickFillCustomer = () => { setPhone("0712345678"); setPassword("1234"); setMode("login"); };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Splash header */}
       <div className="relative bg-primary text-white pt-14 pb-20 px-6 rounded-b-[2.5rem] overflow-hidden">
         <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/10" />
         <div className="absolute -left-16 top-24 w-40 h-40 rounded-full bg-white/10" />
@@ -53,22 +63,37 @@ function AuthPage() {
             <ChefHat className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Top-up once, order faster. No cash, no queues.</p>
+          <p className="mt-1.5 text-white/85 text-sm max-w-xs">{store?.name ? `${store.name} • Prepaid canteen wallet` : "Top-up once, order faster. No cash, no queues."}</p>
         </div>
       </div>
 
-      {/* Form card */}
       <div className="flex-1 -mt-10 px-5 pb-8 relative z-10">
-        <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-6 sm:p-8 border">
-          <h2 className="text-2xl font-bold">
-            {mode === "login" ? "Welcome back 👋" : "Create account"}
+        <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-5 sm:p-7 border">
+          {/* Tabs */}
+          <div className="grid grid-cols-2 gap-1 bg-muted p-1 rounded-xl mb-5">
+            <button
+              onClick={() => { setTab("customer"); setError(""); }}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${tab === "customer" ? "bg-white shadow text-foreground" : "text-muted-foreground"}`}
+            >
+              <User className="w-4 h-4" /> Customer
+            </button>
+            <button
+              onClick={() => { setTab("staff"); setMode("login"); setError(""); }}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${tab === "staff" ? "bg-white shadow text-foreground" : "text-muted-foreground"}`}
+            >
+              <StoreIcon className="w-4 h-4" /> Staff
+            </button>
+          </div>
+
+          <h2 className="text-xl font-bold">
+            {tab === "staff" ? "Staff sign in" : mode === "login" ? "Welcome back 👋" : "Create your wallet"}
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {mode === "login" ? "Sign in to order and manage your wallet." : "Sign up in seconds — start ordering today."}
+            {tab === "staff" ? "Cashiers, supervisors and owners sign in here." : mode === "login" ? "Sign in to order and manage your wallet." : "Sign up in seconds — start ordering today."}
           </p>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            {mode === "signup" && (
+          <form onSubmit={submit} className="mt-5 space-y-3">
+            {tab === "customer" && mode === "signup" && (
               <div>
                 <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
@@ -89,28 +114,44 @@ function AuthPage() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90">
-              {mode === "login" ? "Sign in" : "Create account"} <ArrowRight className="ml-2 w-4 h-4" />
+              {tab === "customer" && mode === "signup" ? "Create account" : "Sign in"} <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </form>
 
-          <div className="mt-5 text-center">
-            <button
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              {mode === "login" ? (<>New here? <span className="text-primary font-semibold">Sign up</span></>) : (<>Already have an account? <span className="text-primary font-semibold">Sign in</span></>)}
-            </button>
-          </div>
+          {tab === "customer" && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setMode(mode === "login" ? "signup" : "login")}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                {mode === "login" ? (<>New here? <span className="text-primary font-semibold">Sign up</span></>) : (<>Already have an account? <span className="text-primary font-semibold">Sign in</span></>)}
+              </button>
+            </div>
+          )}
 
-          <div className="mt-6 pt-5 border-t">
-            <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2.5 text-center">Try demo accounts</p>
+          {/* Create store / admin CTAs */}
+          <div className="mt-6 pt-5 border-t space-y-2">
+            {!hasOwner ? (
+              <Button
+                onClick={() => navigate({ to: "/setup" })}
+                className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              >
+                <StoreIcon className="w-4 h-4 mr-2" /> Create your store (first time)
+              </Button>
+            ) : (
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground text-center">Manage your store</p>
+            )}
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={quickFillCustomer}>Customer demo</Button>
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => navigate({ to: "/setup" })}>Store setup</Button>
+              <Link to="/admin" className="flex items-center justify-center gap-1.5 h-10 rounded-xl border text-xs font-semibold hover:bg-muted">
+                <ShieldCheck className="w-3.5 h-3.5" /> Admin console
+              </Link>
+              <Link to="/support" className="flex items-center justify-center gap-1.5 h-10 rounded-xl border text-xs font-semibold hover:bg-muted">
+                <LifeBuoy className="w-3.5 h-3.5" /> Support
+              </Link>
             </div>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — College Canteen & Hotel</p>
+        <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — SaaS for Canteens & Hotels</p>
       </div>
     </div>
   );
