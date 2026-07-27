@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff, Wallet, Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/setup")({
 function SetupWizard() {
   const { hasOwner, completeSetup } = useStore();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
 
@@ -26,6 +26,9 @@ function SetupWizard() {
   const [contactPhone, setContactPhone] = useState("");
   const [currency, setCurrency] = useState("TZS");
   const [lowThreshold, setLowThreshold] = useState<number>(3000);
+
+  const [openingCash, setOpeningCash] = useState<number>(0);
+  const [openingBank, setOpeningBank] = useState<number>(0);
 
   const [ownerName, setOwnerName] = useState("");
   const [ownerPhone, setOwnerPhone] = useState("");
@@ -36,11 +39,18 @@ function SetupWizard() {
     if (hasOwner) navigate({ to: "/" });
   }, [hasOwner, navigate]);
 
-  const goNext = (e: React.FormEvent) => {
+  const goStep2 = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!storeName.trim() || !contactPhone.trim()) return setError("Store name and contact phone are required");
     setStep(2);
+  };
+
+  const goStep3 = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (openingCash < 0 || openingBank < 0) return setError("Opening balances cannot be negative");
+    setStep(3);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -49,6 +59,8 @@ function SetupWizard() {
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
+      opening_cash: openingCash,
+      opening_bank: openingBank,
     });
     if (!res.ok) return setError(res.reason);
     navigate({ to: "/staff" });
@@ -64,11 +76,13 @@ function SetupWizard() {
             <ChefHat className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Set up BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Two quick steps to get your store running.</p>
+          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Three quick steps to get your store running.</p>
           <div className="flex items-center gap-2 mt-5">
             <StepDot n={1} active={step === 1} done={step > 1} label="Store" />
-            <div className="w-8 h-px bg-white/40" />
-            <StepDot n={2} active={step === 2} done={false} label="Owner" />
+            <div className="w-6 h-px bg-white/40" />
+            <StepDot n={2} active={step === 2} done={step > 2} label="Liquidity" />
+            <div className="w-6 h-px bg-white/40" />
+            <StepDot n={3} active={step === 3} done={false} label="Owner" />
           </div>
         </div>
       </div>
