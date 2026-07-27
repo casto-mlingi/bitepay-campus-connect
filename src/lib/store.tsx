@@ -584,11 +584,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
+    // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
+    // canteen must cover the wallet portion (per-canteen balance).
+    const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
     if (!cust) return { ok: false, reason: "Customer not found" };
+    const custWallet = walletFor(cust, currentStoreId);
     const cashPart = Math.max(0, Math.min(cashPortion, total));
     const walletPart = total - cashPart;
-    if (cust.wallet_balance < walletPart) return { ok: false, reason: "Insufficient wallet balance" };
+    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance at this canteen" };
     if (tender === "mobile" && cashPart > 0 && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
@@ -601,8 +604,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
-    const nextCust = { ...cust, wallet_balance: cust.wallet_balance - walletPart + loyalty };
-    setProfiles((prev) => prev.map((p) => p.id === cust.id ? nextCust : p));
+    setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
       if (walletPart > 0) tx.push({ id: uid("t"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
@@ -613,9 +615,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (tender === "mobile") adjustBank((b) => b + cashPart);
       else adjustCash((c) => c + cashPart);
     }
-    pushNudgeIfLow(nextCust);
+    const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
+    pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet]);
+
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
