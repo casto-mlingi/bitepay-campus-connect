@@ -100,11 +100,23 @@ function LoginPage() {
 
           <form onSubmit={submit} className="mt-5 space-y-3">
             {tab === "customer" && mode === "signup" && (
-              <div>
-                <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
-              </div>
+              <>
+                <div>
+                  <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
+                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
+                </div>
+                {stores.length > 1 && (
+                  <div>
+                    <Label htmlFor="store" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Choose your store</Label>
+                    <select id="store" value={signupStoreId} onChange={(e) => setSignupStoreId(e.target.value)} className="mt-1.5 h-12 w-full rounded-xl border bg-background px-3 text-sm">
+                      <option value="">Select a store…</option>
+                      {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.location}</option>)}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
+
             <div>
               <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phone number</Label>
               <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" className="mt-1.5 h-12 rounded-xl" />
