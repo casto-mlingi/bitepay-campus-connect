@@ -5,6 +5,8 @@ import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useServerFn } from "@tanstack/react-start";
+import { loginUser } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -20,6 +22,7 @@ type Tab = "customer" | "staff";
 
 function LoginPage() {
   const { login, signup, hasOwner, store, stores } = useStore();
+  const loginFn = useServerFn(loginUser);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
   const [mode, setMode] = useState<"login" | "signup">("login");
