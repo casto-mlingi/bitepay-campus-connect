@@ -1,158 +1,220 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { ChefHat, ArrowRight, Eye, EyeOff, Store as StoreIcon, User, ShieldCheck, LifeBuoy } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChefHat, ArrowRight, Wallet, QrCode, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3, Sparkles, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({ meta: [
-    { title: "BitePay — Sign in" },
-    { name: "description", content: "Sign in to BitePay: customer wallet, staff console, or set up a new store." },
-    { property: "og:title", content: "BitePay — Prepaid Canteen Wallet" },
-    { property: "og:description", content: "One home for customers, staff and store owners." },
+    { title: "BitePay — Prepaid Wallets for Canteens & Hotels" },
+    { name: "description", content: "BitePay is the all-in-one prepaid wallet, POS and kitchen-costing platform for college canteens, hostels and small hotels." },
+    { property: "og:title", content: "BitePay — Prepaid Wallets for Canteens & Hotels" },
+    { property: "og:description", content: "Top-up once, order in seconds. Full POS, inventory, batch costing and treasury for operators." },
+    { property: "og:type", content: "website" },
   ] }),
 });
 
-type Tab = "customer" | "staff";
-
 function HomePage() {
-  const { login, signup, hasOwner, store } = useStore();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("customer");
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState("");
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (tab === "staff") {
-      const u = login(phone, password);
-      if (!u) return setError("Invalid phone or password (or account disabled)");
-      if (u.role !== "staff") return setError("This account is a customer account. Use the Customer tab.");
-      navigate({ to: "/staff" });
-      return;
-    }
-    // customer tab
-    if (mode === "login") {
-      const u = login(phone, password);
-      if (!u) return setError("Invalid phone or password");
-      if (u.role !== "customer") return setError("This account is a staff account. Use the Staff tab.");
-      navigate({ to: "/dashboard" });
-    } else {
-      if (!name || !phone || !password) return setError("All fields required");
-      const u = signup(name, phone, password);
-      if (!u) return setError("Phone already registered");
-      navigate({ to: "/dashboard" });
-    }
-  };
+  const { store, hasOwner } = useStore();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <div className="relative bg-primary text-white pt-14 pb-20 px-6 rounded-b-[2.5rem] overflow-hidden">
-        <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/10" />
-        <div className="absolute -left-16 top-24 w-40 h-40 rounded-full bg-white/10" />
-        <div className="relative flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur grid place-items-center mb-3">
-            <ChefHat className="w-8 h-8" />
+    <div className="min-h-screen bg-background">
+      {/* Nav */}
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b">
+        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary grid place-items-center text-white">
+              <ChefHat className="w-4 h-4" />
+            </div>
+            <span className="font-extrabold tracking-tight">BitePay</span>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">{store?.name ? `${store.name} • Prepaid canteen wallet` : "Top-up once, order faster. No cash, no queues."}</p>
-        </div>
-      </div>
-
-      <div className="flex-1 -mt-10 px-5 pb-8 relative z-10">
-        <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-5 sm:p-7 border">
-          {/* Tabs */}
-          <div className="grid grid-cols-2 gap-1 bg-muted p-1 rounded-xl mb-5">
-            <button
-              onClick={() => { setTab("customer"); setError(""); }}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${tab === "customer" ? "bg-white shadow text-foreground" : "text-muted-foreground"}`}
-            >
-              <User className="w-4 h-4" /> Customer
-            </button>
-            <button
-              onClick={() => { setTab("staff"); setMode("login"); setError(""); }}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${tab === "staff" ? "bg-white shadow text-foreground" : "text-muted-foreground"}`}
-            >
-              <StoreIcon className="w-4 h-4" /> Staff
-            </button>
-          </div>
-
-          <h2 className="text-xl font-bold">
-            {tab === "staff" ? "Staff sign in" : mode === "login" ? "Welcome back 👋" : "Create your wallet"}
-          </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            {tab === "staff" ? "Cashiers, supervisors and owners sign in here." : mode === "login" ? "Sign in to order and manage your wallet." : "Sign up in seconds — start ordering today."}
-          </p>
-
-          <form onSubmit={submit} className="mt-5 space-y-3">
-            {tab === "customer" && mode === "signup" && (
-              <div>
-                <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
-              </div>
-            )}
-            <div>
-              <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phone number</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" className="mt-1.5 h-12 rounded-xl" />
-            </div>
-            <div>
-              <Label htmlFor="pw" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Password</Label>
-              <div className="relative mt-1.5">
-                <Input id="pw" type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="h-12 rounded-xl pr-11" />
-                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90">
-              {tab === "customer" && mode === "signup" ? "Create account" : "Sign in"} <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-          </form>
-
-          {tab === "customer" && (
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => setMode(mode === "login" ? "signup" : "login")}
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                {mode === "login" ? (<>New here? <span className="text-primary font-semibold">Sign up</span></>) : (<>Already have an account? <span className="text-primary font-semibold">Sign in</span></>)}
-              </button>
-            </div>
-          )}
-
-          {/* Create store / admin CTAs */}
-          <div className="mt-6 pt-5 border-t space-y-2">
-            {!hasOwner ? (
-              <Button
-                onClick={() => navigate({ to: "/setup" })}
-                className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-              >
-                <StoreIcon className="w-4 h-4 mr-2" /> Create your store (first time)
-              </Button>
-            ) : (
-              <p className="text-[11px] uppercase tracking-widest text-muted-foreground text-center">Manage your store</p>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <Link to="/admin" className="flex items-center justify-center gap-1.5 h-10 rounded-xl border text-xs font-semibold hover:bg-muted">
-                <ShieldCheck className="w-3.5 h-3.5" /> Admin console
-              </Link>
-              <Link to="/support" className="flex items-center justify-center gap-1.5 h-10 rounded-xl border text-xs font-semibold hover:bg-muted">
-                <LifeBuoy className="w-3.5 h-3.5" /> Support
-              </Link>
-            </div>
+          <nav className="hidden sm:flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="#features" className="hover:text-foreground">Features</a>
+            <a href="#operators" className="hover:text-foreground">For operators</a>
+            <a href="#pricing" className="hover:text-foreground">Pricing</a>
+          </nav>
+          <div className="flex items-center gap-2">
+            <Link to="/login" className="text-sm font-semibold px-3 py-2 rounded-lg hover:bg-muted">Sign in</Link>
+            <Link to={hasOwner ? "/login" : "/setup"} className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">
+              {hasOwner ? "Get started" : "Create store"}
+            </Link>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — SaaS for Canteens & Hotels</p>
-      </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-emerald-500/10" />
+        <div className="relative max-w-6xl mx-auto px-5 pt-16 pb-20 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-full">
+              <Sparkles className="w-3.5 h-3.5" /> Trusted by campus canteens
+            </span>
+            <h1 className="mt-4 text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">
+              Prepaid wallets, POS &amp; kitchen costing — <span className="text-primary">in one app.</span>
+            </h1>
+            <p className="mt-4 text-muted-foreground text-lg max-w-lg">
+              {store?.name ? `Welcome to ${store.name}.` : "Skip the queue at the till."} Customers top-up once and order in seconds. Operators get real POS, inventory, batch costing and treasury out of the box.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link to="/login">
+                <Button className="h-12 px-6 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90">
+                  Sign in <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to={hasOwner ? "/login" : "/setup"}>
+                <Button variant="outline" className="h-12 px-6 rounded-xl text-base font-semibold border-2">
+                  <StoreIcon className="mr-2 w-4 h-4" /> {hasOwner ? "Operator sign in" : "Create your store"}
+                </Button>
+              </Link>
+            </div>
+            <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-emerald-600" /> 14-day free trial</span>
+              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-emerald-600" /> No card required</span>
+            </div>
+          </div>
+
+          {/* Preview card */}
+          <div className="relative">
+            <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-[3rem]" />
+            <div className="relative bg-surface border rounded-3xl shadow-2xl shadow-black/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">Wallet balance</p>
+                  <p className="text-3xl font-extrabold mt-1">TZS 12,500</p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 grid place-items-center text-primary">
+                  <Wallet className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                {[
+                  { icon: <Utensils className="w-4 h-4" />, label: "Order" },
+                  { icon: <QrCode className="w-4 h-4" />, label: "Scan" },
+                  { icon: <ClipboardList className="w-4 h-4" />, label: "History" },
+                ].map((a) => (
+                  <div key={a.label} className="flex flex-col items-center gap-1 py-3 rounded-xl bg-muted">
+                    <span className="text-primary">{a.icon}</span>
+                    <span className="text-xs font-semibold">{a.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 space-y-2">
+                {[
+                  { name: "Chapati & Beans", when: "12:04", amt: "-1,500" },
+                  { name: "Top-up via M-Pesa", when: "09:22", amt: "+10,000", green: true },
+                  { name: "Chai + Mandazi", when: "08:11", amt: "-1,000" },
+                ].map((r) => (
+                  <div key={r.name} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+                    <div>
+                      <p className="font-semibold">{r.name}</p>
+                      <p className="text-xs text-muted-foreground">{r.when}</p>
+                    </div>
+                    <span className={`font-bold ${r.green ? "text-emerald-600" : "text-foreground"}`}>{r.amt}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section id="features" className="max-w-6xl mx-auto px-5 py-16">
+        <h2 className="text-3xl font-extrabold tracking-tight text-center">Everything a canteen needs.</h2>
+        <p className="text-center text-muted-foreground mt-2 max-w-xl mx-auto">From student wallets to kitchen batch costing, BitePay replaces spreadsheets, cash tins and receipt books.</p>
+        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[
+            { icon: <Wallet className="w-5 h-5" />, title: "Prepaid wallets", body: "Customers top-up once via mobile money and pay at the till in one tap or QR scan." },
+            { icon: <StoreIcon className="w-5 h-5" />, title: "Walk-in POS", body: "Cash, mobile money and wallet payments with split-tender and printable receipts." },
+            { icon: <Utensils className="w-5 h-5" />, title: "Kitchen batch costing", body: "Log raw materials, cook a batch and BitePay auto-computes cost per plate." },
+            { icon: <BarChart3 className="w-5 h-5" />, title: "Treasury & P&L", body: "Working capital, wallet liabilities, COGS and net profit — updated in real time." },
+            { icon: <ClipboardList className="w-5 h-5" />, title: "Shifts & Z-reports", body: "Open and close shifts per cashier with a settlement journal at end of day." },
+            { icon: <ShieldCheck className="w-5 h-5" />, title: "Role-based access", body: "Owner, supervisor and cashier permissions — each sees only what they should." },
+          ].map((f) => (
+            <div key={f.title} className="p-5 rounded-2xl border bg-surface hover:shadow-lg transition">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center">{f.icon}</div>
+              <h3 className="mt-3 font-bold">{f.title}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Operators band */}
+      <section id="operators" className="bg-muted/40 border-y">
+        <div className="max-w-6xl mx-auto px-5 py-16 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <h2 className="text-3xl font-extrabold tracking-tight">Run the whole canteen from one screen.</h2>
+            <p className="mt-3 text-muted-foreground">Live Kanban orders, walk-in POS, inventory, cooking batches, procurement and payroll-ready expense logs. Owners see full financials; cashiers see just their till.</p>
+            <ul className="mt-5 space-y-2 text-sm">
+              {["Live order board with prep-time tracking", "PIN-protected wallet top-ups", "Offline-first POS with sync queue", "Daily settlement journal for accountants"].map((t) => (
+                <li key={t} className="flex items-start gap-2"><Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {t}</li>
+              ))}
+            </ul>
+            <div className="mt-6 flex gap-3">
+              <Link to={hasOwner ? "/login" : "/setup"}>
+                <Button className="h-11 rounded-xl bg-primary hover:bg-primary/90 font-semibold">
+                  {hasOwner ? "Operator sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to="/support">
+                <Button variant="outline" className="h-11 rounded-xl font-semibold border-2">Talk to us</Button>
+              </Link>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { k: "1,200+", v: "Meals served / day" },
+              { k: "< 3s", v: "Average checkout" },
+              { k: "98%", v: "Wallet adoption" },
+              { k: "0", v: "Cash reconciliation errors" },
+            ].map((s) => (
+              <div key={s.v} className="p-5 rounded-2xl bg-surface border">
+                <p className="text-3xl font-extrabold text-primary">{s.k}</p>
+                <p className="text-xs text-muted-foreground mt-1">{s.v}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing teaser */}
+      <section id="pricing" className="max-w-4xl mx-auto px-5 py-16 text-center">
+        <h2 className="text-3xl font-extrabold tracking-tight">Simple pricing.</h2>
+        <p className="text-muted-foreground mt-2">Start with a 14-day free trial. Upgrade when you're ready.</p>
+        <div className="mt-8 grid sm:grid-cols-3 gap-4 text-left">
+          {[
+            { name: "Trial", price: "Free", body: "14 days, all features." },
+            { name: "Starter", price: "TZS 50k / mo", body: "1 outlet, up to 500 wallets.", highlight: true },
+            { name: "Pro", price: "TZS 120k / mo", body: "Multi-outlet, unlimited wallets." },
+          ].map((p) => (
+            <div key={p.name} className={`p-6 rounded-2xl border bg-surface ${p.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{p.name}</p>
+              <p className="text-2xl font-extrabold mt-2">{p.price}</p>
+              <p className="text-sm text-muted-foreground mt-2">{p.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t bg-surface">
+        <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-primary grid place-items-center text-white">
+              <ChefHat className="w-3.5 h-3.5" />
+            </div>
+            <span className="font-semibold text-foreground">BitePay</span>
+            <span>© {new Date().getFullYear()}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link to="/admin" className="inline-flex items-center gap-1 hover:text-foreground"><ShieldCheck className="w-3.5 h-3.5" /> Admin</Link>
+            <Link to="/support" className="inline-flex items-center gap-1 hover:text-foreground"><LifeBuoy className="w-3.5 h-3.5" /> Support</Link>
+            <Link to="/login" className="inline-flex items-center gap-1 hover:text-foreground">Sign in</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
