@@ -802,8 +802,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!u || u.disabled) return null;
       setCurrentUserId(u.id);
       setProfiles((prev) => prev.map((p) => p.id === u.id ? { ...p, last_login: Date.now() } : p));
+      if (u.role === "customer") {
+        // Prefer last-ordered canteen, else home store, else first active canteen.
+        const lastOrder = orders.filter((o) => o.customer_id === u.id).sort((a, b) => b.created_at - a.created_at)[0];
+        const pick = lastOrder?.store_id ?? u.store_id ?? stores.find((s) => s.subscription.status === "active")?.id ?? null;
+        setSelectedCanteenId(pick);
+      }
       return u;
     },
+
     signup(name, phone, password, store_id) {
       if (!store_id || !stores.some((s) => s.id === store_id)) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
