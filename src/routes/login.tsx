@@ -34,13 +34,14 @@ function LoginPage() {
   const [error, setError] = useState("");
 
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (tab === "staff") {
       const u = login(phone, password);
       if (!u) return setError("Invalid phone or password (or account disabled)");
       if (u.role !== "staff") return setError("This account is a customer account. Use the Customer tab.");
+      try { await loginFn({ data: { phone, password } }); } catch (err) { console.warn("[login] db mirror failed", err); }
       navigate({ to: "/staff" });
       return;
     }
@@ -48,6 +49,7 @@ function LoginPage() {
       const u = login(phone, password);
       if (!u) return setError("Invalid phone or password");
       if (u.role !== "customer") return setError("This account is a staff account. Use the Staff tab.");
+      try { await loginFn({ data: { phone, password } }); } catch (err) { console.warn("[login] db mirror failed", err); }
       navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
