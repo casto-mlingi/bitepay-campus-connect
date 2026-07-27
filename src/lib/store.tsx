@@ -315,7 +315,11 @@ type Ctx = {
   store: Store | null; // current tenant's store
   stores: Store[]; // all stores (for admin & customer picker)
   currentStoreId: string | null;
+  selectedCanteenId: string | null; // customer's currently-shopping canteen
+  setSelectedCanteen: (storeId: string) => void;
+  availableCanteens: Store[]; // active canteens a customer can shop from
   hasOwner: boolean;
+
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string, store_id: string) => Profile | null;
   logout: () => void;
