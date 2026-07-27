@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as TeamRouteImport } from './routes/team'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as SetupRouteImport } from './routes/setup'
@@ -24,6 +25,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TopupRoute = TopupRouteImport.update({
@@ -34,6 +36,11 @@ const TopupRoute = TopupRouteImport.update({
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StaffRoute = StaffRouteImport.update({
@@ -101,6 +108,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -109,6 +121,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/customers': typeof CustomersRoute
@@ -122,11 +135,13 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/customers': typeof CustomersRoute
@@ -140,12 +155,14 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
   '/customers': typeof CustomersRoute
@@ -159,6 +176,7 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
 }
@@ -166,6 +184,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/cart'
     | '/customers'
@@ -179,11 +198,13 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/support'
     | '/team'
     | '/topup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/cart'
     | '/customers'
@@ -197,11 +218,13 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/support'
     | '/team'
     | '/topup'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/analytics'
     | '/cart'
     | '/customers'
@@ -215,12 +238,14 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/support'
     | '/team'
     | '/topup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   CartRoute: typeof CartRoute
   CustomersRoute: typeof CustomersRoute
@@ -234,6 +259,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   ShiftRoute: typeof ShiftRoute
   StaffRoute: typeof StaffRoute
+  SupportRoute: typeof SupportRoute
   TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
 }
@@ -252,6 +278,13 @@ declare module '@tanstack/react-router' {
       path: '/team'
       fullPath: '/team'
       preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/staff': {
@@ -345,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -357,6 +397,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   CartRoute: CartRoute,
   CustomersRoute: CustomersRoute,
@@ -370,6 +411,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   ShiftRoute: ShiftRoute,
   StaffRoute: StaffRoute,
+  SupportRoute: SupportRoute,
   TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
 }

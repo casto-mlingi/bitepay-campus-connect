@@ -16,6 +16,16 @@ export type Profile = {
   created_at?: number;
 };
 
+export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
+export type SubscriptionStatus = "active" | "suspended" | "expired";
+export type Subscription = {
+  plan: SubscriptionPlan;
+  started_at: number;
+  expires_at: number;
+  status: SubscriptionStatus;
+  monthly_price: number;
+};
+
 export type Store = {
   name: string;
   location: string;
@@ -24,7 +34,31 @@ export type Store = {
   low_balance_threshold: number;
   enable_mobile_tender: boolean;
   created_at: number;
+  subscription: Subscription;
 };
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketReply = { id: string; from: "store" | "admin"; author_name: string; body: string; created_at: number };
+export type Ticket = {
+  id: string;
+  subject: string;
+  message: string;
+  category: "billing" | "technical" | "feature" | "other";
+  priority: TicketPriority;
+  status: TicketStatus;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: number;
+  updated_at: number;
+  replies: TicketReply[];
+};
+
+export type SuperAdmin = { username: string; password: string; full_name: string };
+export type AdminAuditLog = { id: string; action: string; detail: string; created_at: number };
+
+export const PLAN_PRICE: Record<SubscriptionPlan, number> = { trial: 0, starter: 25000, pro: 60000, enterprise: 150000 };
+export const PLAN_LABEL: Record<SubscriptionPlan, string> = { trial: "Free Trial", starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
 
 export type Permission =
   | "pos.sell"
@@ -265,7 +299,7 @@ type Ctx = {
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
   can: (perm: Permission) => boolean;
-  completeSetup: (input: { store: Omit<Store, "created_at">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
+  completeSetup: (input: { store: Omit<Store, "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
   updateStore: (patch: Partial<Omit<Store, "created_at">>) => void;
   addStaff: (input: AddStaffInput) => Ok | Fail;
   updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
@@ -300,6 +334,22 @@ type Ctx = {
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at">) => void;
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
+
+  // Subscription & SaaS admin
+  tickets: Ticket[];
+  submitTicket: (input: { subject: string; message: string; category: Ticket["category"]; priority: TicketPriority }) => Ticket | null;
+  replyToTicket: (ticketId: string, body: string) => Ok | Fail;
+  updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
+  superAdmin: SuperAdmin;
+  isAdminSignedIn: boolean;
+  adminLogin: (username: string, password: string) => boolean;
+  adminLogout: () => void;
+  addSubscriptionDays: (days: number) => void;
+  changePlan: (plan: SubscriptionPlan) => void;
+  setSubscriptionStatus: (status: SubscriptionStatus) => void;
+  adminAuditLog: AdminAuditLog[];
+  subscriptionDaysLeft: () => number;
+  isSubscriptionBlocked: () => boolean;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -316,9 +366,11 @@ const seedProducts: Product[] = [
   { id: "p9", name: "Coffee", description: "Freshly brewed Tanzanian coffee", price: 1800, category: "Drinks", emoji: "☕", gradient: "from-amber-700 to-yellow-800" },
 ];
 
-// Only a single demo customer is seeded. Staff & store are created by the owner during first-run setup.
+// Only a small demo set is seeded. Staff & store are created by the owner during first-run setup.
 const seedProfiles: Profile[] = [
-  { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
+  { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer", created_at: Date.now() - 6 * 86400000 },
+  { id: "u2", full_name: "John Mwakalinga", phone: "0754112233", password: "1234", wallet_balance: 8500, role: "customer", created_at: Date.now() - 4 * 86400000 },
+  { id: "u3", full_name: "Fatuma Said", phone: "0688776655", password: "1234", wallet_balance: 22000, role: "customer", created_at: Date.now() - 2 * 86400000 },
 ];
 
 const seedOrders: Order[] = [];
@@ -367,6 +419,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [store, setStore] = useState<Store | null>(null);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
+  const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
+  const superAdmin: SuperAdmin = { username: "admin", password: "bitepay2025", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
@@ -505,7 +561,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         staff_pin: owner.staff_pin, created_at: Date.now(),
       };
       setProfiles((prev) => [...prev, ownerProfile]);
-      setStore({ ...s, name: s.name.trim(), created_at: Date.now() });
+      const now = Date.now();
+      const trialDays = 14;
+      setStore({ ...s, name: s.name.trim(), created_at: now, subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 } });
       setCash(opening_cash);
       setBank(opening_bank);
       setCurrentUserId(ownerProfile.id);
@@ -850,7 +908,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification]);
+    tickets,
+    submitTicket({ subject, message, category, priority }) {
+      if (!currentUser || currentUser.role !== "staff") return null;
+      if (!subject.trim() || !message.trim()) return null;
+      const now = Date.now();
+      const t: Ticket = {
+        id: `TK-${now}`, subject: subject.trim(), message: message.trim(), category, priority,
+        status: "open", created_by_id: currentUser.id, created_by_name: currentUser.full_name,
+        created_at: now, updated_at: now, replies: [],
+      };
+      setTickets((prev) => [t, ...prev]);
+      return t;
+    },
+    replyToTicket(ticketId, body) {
+      if (!body.trim()) return { ok: false, reason: "Reply cannot be empty" };
+      const from: "store" | "admin" = superAdminSignedIn ? "admin" : "store";
+      const author_name = superAdminSignedIn ? superAdmin.full_name : (currentUser?.full_name ?? "Unknown");
+      const now = Date.now();
+      setTickets((prev) => prev.map((t) => t.id === ticketId ? {
+        ...t, updated_at: now,
+        status: t.status === "open" ? "in_progress" : t.status,
+        replies: [...t.replies, { id: `rep${now}`, from, author_name, body: body.trim(), created_at: now }],
+      } : t));
+      return { ok: true };
+    },
+    updateTicketStatus(ticketId, status) {
+      setTickets((prev) => prev.map((t) => t.id === ticketId ? { ...t, status, updated_at: Date.now() } : t));
+    },
+    superAdmin,
+    isAdminSignedIn: superAdminSignedIn,
+    adminLogin(username, password) {
+      if (username.trim().toLowerCase() === superAdmin.username && password === superAdmin.password) {
+        setSuperAdminSignedIn(true);
+        setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
+        return true;
+      }
+      return false;
+    },
+    adminLogout() { setSuperAdminSignedIn(false); },
+    addSubscriptionDays(days) {
+      if (!store || days === 0) return;
+      const nowMs = Date.now();
+      const base = Math.max(store.subscription.expires_at, nowMs);
+      const newExpiry = base + days * 86400000;
+      const newStatus: SubscriptionStatus = newExpiry > nowMs ? "active" : "expired";
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, expires_at: newExpiry, status: newStatus } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "extend_subscription", detail: `${days > 0 ? "+" : ""}${days} days`, created_at: Date.now() }, ...prev]);
+    },
+    changePlan(plan) {
+      if (!store) return;
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
+    },
+    setSubscriptionStatus(status) {
+      if (!store) return;
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, status } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
+    },
+    adminAuditLog,
+    subscriptionDaysLeft() {
+      if (!store) return 0;
+      return Math.max(0, Math.ceil((store.subscription.expires_at - Date.now()) / 86400000));
+    },
+    isSubscriptionBlocked() {
+      if (!store) return false;
+      const s = store.subscription;
+      if (s.status === "suspended") return true;
+      if (s.expires_at < Date.now()) return true;
+      return false;
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, superAdminSignedIn, adminAuditLog]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
