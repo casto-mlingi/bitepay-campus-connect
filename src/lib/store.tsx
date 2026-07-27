@@ -450,11 +450,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
-  const currentStoreId = currentUser?.store_id ?? null;
+  const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
+  const availableCanteens = useMemo(
+    () => stores.filter((s) => s.subscription.status === "active"),
+    [stores],
+  );
+  // For customers, the "active" store is whichever canteen they picked (or a sane default).
+  // For staff, it's always their tenant.
+  const activeStoreId: string | null =
+    rawUser?.role === "customer"
+      ? (selectedCanteenId && stores.some((s) => s.id === selectedCanteenId) ? selectedCanteenId : (rawUser.store_id ?? null))
+      : (rawUser?.store_id ?? null);
+  const currentStoreId = activeStoreId;
   const store = stores.find((s) => s.id === currentStoreId) ?? null;
   const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
   const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
+
+  // Expose customer's wallet balance for the ACTIVE canteen (fallback to legacy field for home store).
+  const walletFor = (p: Profile, sid: string | null): number => {
+    if (!sid) return 0;
+    if (p.wallets && sid in p.wallets) return p.wallets[sid];
+    if (p.store_id === sid) return p.wallet_balance; // legacy migration
+    return 0;
+  };
+  const currentUser: Profile | null = rawUser
+    ? rawUser.role === "customer"
+      ? { ...rawUser, wallet_balance: walletFor(rawUser, activeStoreId) }
+      : rawUser
+    : null;
+
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
