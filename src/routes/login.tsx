@@ -19,15 +19,17 @@ export const Route = createFileRoute("/login")({
 type Tab = "customer" | "staff";
 
 function LoginPage() {
-  const { login, signup, hasOwner, store } = useStore();
+  const { login, signup, hasOwner, store, stores } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [signupStoreId, setSignupStoreId] = useState<string>("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
