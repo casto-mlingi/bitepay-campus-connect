@@ -834,24 +834,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     clearCart() { setCart([]); },
     placeOrder(deliveryType) {
-      if (!currentUser || !currentUser.store_id) return null;
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
       const total = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
-      if (total <= 0 || currentUser.wallet_balance < total) return null;
+      const bal = walletFor(rawUser!, sid);
+      if (total <= 0 || bal < total) return null;
       const id = nextOrderId();
       const order: Order = {
-        id, store_id: currentUser.store_id, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        id, store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
         items: cart.map((c) => ({ product_id: c.product.id, name: c.product.name, price: c.product.price, qty: c.qty })),
         total_amount: total, status: "new", delivery_type: deliveryType, payment_status: "paid",
         created_at: Date.now(),
       };
       setOrders((prev) => [order, ...prev]);
-      const nextUser = { ...currentUser, wallet_balance: currentUser.wallet_balance - total };
-      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? nextUser : p));
-      setTransactions((prev) => [{ id: uid("t"), store_id: currentUser.store_id!, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
+      setWallet(currentUser.id, sid, -total);
+      setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
-      pushNudgeIfLow(nextUser);
+      const post: Profile = { ...currentUser, wallet_balance: bal - total, store_id: sid };
+      pushNudgeIfLow(post);
       return order;
     },
+
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
