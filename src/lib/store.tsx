@@ -630,6 +630,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
+    selectedCanteenId, availableCanteens,
+    setSelectedCanteen(storeId) {
+      if (!stores.some((s) => s.id === storeId)) return;
+      setSelectedCanteenId((prev) => {
+        if (prev !== storeId) setCart([]);
+        return storeId;
+      });
+    },
+
     notifications: scopedNotifs,
     unreadNotifications: (userId) => scopedNotifs.filter((n) => n.user_id === userId && !n.read),
     markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
