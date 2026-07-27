@@ -604,6 +604,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (requestId) {
         setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
       }
+      pushNotification({
+        user_id: customerId,
+        title: "Wallet topped up",
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance: TZS ${(cust.wallet_balance + amount).toLocaleString()}.`,
+        kind: "topup",
+      });
       return { ok: true };
     },
     login(phone, password) {
