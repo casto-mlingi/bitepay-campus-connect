@@ -6,7 +6,8 @@ import { useEffect, useState, type ReactNode } from "react";
 export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
-  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked } = useStore();
+  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests } = useStore();
+  const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
 
@@ -46,7 +47,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
               <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
-              <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
+              <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} badge={pendingTopUps} />
               {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
               {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
@@ -87,7 +88,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Orders" active={active === "orders"} />
           <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
           <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
-          <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
+          <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} badge={pendingTopUps} />
           {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
           {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
           {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
@@ -119,10 +120,11 @@ function SubscriptionBanner({ daysLeft, blocked, status }: { daysLeft: number; b
   return null;
 }
 
-function TopLink({ to, icon, label, active }: { to: string; icon: ReactNode; label: string; active?: boolean }) {
+function TopLink({ to, icon, label, active, badge }: { to: string; icon: ReactNode; label: string; active?: boolean; badge?: number }) {
   return (
-    <Link to={to} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+    <Link to={to} className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
       {icon}{label}
+      {badge && badge > 0 ? <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-amber-500 text-white">{badge}</span> : null}
     </Link>
   );
 }
