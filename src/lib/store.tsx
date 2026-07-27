@@ -7,15 +7,17 @@ export type Profile = {
   full_name: string;
   phone: string;
   password: string;
-  wallet_balance: number;
+  wallet_balance: number; // legacy — for customers this reflects the ACTIVE canteen wallet
+  wallets?: Record<string, number>; // per-canteen balances (customers only)
   role: Role;
   staff_role?: StaffRole;
   staff_pin?: string;
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
-  store_id?: string; // tenant scope — staff always set; customer set at signup
+  store_id?: string; // home canteen (customer signup) / tenant (staff)
 };
+
 
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
 export type SubscriptionStatus = "active" | "suspended" | "expired";
@@ -313,7 +315,11 @@ type Ctx = {
   store: Store | null; // current tenant's store
   stores: Store[]; // all stores (for admin & customer picker)
   currentStoreId: string | null;
+  selectedCanteenId: string | null; // customer's currently-shopping canteen
+  setSelectedCanteen: (storeId: string) => void;
+  availableCanteens: Store[]; // active canteens a customer can shop from
   hasOwner: boolean;
+
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string, store_id: string) => Profile | null;
   logout: () => void;
@@ -413,6 +419,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedCanteenId, setSelectedCanteenId] = useState<string | null>(null);
+
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
@@ -442,11 +450,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
-  const currentStoreId = currentUser?.store_id ?? null;
+  const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
+  const availableCanteens = useMemo(
+    () => stores.filter((s) => s.subscription.status === "active"),
+    [stores],
+  );
+  // For customers, the "active" store is whichever canteen they picked (or a sane default).
+  // For staff, it's always their tenant.
+  const activeStoreId: string | null =
+    rawUser?.role === "customer"
+      ? (selectedCanteenId && stores.some((s) => s.id === selectedCanteenId) ? selectedCanteenId : (rawUser.store_id ?? null))
+      : (rawUser?.store_id ?? null);
+  const currentStoreId = activeStoreId;
   const store = stores.find((s) => s.id === currentStoreId) ?? null;
   const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
   const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
+
+  // Expose customer's wallet balance for the ACTIVE canteen (fallback to legacy field for home store).
+  const walletFor = (p: Profile, sid: string | null): number => {
+    if (!sid) return 0;
+    if (p.wallets && sid in p.wallets) return p.wallets[sid];
+    if (p.store_id === sid) return p.wallet_balance; // legacy migration
+    return 0;
+  };
+  const currentUser: Profile | null = rawUser
+    ? rawUser.role === "customer"
+      ? { ...rawUser, wallet_balance: walletFor(rawUser, activeStoreId) }
+      : rawUser
+    : null;
+
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
@@ -522,6 +554,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [stores]);
 
+  // Update a customer's per-canteen wallet balance. Keeps legacy wallet_balance in sync
+  // when the target canteen is their home store, so existing UIs keep rendering.
+  const setWallet = useCallback((profileId: string, storeId: string, delta: number) => {
+    setProfiles((prev) => prev.map((p) => {
+      if (p.id !== profileId) return p;
+      const wallets = { ...(p.wallets ?? {}) };
+      const cur = wallets[storeId] ?? (p.store_id === storeId ? p.wallet_balance : 0);
+      const nv = cur + delta;
+      wallets[storeId] = nv;
+      const legacy = p.store_id === storeId ? nv : p.wallet_balance;
+      return { ...p, wallets, wallet_balance: legacy };
+    }));
+  }, []);
+
+
   const nextReceiptNo = () => {
     const day = todayKey();
     let no = "";
@@ -537,11 +584,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
+    // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
+    // canteen must cover the wallet portion (per-canteen balance).
+    const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
     if (!cust) return { ok: false, reason: "Customer not found" };
+    const custWallet = walletFor(cust, currentStoreId);
     const cashPart = Math.max(0, Math.min(cashPortion, total));
     const walletPart = total - cashPart;
-    if (cust.wallet_balance < walletPart) return { ok: false, reason: "Insufficient wallet balance" };
+    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance at this canteen" };
     if (tender === "mobile" && cashPart > 0 && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
@@ -554,8 +604,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
-    const nextCust = { ...cust, wallet_balance: cust.wallet_balance - walletPart + loyalty };
-    setProfiles((prev) => prev.map((p) => p.id === cust.id ? nextCust : p));
+    setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
       if (walletPart > 0) tx.push({ id: uid("t"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
@@ -566,9 +615,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (tender === "mobile") adjustBank((b) => b + cashPart);
       else adjustCash((c) => c + cashPart);
     }
-    pushNudgeIfLow(nextCust);
+    const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
+    pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet]);
+
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
@@ -598,6 +649,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
+    selectedCanteenId, availableCanteens,
+    setSelectedCanteen(storeId) {
+      if (!stores.some((s) => s.id === storeId)) return;
+      setSelectedCanteenId((prev) => {
+        if (prev !== storeId) setCart([]);
+        return storeId;
+      });
+    },
+
     notifications: scopedNotifs,
     unreadNotifications: (userId) => scopedNotifs.filter((n) => n.user_id === userId && !n.read),
     markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
@@ -689,10 +749,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     submitTopUpRequest({ amount, reference, note }) {
-      if (!currentUser || currentUser.role !== "customer" || !currentUser.store_id) return null;
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
       if (amount <= 0 || !reference.trim()) return null;
       const req: TopUpRequest = {
-        id: `TR-${Date.now()}`, store_id: currentUser.store_id,
+        id: `TR-${Date.now()}`, store_id: sid,
+
         customer_id: currentUser.id, customer_name: currentUser.full_name,
         customer_phone: currentUser.phone, amount, reference: reference.trim(), note,
         status: "pending", created_at: Date.now(),
@@ -717,40 +780,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
       if (amount <= 0) return { ok: false, reason: "Enter an amount" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
-      const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
+      const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
       if (!cust) return { ok: false, reason: "Customer not found" };
       const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
-      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setWallet(customerId, currentStoreId!, amount);
       setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId!, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
       if (requestId) {
         setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
       }
+      const prevBal = walletFor(cust, currentStoreId!);
       pushNotification({
         store_id: currentStoreId!, user_id: customerId,
         title: "Wallet topped up",
-        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance: TZS ${(cust.wallet_balance + amount).toLocaleString()}.`,
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance at this canteen: TZS ${(prevBal + amount).toLocaleString()}.`,
         kind: "topup",
       });
       return { ok: true };
+
     },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
       if (!u || u.disabled) return null;
       setCurrentUserId(u.id);
       setProfiles((prev) => prev.map((p) => p.id === u.id ? { ...p, last_login: Date.now() } : p));
+      if (u.role === "customer") {
+        // Prefer last-ordered canteen, else home store, else first active canteen.
+        const lastOrder = orders.filter((o) => o.customer_id === u.id).sort((a, b) => b.created_at - a.created_at)[0];
+        const pick = lastOrder?.store_id ?? u.store_id ?? stores.find((s) => s.subscription.status === "active")?.id ?? null;
+        setSelectedCanteenId(pick);
+      }
       return u;
     },
+
     signup(name, phone, password, store_id) {
       if (!store_id || !stores.some((s) => s.id === store_id)) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, role: "customer", created_at: Date.now(), store_id };
+      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [store_id]: 0 }, role: "customer", created_at: Date.now(), store_id };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
+      setSelectedCanteenId(store_id);
       return u;
     },
-    logout() { setCurrentUserId(null); setCart([]); },
+
+    logout() { setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);
@@ -763,36 +837,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     clearCart() { setCart([]); },
     placeOrder(deliveryType) {
-      if (!currentUser || !currentUser.store_id) return null;
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
       const total = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
-      if (total <= 0 || currentUser.wallet_balance < total) return null;
+      const bal = walletFor(rawUser!, sid);
+      if (total <= 0 || bal < total) return null;
       const id = nextOrderId();
       const order: Order = {
-        id, store_id: currentUser.store_id, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        id, store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
         items: cart.map((c) => ({ product_id: c.product.id, name: c.product.name, price: c.product.price, qty: c.qty })),
         total_amount: total, status: "new", delivery_type: deliveryType, payment_status: "paid",
         created_at: Date.now(),
       };
       setOrders((prev) => [order, ...prev]);
-      const nextUser = { ...currentUser, wallet_balance: currentUser.wallet_balance - total };
-      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? nextUser : p));
-      setTransactions((prev) => [{ id: uid("t"), store_id: currentUser.store_id!, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
+      setWallet(currentUser.id, sid, -total);
+      setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
-      pushNudgeIfLow(nextUser);
+      const post: Profile = { ...currentUser, wallet_balance: bal - total, store_id: sid };
+      pushNudgeIfLow(post);
       return order;
     },
+
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!currentStoreId) return;
-      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setWallet(customerId, currentStoreId, amount);
       const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
       setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
     },
+
     posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
       return _executePosSale(customerId, items, cashPortion, tender, reference);
     },
@@ -817,9 +896,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
       if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
-        setProfiles((prev) => prev.map((p) => p.id === original.customer_id ? { ...p, wallet_balance: p.wallet_balance + (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0) } : p));
+        const refund = (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0);
+        setWallet(original.customer_id, currentStoreId!, refund);
         setTransactions((prev) => [{ id: uid("tr"), store_id: currentStoreId!, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
       }
+
       const cashPart = original.cash_paid ?? 0;
       if (cashPart > 0) {
         if (original.tender === "mobile") adjustBank((b) => b - cashPart);
