@@ -681,13 +681,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
         staff_pin: owner.staff_pin, created_at: now, store_id: storeId,
       };
-      // Seed per-store menu & raw materials so each tenant starts clean.
-      const seededProducts: Product[] = PRODUCT_TEMPLATE.map((p, i) => ({ ...p, id: `p-${storeId}-${i}`, store_id: storeId }));
-      const seededRaw: RawMaterial[] = RAW_TEMPLATE.map((r, i) => ({ ...r, id: `r-${storeId}-${i}`, store_id: storeId }));
+      // New stores start empty — no seeded products, raw materials, customers, or transactions.
       setStores((prev) => [...prev, newStore]);
       setProfiles((prev) => [...prev, ownerProfile]);
-      setProducts((prev) => [...prev, ...seededProducts]);
-      setRawMaterials((prev) => [...prev, ...seededRaw]);
+
       setTreasuries((prev) => ({ ...prev, [storeId]: { cash: opening_cash, bank: opening_bank } }));
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
