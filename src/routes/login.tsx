@@ -19,15 +19,17 @@ export const Route = createFileRoute("/login")({
 type Tab = "customer" | "staff";
 
 function LoginPage() {
-  const { login, signup, hasOwner, store } = useStore();
+  const { login, signup, hasOwner, store, stores } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [signupStoreId, setSignupStoreId] = useState<string>("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +48,14 @@ function LoginPage() {
       navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
-      const u = signup(name, phone, password);
+      const targetStore = stores.length === 1 ? stores[0].id : signupStoreId;
+      if (!targetStore) return setError("Choose which store to sign up for");
+      const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
       navigate({ to: "/dashboard" });
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -95,11 +100,23 @@ function LoginPage() {
 
           <form onSubmit={submit} className="mt-5 space-y-3">
             {tab === "customer" && mode === "signup" && (
-              <div>
-                <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
-              </div>
+              <>
+                <div>
+                  <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
+                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
+                </div>
+                {stores.length > 1 && (
+                  <div>
+                    <Label htmlFor="store" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Choose your store</Label>
+                    <select id="store" value={signupStoreId} onChange={(e) => setSignupStoreId(e.target.value)} className="mt-1.5 h-12 w-full rounded-xl border bg-background px-3 text-sm">
+                      <option value="">Select a store…</option>
+                      {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.location}</option>)}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
+
             <div>
               <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phone number</Label>
               <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" className="mt-1.5 h-12 rounded-xl" />

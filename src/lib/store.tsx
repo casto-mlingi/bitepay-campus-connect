@@ -14,6 +14,7 @@ export type Profile = {
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
+  store_id?: string; // tenant scope — staff always set; customer set at signup
 };
 
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
@@ -27,10 +28,11 @@ export type Subscription = {
 };
 
 export type Store = {
+  id: string;
   name: string;
   location: string;
   contact_phone: string;
-  currency: string; // label only
+  currency: string;
   low_balance_threshold: number;
   enable_mobile_tender: boolean;
   created_at: number;
@@ -42,6 +44,7 @@ export type TicketPriority = "low" | "normal" | "high" | "urgent";
 export type TicketReply = { id: string; from: "store" | "admin"; author_name: string; body: string; created_at: number };
 export type Ticket = {
   id: string;
+  store_id: string;
   subject: string;
   message: string;
   category: "billing" | "technical" | "feature" | "other";
@@ -59,21 +62,20 @@ export type AdminAuditLog = { id: string; action: string; detail: string; create
 
 export const PLAN_PRICE: Record<SubscriptionPlan, number> = { trial: 0, starter: 25000, pro: 60000, enterprise: 150000 };
 export const PLAN_LABEL: Record<SubscriptionPlan, string> = { trial: "Free Trial", starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
+export const PLAN_FEATURES: Record<SubscriptionPlan, string[]> = {
+  trial: ["All features for 14 days", "Unlimited staff", "Unlimited customers"],
+  starter: ["Up to 3 staff", "1,000 customers", "POS + Wallet + Inventory"],
+  pro: ["Unlimited staff", "Unlimited customers", "Multi-tender + Analytics + Batch costing"],
+  enterprise: ["Everything in Pro", "Priority support", "Custom onboarding & SLA"],
+};
 
 export type Permission =
-  | "pos.sell"
-  | "pos.refund"
-  | "shift.manage"
-  | "customers.view"
-  | "customers.topup"
-  | "inventory.view"
-  | "inventory.edit"
-  | "finance.view"
-  | "finance.edit"
+  | "pos.sell" | "pos.refund" | "shift.manage"
+  | "customers.view" | "customers.topup"
+  | "inventory.view" | "inventory.edit"
+  | "finance.view" | "finance.edit"
   | "analytics.view"
-  | "team.view"
-  | "team.manage_cashier"
-  | "team.manage_all"
+  | "team.view" | "team.manage_cashier" | "team.manage_all"
   | "settings.manage";
 
 const PERMISSIONS: Record<StaffRole, Permission[]> = {
@@ -93,6 +95,7 @@ const PERMISSIONS: Record<StaffRole, Permission[]> = {
 export type TopUpRequestStatus = "pending" | "approved" | "rejected";
 export type TopUpRequest = {
   id: string;
+  store_id: string;
   customer_id: string;
   customer_name: string;
   customer_phone: string;
@@ -108,6 +111,7 @@ export type TopUpRequest = {
 
 export type Product = {
   id: string;
+  store_id: string;
   name: string;
   description: string;
   price: number;
@@ -122,6 +126,7 @@ export type DeliveryType = "pickup" | "delivery";
 export type OrderItem = { product_id: string; name: string; price: number; qty: number };
 export type Order = {
   id: string;
+  store_id: string;
   customer_id: string;
   customer_name: string;
   items: OrderItem[];
@@ -146,6 +151,7 @@ export type Order = {
 
 export type Transaction = {
   id: string;
+  store_id: string;
   customer_id: string;
   order_id?: string;
   type: "topup" | "deduction";
@@ -157,6 +163,7 @@ export type Transaction = {
 
 export type RawMaterial = {
   id: string;
+  store_id: string;
   name: string;
   category: string;
   unit: "kg" | "liters" | "pcs";
@@ -168,6 +175,7 @@ export type RawMaterial = {
 export type BatchIngredient = { raw_id: string; qty: number };
 export type CookingBatch = {
   id: string;
+  store_id: string;
   product_id: string;
   ingredients: BatchIngredient[];
   labor_cost: number;
@@ -180,6 +188,7 @@ export type CookingBatch = {
 
 export type WastageLog = {
   id: string;
+  store_id: string;
   batch_id: string;
   product_name: string;
   plates: number;
@@ -190,6 +199,7 @@ export type WastageLog = {
 export type PaymentMethod = "cash" | "bank";
 export type Purchase = {
   id: string;
+  store_id: string;
   date: number;
   supplier: string;
   raw_id: string;
@@ -202,6 +212,7 @@ export type Purchase = {
 export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
 export type Expense = {
   id: string;
+  store_id: string;
   date: number;
   category: ExpenseCategory;
   amount: number;
@@ -213,6 +224,7 @@ export type CartItem = { product: Product; qty: number };
 
 export type Shift = {
   id: string;
+  store_id: string;
   cashier_id: string;
   cashier_name: string;
   opened_at: number;
@@ -228,6 +240,7 @@ export type Shift = {
 export type PendingSaleKind = "wallet" | "cash";
 export type PendingSale = {
   id: string;
+  store_id: string;
   queued_at: number;
   kind: PendingSaleKind;
   customer_id?: string;
@@ -242,6 +255,7 @@ export type PendingSale = {
 export type SmsChannel = "sms" | "whatsapp";
 export type SmsLog = {
   id: string;
+  store_id: string;
   channel: SmsChannel;
   to_phone: string;
   to_name: string;
@@ -252,6 +266,7 @@ export type SmsLog = {
 
 export type AppNotification = {
   id: string;
+  store_id: string;
   user_id: string;
   title: string;
   body: string;
@@ -268,12 +283,15 @@ export type AddStaffInput = {
   full_name: string; phone: string; password: string; role: StaffRole; staff_pin: string;
 };
 
+type Treasury = { cash: number; bank: number };
+
 type Ctx = {
   currentUser: Profile | null;
-  profiles: Profile[];
-  products: Product[];
-  orders: Order[];
-  transactions: Transaction[];
+  profiles: Profile[]; // filtered to current store
+  allProfiles: Profile[]; // unfiltered (for admin / login lookup)
+  products: Product[]; // filtered
+  orders: Order[]; // filtered
+  transactions: Transaction[]; // filtered
   cart: CartItem[];
   rawMaterials: RawMaterial[];
   batches: CookingBatch[];
@@ -292,15 +310,17 @@ type Ctx = {
   dismissNotification: (id: string) => void;
   isOnline: boolean;
   LOW_BALANCE_THRESHOLD: number;
-  store: Store | null;
+  store: Store | null; // current tenant's store
+  stores: Store[]; // all stores (for admin & customer picker)
+  currentStoreId: string | null;
   hasOwner: boolean;
   login: (phone: string, password: string) => Profile | null;
-  signup: (name: string, phone: string, password: string) => Profile | null;
+  signup: (name: string, phone: string, password: string, store_id: string) => Profile | null;
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
   can: (perm: Permission) => boolean;
-  completeSetup: (input: { store: Omit<Store, "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
-  updateStore: (patch: Partial<Omit<Store, "created_at">>) => void;
+  completeSetup: (input: { store: Omit<Store, "id" | "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
+  updateStore: (patch: Partial<Omit<Store, "id" | "created_at">>) => void;
   addStaff: (input: AddStaffInput) => Ok | Fail;
   updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
   disableStaff: (id: string, disabled: boolean) => Ok | Fail;
@@ -321,7 +341,7 @@ type Ctx = {
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
-  addRawMaterial: (r: Omit<RawMaterial, "id">) => void;
+  addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
   updateRawStock: (id: string, delta: number) => void;
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
@@ -331,7 +351,7 @@ type Ctx = {
   availablePlates: (product_id: string) => number | null;
   openShift: (opening_float: number) => Shift | null;
   closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
-  enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at">) => void;
+  enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
 
@@ -344,9 +364,9 @@ type Ctx = {
   isAdminSignedIn: boolean;
   adminLogin: (username: string, password: string) => boolean;
   adminLogout: () => void;
-  addSubscriptionDays: (days: number) => void;
-  changePlan: (plan: SubscriptionPlan) => void;
-  setSubscriptionStatus: (status: SubscriptionStatus) => void;
+  addSubscriptionDays: (days: number, storeId?: string) => void;
+  changePlan: (plan: SubscriptionPlan, storeId?: string) => void;
+  setSubscriptionStatus: (status: SubscriptionStatus, storeId?: string) => void;
   adminAuditLog: AdminAuditLog[];
   subscriptionDaysLeft: () => number;
   isSubscriptionBlocked: () => boolean;
@@ -354,63 +374,51 @@ type Ctx = {
 
 const StoreContext = createContext<Ctx | null>(null);
 
-const seedProducts: Product[] = [
-  { id: "p1", name: "Chicken Burger", description: "Crispy chicken, lettuce, house sauce", price: 4500, category: "Meals", emoji: "🍔", gradient: "from-orange-400 to-red-500" },
-  { id: "p2", name: "Beef Chips", description: "Steak strips with hand-cut fries", price: 6000, category: "Meals", emoji: "🍟", gradient: "from-amber-400 to-orange-600" },
-  { id: "p3", name: "Chapati Beans", description: "Soft chapati with stewed beans", price: 2500, category: "Meals", emoji: "🫓", gradient: "from-yellow-400 to-amber-500" },
-  { id: "p4", name: "Pilau Rice", description: "Spiced rice with tender beef", price: 5000, category: "Meals", emoji: "🍛", gradient: "from-amber-500 to-red-500" },
-  { id: "p5", name: "Samosa (2pc)", description: "Golden crispy triangles", price: 1500, category: "Snacks", emoji: "🥟", gradient: "from-orange-300 to-orange-500" },
-  { id: "p6", name: "Mandazi (3pc)", description: "Sweet fluffy pastry", price: 1000, category: "Snacks", emoji: "🥐", gradient: "from-yellow-300 to-amber-400" },
-  { id: "p7", name: "Fresh Juice", description: "Passion & mango blend", price: 2000, category: "Drinks", emoji: "🧃", gradient: "from-orange-300 to-pink-400" },
-  { id: "p8", name: "Soda 500ml", description: "Chilled bottled soda", price: 1500, category: "Drinks", emoji: "🥤", gradient: "from-red-400 to-rose-500" },
-  { id: "p9", name: "Coffee", description: "Freshly brewed Tanzanian coffee", price: 1800, category: "Drinks", emoji: "☕", gradient: "from-amber-700 to-yellow-800" },
+const PRODUCT_TEMPLATE: Omit<Product, "id" | "store_id">[] = [
+  { name: "Chicken Burger", description: "Crispy chicken, lettuce, house sauce", price: 4500, category: "Meals", emoji: "🍔", gradient: "from-orange-400 to-red-500" },
+  { name: "Beef Chips", description: "Steak strips with hand-cut fries", price: 6000, category: "Meals", emoji: "🍟", gradient: "from-amber-400 to-orange-600" },
+  { name: "Chapati Beans", description: "Soft chapati with stewed beans", price: 2500, category: "Meals", emoji: "🫓", gradient: "from-yellow-400 to-amber-500" },
+  { name: "Pilau Rice", description: "Spiced rice with tender beef", price: 5000, category: "Meals", emoji: "🍛", gradient: "from-amber-500 to-red-500" },
+  { name: "Samosa (2pc)", description: "Golden crispy triangles", price: 1500, category: "Snacks", emoji: "🥟", gradient: "from-orange-300 to-orange-500" },
+  { name: "Mandazi (3pc)", description: "Sweet fluffy pastry", price: 1000, category: "Snacks", emoji: "🥐", gradient: "from-yellow-300 to-amber-400" },
+  { name: "Fresh Juice", description: "Passion & mango blend", price: 2000, category: "Drinks", emoji: "🧃", gradient: "from-orange-300 to-pink-400" },
+  { name: "Soda 500ml", description: "Chilled bottled soda", price: 1500, category: "Drinks", emoji: "🥤", gradient: "from-red-400 to-rose-500" },
+  { name: "Coffee", description: "Freshly brewed Tanzanian coffee", price: 1800, category: "Drinks", emoji: "☕", gradient: "from-amber-700 to-yellow-800" },
 ];
 
-// Only a small demo set is seeded. Staff & store are created by the owner during first-run setup.
-const seedProfiles: Profile[] = [
-  { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer", created_at: Date.now() - 6 * 86400000 },
-  { id: "u2", full_name: "John Mwakalinga", phone: "0754112233", password: "1234", wallet_balance: 8500, role: "customer", created_at: Date.now() - 4 * 86400000 },
-  { id: "u3", full_name: "Fatuma Said", phone: "0688776655", password: "1234", wallet_balance: 22000, role: "customer", created_at: Date.now() - 2 * 86400000 },
+const RAW_TEMPLATE: Omit<RawMaterial, "id" | "store_id">[] = [
+  { name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
+  { name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
+  { name: "Cooking Oil", category: "Oils", unit: "liters", stock: 18, avg_cost: 6800, low_threshold: 10 },
+  { name: "Chicken", category: "Protein", unit: "kg", stock: 8, avg_cost: 12000, low_threshold: 10 },
+  { name: "Wheat Flour", category: "Grains", unit: "kg", stock: 30, avg_cost: 2400, low_threshold: 15 },
+  { name: "Onions", category: "Vegetables", unit: "kg", stock: 22, avg_cost: 1800, low_threshold: 10 },
 ];
-
-const seedOrders: Order[] = [];
-const seedTx: Transaction[] = [];
 
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
-
 const pad = (n: number, w = 3) => String(n).padStart(w, "0");
 const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
 const LOYALTY_RATE = 0.01;
-
 const roleRank: Record<StaffRole, number> = { cashier: 1, supervisor: 2, owner: 3 };
-
-const seedRaw: RawMaterial[] = [
-  { id: "r1", name: "Rice", category: "Grains", unit: "kg", stock: 45, avg_cost: 3200, low_threshold: 20 },
-  { id: "r2", name: "Beans", category: "Legumes", unit: "kg", stock: 12, avg_cost: 4500, low_threshold: 15 },
-  { id: "r3", name: "Cooking Oil", category: "Oils", unit: "liters", stock: 18, avg_cost: 6800, low_threshold: 10 },
-  { id: "r4", name: "Chicken", category: "Protein", unit: "kg", stock: 8, avg_cost: 12000, low_threshold: 10 },
-  { id: "r5", name: "Wheat Flour", category: "Grains", unit: "kg", stock: 30, avg_cost: 2400, low_threshold: 15 },
-  { id: "r6", name: "Onions", category: "Vegetables", unit: "kg", stock: 22, avg_cost: 1800, low_threshold: 10 },
-];
+const uid = (prefix: string) => `${prefix}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [profiles, setProfiles] = useState<Profile[]>(seedProfiles);
-  const [products] = useState<Product[]>(seedProducts);
-  const [orders, setOrders] = useState<Order[]>(seedOrders);
-  const [transactions, setTransactions] = useState<Transaction[]>(seedTx);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(seedRaw);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [cash, setCash] = useState<number>(0);
-  const [bank, setBank] = useState<number>(0);
+  const [treasuries, setTreasuries] = useState<Record<string, Treasury>>({});
   const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
@@ -418,7 +426,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
-  const [store, setStore] = useState<Store | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
   const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
@@ -434,22 +442,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  const nextReceiptNo = () => {
-    const day = todayKey();
-    let no = "";
-    setReceiptSeq((prev) => {
-      const next = prev.day === day ? { day, n: prev.n + 1 } : { day, n: 1 };
-      no = `R-${day}-${pad(next.n)}`;
-      return next;
-    });
-    const nextN = receiptSeq.day === day ? receiptSeq.n + 1 : 1;
-    return no || `R-${day}-${pad(nextN)}`;
-  };
-
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
-  const activeShift = shifts.find((s) => s.id === activeShiftId && !s.closed_at) ?? null;
+  const currentStoreId = currentUser?.store_id ?? null;
+  const store = stores.find((s) => s.id === currentStoreId) ?? null;
   const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
   const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
+
+  // Filtered per-tenant views
+  const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
+  const scopedProfiles = useMemo(() => currentStoreId ? profiles.filter((p) => p.store_id === currentStoreId) : [], [profiles, currentStoreId]);
+  const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
+  const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
+  const scopedRaw = useMemo(() => currentStoreId ? rawMaterials.filter((r) => r.store_id === currentStoreId) : [], [rawMaterials, currentStoreId]);
+  const scopedBatches = useMemo(() => currentStoreId ? batches.filter((b) => b.store_id === currentStoreId) : [], [batches, currentStoreId]);
+  const scopedWaste = useMemo(() => currentStoreId ? wastage.filter((w) => w.store_id === currentStoreId) : [], [wastage, currentStoreId]);
+  const scopedPurchases = useMemo(() => currentStoreId ? purchases.filter((p) => p.store_id === currentStoreId) : [], [purchases, currentStoreId]);
+  const scopedExpenses = useMemo(() => currentStoreId ? expenses.filter((e) => e.store_id === currentStoreId) : [], [expenses, currentStoreId]);
+  const scopedShifts = useMemo(() => currentStoreId ? shifts.filter((s) => s.store_id === currentStoreId) : [], [shifts, currentStoreId]);
+  const scopedPending = useMemo(() => currentStoreId ? pendingSales.filter((p) => p.store_id === currentStoreId) : [], [pendingSales, currentStoreId]);
+  const scopedSms = useMemo(() => currentStoreId ? smsLogs.filter((s) => s.store_id === currentStoreId) : [], [smsLogs, currentStoreId]);
+  const scopedNotifs = useMemo(() => currentStoreId ? notifications.filter((n) => n.store_id === currentStoreId) : notifications, [notifications, currentStoreId]);
+  const scopedRequests = useMemo(() => currentStoreId ? topUpRequests.filter((r) => r.store_id === currentStoreId) : [], [topUpRequests, currentStoreId]);
+  const scopedTickets = useMemo(() => superAdminSignedIn ? tickets : (currentStoreId ? tickets.filter((t) => t.store_id === currentStoreId) : []), [tickets, currentStoreId, superAdminSignedIn]);
+
+  const treasury: Treasury = (currentStoreId && treasuries[currentStoreId]) || { cash: 0, bank: 0 };
+  const cash = treasury.cash;
+  const bank = treasury.bank;
+
+  const activeShift = scopedShifts.find((s) => s.id === activeShiftId && !s.closed_at) ?? null;
+
+  const adjustCash = useCallback((updater: number | ((c: number) => number), sid?: string) => {
+    const targetId = sid ?? currentStoreId;
+    if (!targetId) return;
+    setTreasuries((prev) => {
+      const cur = prev[targetId] ?? { cash: 0, bank: 0 };
+      const nv = typeof updater === "function" ? updater(cur.cash) : updater;
+      return { ...prev, [targetId]: { ...cur, cash: nv } };
+    });
+  }, [currentStoreId]);
+
+  const adjustBank = useCallback((updater: number | ((b: number) => number), sid?: string) => {
+    const targetId = sid ?? currentStoreId;
+    if (!targetId) return;
+    setTreasuries((prev) => {
+      const cur = prev[targetId] ?? { cash: 0, bank: 0 };
+      const nv = typeof updater === "function" ? updater(cur.bank) : updater;
+      return { ...prev, [targetId]: { ...cur, bank: nv } };
+    });
+  }, [currentStoreId]);
 
   const hasStaffRole = useCallback((min: StaffRole) => {
     if (!currentUser || currentUser.role !== "staff") return false;
@@ -464,29 +504,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   const pushNotification = useCallback((n: Omit<AppNotification, "id" | "created_at" | "read">) => {
-    setNotifications((prev) => [{ ...n, id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`, created_at: Date.now(), read: false }, ...prev]);
+    setNotifications((prev) => [{ ...n, id: uid("n"), created_at: Date.now(), read: false }, ...prev]);
   }, []);
 
   const pushNudgeIfLow = useCallback((customer: Profile) => {
-    if (customer.wallet_balance >= LOW_BALANCE_THRESHOLD) return;
-    // Suppress duplicates: skip if an unread low_balance notification already exists for this user
+    if (!customer.store_id) return;
+    const threshold = stores.find((s) => s.id === customer.store_id)?.low_balance_threshold ?? 3000;
+    if (customer.wallet_balance >= threshold) return;
     setNotifications((prev) => {
       if (prev.some((n) => n.user_id === customer.id && n.kind === "low_balance" && !n.read)) return prev;
       return [{
-        id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-        user_id: customer.id,
+        id: uid("n"), store_id: customer.store_id!, user_id: customer.id,
         title: "Wallet running low",
         body: `Your balance is TZS ${customer.wallet_balance.toLocaleString()}. Top up now so you don't get stuck at checkout.`,
-        kind: "low_balance",
-        created_at: Date.now(),
-        read: false,
+        kind: "low_balance", created_at: Date.now(), read: false,
       }, ...prev];
     });
-  }, [LOW_BALANCE_THRESHOLD]);
+  }, [stores]);
+
+  const nextReceiptNo = () => {
+    const day = todayKey();
+    let no = "";
+    setReceiptSeq((prev) => {
+      const next = prev.day === day ? { day, n: prev.n + 1 } : { day, n: 1 };
+      no = `R-${day}-${pad(next.n)}`;
+      return next;
+    });
+    const nextN = receiptSeq.day === day ? receiptSeq.n + 1 : 1;
+    return no || `R-${day}-${pad(nextN)}`;
+  };
 
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
+    if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    const cust = profiles.find((p) => p.id === customerId);
+    const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
     if (!cust) return { ok: false, reason: "Customer not found" };
     const cashPart = Math.max(0, Math.min(cashPortion, total));
     const walletPart = total - cashPart;
@@ -496,7 +547,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const receipt_no = nextReceiptNo();
     const loyalty = Math.round(total * LOYALTY_RATE);
     const order: Order = {
-      id, customer_id: cust.id, customer_name: cust.full_name, items,
+      id, store_id: currentStoreId, customer_id: cust.id, customer_name: cust.full_name, items,
       total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
@@ -507,19 +558,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProfiles((prev) => prev.map((p) => p.id === cust.id ? nextCust : p));
     setTransactions((prev) => {
       const tx: Transaction[] = [];
-      if (walletPart > 0) tx.push({ id: `t${Date.now()}`, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
-      if (loyalty > 0) tx.push({ id: `tl${Date.now()}`, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
+      if (walletPart > 0) tx.push({ id: uid("t"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "deduction", amount: walletPart, description: `POS ${receipt_no}`, created_at: Date.now() });
+      if (loyalty > 0) tx.push({ id: uid("tl"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
       return [...tx, ...prev];
     });
     if (cashPart > 0) {
-      if (tender === "mobile") setBank((b) => b + cashPart);
-      else setCash((c) => c + cashPart);
+      if (tender === "mobile") adjustBank((b) => b + cashPart);
+      else adjustCash((c) => c + cashPart);
     }
     pushNudgeIfLow(nextCust);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash]);
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
+    if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     if (total <= 0) return { ok: false, reason: "Cart empty" };
     if (tender === "cash" && cashReceived < total) return { ok: false, reason: "Amount received is less than total" };
@@ -527,87 +579,99 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
     const order: Order = {
-      id, customer_id: "walkin", customer_name: customerName, items,
+      id, store_id: currentStoreId, customer_id: "walkin", customer_name: customerName, items,
       total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: tender === "cash" ? cashReceived : total, wallet_paid: 0, tender,
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
-    if (tender === "mobile") setBank((b) => b + total);
-    else setCash((c) => c + total);
+    if (tender === "mobile") adjustBank((b) => b + total);
+    else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift]);
+  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash]);
 
   const value: Ctx = useMemo(() => ({
-    currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
-    purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
-    topUpRequests, store, hasOwner,
-    notifications,
-    unreadNotifications: (userId) => notifications.filter((n) => n.user_id === userId && !n.read),
+    currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    orders: scopedOrders, transactions: scopedTx, cart,
+    rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
+    purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
+    shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
+    isOnline, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
+    notifications: scopedNotifs,
+    unreadNotifications: (userId) => scopedNotifs.filter((n) => n.user_id === userId && !n.read),
     markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
     dismissNotification(id) { setNotifications((prev) => prev.filter((n) => n.id !== id)); },
     can, hasStaffRole,
     completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0 }) {
-      if (hasOwner) return { ok: false, reason: "Store is already set up" };
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
       if (profiles.some((p) => p.phone === owner.phone.trim())) return { ok: false, reason: "That phone is already in use" };
-      const ownerProfile: Profile = {
-        id: `u${Date.now()}`, full_name: owner.full_name.trim(), phone: owner.phone.trim(),
-        password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
-        staff_pin: owner.staff_pin, created_at: Date.now(),
-      };
-      setProfiles((prev) => [...prev, ownerProfile]);
       const now = Date.now();
       const trialDays = 14;
-      setStore({ ...s, name: s.name.trim(), created_at: now, subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 } });
-      setCash(opening_cash);
-      setBank(opening_bank);
+      const storeId = uid("s");
+      const newStore: Store = {
+        id: storeId, ...s, name: s.name.trim(), created_at: now,
+        subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 },
+      };
+      const ownerProfile: Profile = {
+        id: uid("u"), full_name: owner.full_name.trim(), phone: owner.phone.trim(),
+        password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
+        staff_pin: owner.staff_pin, created_at: now, store_id: storeId,
+      };
+      // Seed per-store menu & raw materials so each tenant starts clean.
+      const seededProducts: Product[] = PRODUCT_TEMPLATE.map((p, i) => ({ ...p, id: `p-${storeId}-${i}`, store_id: storeId }));
+      const seededRaw: RawMaterial[] = RAW_TEMPLATE.map((r, i) => ({ ...r, id: `r-${storeId}-${i}`, store_id: storeId }));
+      setStores((prev) => [...prev, newStore]);
+      setProfiles((prev) => [...prev, ownerProfile]);
+      setProducts((prev) => [...prev, ...seededProducts]);
+      setRawMaterials((prev) => [...prev, ...seededRaw]);
+      setTreasuries((prev) => ({ ...prev, [storeId]: { cash: opening_cash, bank: opening_bank } }));
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
     updateStore(patch) {
-      setStore((prev) => prev ? { ...prev, ...patch, name: (patch.name ?? prev.name).trim() || prev.name } : prev);
+      if (!currentStoreId) return;
+      setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, name: (patch.name ?? s.name).trim() || s.name } : s));
     },
     addStaff({ full_name, phone, password, role, staff_pin }) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
       if (role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can add supervisors or owners" };
       if (!full_name.trim() || !phone.trim() || !password) return { ok: false, reason: "All fields are required" };
       if (!/^\d{4,6}$/.test(staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
       if (profiles.some((p) => p.phone === phone.trim())) return { ok: false, reason: "Phone already in use" };
       const p: Profile = {
-        id: `u${Date.now()}`, full_name: full_name.trim(), phone: phone.trim(), password,
+        id: uid("u"), full_name: full_name.trim(), phone: phone.trim(), password,
         wallet_balance: 0, role: "staff", staff_role: role, staff_pin, created_at: Date.now(),
+        store_id: currentStoreId,
       };
       setProfiles((prev) => [...prev, p]);
       return { ok: true };
     },
     updateStaff(id, patch) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id);
+      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
       if (patch.staff_role && patch.staff_role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
       if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
       if (patch.phone && profiles.some((p) => p.phone === patch.phone!.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
       setProfiles((prev) => prev.map((p) => p.id === id ? {
-        ...p,
-        full_name: patch.full_name?.trim() || p.full_name,
-        phone: patch.phone?.trim() || p.phone,
-        staff_role: patch.staff_role ?? p.staff_role,
+        ...p, full_name: patch.full_name?.trim() || p.full_name,
+        phone: patch.phone?.trim() || p.phone, staff_role: patch.staff_role ?? p.staff_role,
       } : p));
       return { ok: true };
     },
     disableStaff(id, disabled) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id);
+      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
       if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
       if (target.id === currentUser?.id) return { ok: false, reason: "You cannot disable yourself" };
       if (disabled && target.staff_role === "owner") {
-        const activeOwners = profiles.filter((p) => p.staff_role === "owner" && !p.disabled && p.id !== id).length;
+        const activeOwners = profiles.filter((p) => p.store_id === currentStoreId && p.staff_role === "owner" && !p.disabled && p.id !== id).length;
         if (activeOwners === 0) return { ok: false, reason: "At least one active owner is required" };
       }
       setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, disabled } : p));
@@ -625,10 +689,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     submitTopUpRequest({ amount, reference, note }) {
-      if (!currentUser || currentUser.role !== "customer") return null;
+      if (!currentUser || currentUser.role !== "customer" || !currentUser.store_id) return null;
       if (amount <= 0 || !reference.trim()) return null;
       const req: TopUpRequest = {
-        id: `TR-${Date.now()}`, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        id: `TR-${Date.now()}`, store_id: currentUser.store_id,
+        customer_id: currentUser.id, customer_name: currentUser.full_name,
         customer_phone: currentUser.phone, amount, reference: reference.trim(), note,
         status: "pending", created_at: Date.now(),
       };
@@ -652,18 +717,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
       if (amount <= 0) return { ok: false, reason: "Enter an amount" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
-      const cust = profiles.find((p) => p.id === customerId);
+      const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
       if (!cust) return { ok: false, reason: "Customer not found" };
       const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
-      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
-      if (tender === "mobile") setBank((b) => b + amount);
-      else setCash((c) => c + amount);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId!, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
+      if (tender === "mobile") adjustBank((b) => b + amount);
+      else adjustCash((c) => c + amount);
       if (requestId) {
         setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
       }
       pushNotification({
-        user_id: customerId,
+        store_id: currentStoreId!, user_id: customerId,
         title: "Wallet topped up",
         body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance: TZS ${(cust.wallet_balance + amount).toLocaleString()}.`,
         kind: "topup",
@@ -672,15 +737,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
-      if (!u) return null;
-      if (u.disabled) return null;
+      if (!u || u.disabled) return null;
       setCurrentUserId(u.id);
       setProfiles((prev) => prev.map((p) => p.id === u.id ? { ...p, last_login: Date.now() } : p));
       return u;
     },
-    signup(name, phone, password) {
+    signup(name, phone, password, store_id) {
+      if (!store_id || !stores.some((s) => s.id === store_id)) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone, password, wallet_balance: 0, role: "customer", created_at: Date.now() };
+      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, role: "customer", created_at: Date.now(), store_id };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
       return u;
@@ -698,12 +763,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     clearCart() { setCart([]); },
     placeOrder(deliveryType) {
-      if (!currentUser) return null;
+      if (!currentUser || !currentUser.store_id) return null;
       const total = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
       if (total <= 0 || currentUser.wallet_balance < total) return null;
       const id = nextOrderId();
       const order: Order = {
-        id, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        id, store_id: currentUser.store_id, customer_id: currentUser.id, customer_name: currentUser.full_name,
         items: cart.map((c) => ({ product_id: c.product.id, name: c.product.name, price: c.product.price, qty: c.qty })),
         total_amount: total, status: "new", delivery_type: deliveryType, payment_status: "paid",
         created_at: Date.now(),
@@ -711,7 +776,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => [order, ...prev]);
       const nextUser = { ...currentUser, wallet_balance: currentUser.wallet_balance - total };
       setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? nextUser : p));
-      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentUser.store_id!, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
       pushNudgeIfLow(nextUser);
       return order;
@@ -721,11 +786,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
+      if (!currentStoreId) return;
       setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
       const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
-      setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
-      if (tender === "mobile") setBank((b) => b + amount);
-      else setCash((c) => c + amount);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
+      if (tender === "mobile") adjustBank((b) => b + amount);
+      else adjustCash((c) => c + amount);
     },
     posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
       return _executePosSale(customerId, items, cashPortion, tender, reference);
@@ -734,7 +800,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference);
     },
     reverseSale(orderId, reason) {
-      const original = orders.find((o) => o.id === orderId);
+      const original = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
       if (!original) return { ok: false, reason: "Order not found" };
       if (original.reversed || original.is_reversal) return { ok: false, reason: "Already reversed" };
       const id = nextOrderId();
@@ -752,46 +818,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
       if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
         setProfiles((prev) => prev.map((p) => p.id === original.customer_id ? { ...p, wallet_balance: p.wallet_balance + (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0) } : p));
-        setTransactions((prev) => [{ id: `tr${Date.now()}`, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
+        setTransactions((prev) => [{ id: uid("tr"), store_id: currentStoreId!, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
       }
       const cashPart = original.cash_paid ?? 0;
       if (cashPart > 0) {
-        if (original.tender === "mobile") setBank((b) => b - cashPart);
-        else setCash((c) => c - cashPart);
+        if (original.tender === "mobile") adjustBank((b) => b - cashPart);
+        else adjustCash((c) => c - cashPart);
       }
       return { ok: true, order: credit };
     },
     findCustomer(query) {
       const q = query.trim().toLowerCase();
       if (!q) return null;
-      return profiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
+      return profiles.find((p) => p.role === "customer" && p.store_id === currentStoreId && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
     addCustomer({ full_name, phone, initial_balance = 0 }) {
+      if (!currentStoreId) return null;
       const name = full_name.trim();
       const ph = phone.trim();
       if (!name || !ph) return null;
       if (profiles.some((p) => p.phone === ph)) return null;
-      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer", created_at: Date.now() };
+      const u: Profile = { id: uid("u"), full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer", created_at: Date.now(), store_id: currentStoreId };
       setProfiles((prev) => [...prev, u]);
       if (initial_balance > 0) {
-        setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
-        setCash((c) => c + initial_balance);
+        setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
+        adjustCash((c) => c + initial_balance);
       }
       return u;
     },
-    addRawMaterial(r) { setRawMaterials((prev) => [...prev, { ...r, id: `r${Date.now()}` }]); },
+    addRawMaterial(r) {
+      if (!currentStoreId) return;
+      setRawMaterials((prev) => [...prev, { ...r, id: uid("r"), store_id: currentStoreId }]);
+    },
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
     createBatch({ product_id, ingredients, labor_cost, plates }) {
-      if (plates <= 0 || ingredients.length === 0) return null;
+      if (!currentStoreId || plates <= 0 || ingredients.length === 0) return null;
       let raw_cost = 0;
       for (const ing of ingredients) {
-        const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+        const raw = rawMaterials.find((r) => r.id === ing.raw_id && r.store_id === currentStoreId);
         if (!raw || raw.stock < ing.qty) return null;
         raw_cost += raw.avg_cost * ing.qty;
       }
       const unit_cost = Math.round((raw_cost + labor_cost) / plates);
       const batch: CookingBatch = {
-        id: `B-${Date.now()}`, product_id, ingredients, labor_cost, plates,
+        id: `B-${Date.now()}`, store_id: currentStoreId, product_id, ingredients, labor_cost, plates,
         raw_cost, unit_cost, plates_remaining: plates, created_at: Date.now(),
       };
       setRawMaterials((prev) => prev.map((r) => {
@@ -803,61 +873,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     logWastage(batch_id, plates, reason) {
       const b = batches.find((x) => x.id === batch_id);
-      if (!b || plates <= 0) return;
-      const prod = seedProducts.find((p) => p.id === b.product_id);
+      if (!b || plates <= 0 || !currentStoreId) return;
+      const prod = products.find((p) => p.id === b.product_id);
       setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
-      setWastage((prev) => [{ id: `w${Date.now()}`, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
+      setWastage((prev) => [{ id: uid("w"), store_id: currentStoreId, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
     },
     recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date }) {
-      if (qty <= 0 || total_cost < 0) return null;
-      const raw = rawMaterials.find((r) => r.id === raw_id);
+      if (!currentStoreId || qty <= 0 || total_cost < 0) return null;
+      const raw = rawMaterials.find((r) => r.id === raw_id && r.store_id === currentStoreId);
       if (!raw) return null;
       const newStock = raw.stock + qty;
       const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
       setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
-      if (payment_method === "bank") setBank((b) => b - total_cost);
-      else setCash((c) => c - total_cost);
+      if (payment_method === "bank") adjustBank((b) => b - total_cost);
+      else adjustCash((c) => c - total_cost);
       const purchase: Purchase = {
-        id: `PO-${Date.now()}`, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
+        id: `PO-${Date.now()}`, store_id: currentStoreId, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
         qty, total_cost, payment_method,
       };
       setPurchases((prev) => [purchase, ...prev]);
       return purchase;
     },
     recordExpense({ category, amount, description, payment_method, date }) {
-      if (amount <= 0) return null;
-      const exp: Expense = { id: `EX-${Date.now()}`, date: date ?? Date.now(), category, amount, description, payment_method };
+      if (!currentStoreId || amount <= 0) return null;
+      const exp: Expense = { id: `EX-${Date.now()}`, store_id: currentStoreId, date: date ?? Date.now(), category, amount, description, payment_method };
       setExpenses((prev) => [exp, ...prev]);
-      if (payment_method === "bank") setBank((b) => b - amount);
-      else setCash((c) => c - amount);
+      if (payment_method === "bank") adjustBank((b) => b - amount);
+      else adjustCash((c) => c - amount);
       return exp;
     },
     transferFunds(from, amount) {
-      if (amount <= 0) return false;
+      if (!currentStoreId || amount <= 0) return false;
+      const t = treasuries[currentStoreId] ?? { cash: 0, bank: 0 };
       if (from === "cash") {
-        if (cash < amount) return false;
-        setCash((c) => c - amount); setBank((b) => b + amount);
+        if (t.cash < amount) return false;
+        setTreasuries((prev) => ({ ...prev, [currentStoreId]: { cash: prev[currentStoreId].cash - amount, bank: prev[currentStoreId].bank + amount } }));
       } else {
-        if (bank < amount) return false;
-        setBank((b) => b - amount); setCash((c) => c + amount);
+        if (t.bank < amount) return false;
+        setTreasuries((prev) => ({ ...prev, [currentStoreId]: { cash: prev[currentStoreId].cash + amount, bank: prev[currentStoreId].bank - amount } }));
       }
       return true;
     },
     availablePlates(product_id) {
-      const rel = batches.filter((b) => b.product_id === product_id);
+      const rel = batches.filter((b) => b.product_id === product_id && b.store_id === currentStoreId);
       if (rel.length === 0) return null;
       return rel.reduce((s, b) => s + b.plates_remaining, 0);
     },
     openShift(opening_float) {
-      if (!currentUser || currentUser.role !== "staff") return null;
+      if (!currentUser || currentUser.role !== "staff" || !currentStoreId) return null;
       if (activeShift) return null;
       const s: Shift = {
-        id: `SH-${Date.now()}`, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
+        id: `SH-${Date.now()}`, store_id: currentStoreId, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
         opened_at: Date.now(), opening_float,
       };
       setShifts((prev) => [s, ...prev]);
       setActiveShiftId(s.id);
-      setCash((c) => c + opening_float);
+      adjustCash((c) => c + opening_float);
       return s;
     },
     closeShift({ counted_cash, counted_mobile, notes }) {
@@ -877,13 +948,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return closed;
     },
     enqueueSale(payload) {
-      const p: PendingSale = { id: `PQ-${Date.now()}`, queued_at: Date.now(), ...payload };
+      if (!currentStoreId) return;
+      const p: PendingSale = { id: `PQ-${Date.now()}`, store_id: currentStoreId, queued_at: Date.now(), ...payload };
       setPendingSales((prev) => [p, ...prev]);
     },
     syncOutbox() {
       let synced = 0, failed = 0;
       const rem: PendingSale[] = [];
-      for (const p of [...pendingSales].reverse()) {
+      for (const p of [...pendingSales].filter((x) => x.store_id === currentStoreId).reverse()) {
         let res: SaleResult;
         if (p.kind === "wallet" && p.customer_id) {
           res = _executePosSale(p.customer_id, p.items, p.cash_portion ?? 0, p.tender, p.reference);
@@ -892,29 +964,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         if (res.ok) synced++; else { failed++; rem.push(p); }
       }
-      setPendingSales(rem);
+      setPendingSales((prev) => prev.filter((x) => x.store_id !== currentStoreId).concat(rem));
       return { synced, failed };
     },
     sendReceiptMessage(order, channel) {
       const cust = profiles.find((p) => p.id === order.customer_id);
       const to_phone = cust?.phone ?? "";
       const to_name = cust?.full_name ?? order.customer_name;
-      if (!to_phone) return null;
+      if (!to_phone || !currentStoreId) return null;
       const log: SmsLog = {
-        id: `sms${Date.now()}`, channel, to_phone, to_name,
+        id: uid("sms"), store_id: currentStoreId, channel, to_phone, to_name,
         message: `BitePay receipt ${order.receipt_no ?? order.id} · TZS ${order.total_amount.toLocaleString()} · Thank you!`,
         kind: "receipt", created_at: Date.now(),
       };
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-    tickets,
+    tickets: scopedTickets,
     submitTicket({ subject, message, category, priority }) {
-      if (!currentUser || currentUser.role !== "staff") return null;
+      if (!currentUser || currentUser.role !== "staff" || !currentStoreId) return null;
       if (!subject.trim() || !message.trim()) return null;
       const now = Date.now();
       const t: Ticket = {
-        id: `TK-${now}`, subject: subject.trim(), message: message.trim(), category, priority,
+        id: `TK-${now}`, store_id: currentStoreId, subject: subject.trim(), message: message.trim(), category, priority,
         status: "open", created_by_id: currentUser.id, created_by_name: currentUser.full_name,
         created_at: now, updated_at: now, replies: [],
       };
@@ -941,30 +1013,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     adminLogin(username, password) {
       if (username.trim().toLowerCase() === superAdmin.username && password === superAdmin.password) {
         setSuperAdminSignedIn(true);
-        setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
+        setAdminAuditLog((prev) => [{ id: uid("au"), action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
         return true;
       }
       return false;
     },
     adminLogout() { setSuperAdminSignedIn(false); },
-    addSubscriptionDays(days) {
-      if (!store || days === 0) return;
+    addSubscriptionDays(days, storeId) {
+      const targetId = storeId ?? currentStoreId;
+      if (!targetId || days === 0) return;
+      const target = stores.find((s) => s.id === targetId);
+      if (!target) return;
       const nowMs = Date.now();
-      const base = Math.max(store.subscription.expires_at, nowMs);
+      const base = Math.max(target.subscription.expires_at, nowMs);
       const newExpiry = base + days * 86400000;
       const newStatus: SubscriptionStatus = newExpiry > nowMs ? "active" : "expired";
-      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, expires_at: newExpiry, status: newStatus } } : prev);
-      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "extend_subscription", detail: `${days > 0 ? "+" : ""}${days} days`, created_at: Date.now() }, ...prev]);
+      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, expires_at: newExpiry, status: newStatus } } : s));
+      setAdminAuditLog((prev) => [{ id: uid("au"), action: "extend_subscription", detail: `${days > 0 ? "+" : ""}${days} days on ${target.name}`, created_at: Date.now() }, ...prev]);
     },
-    changePlan(plan) {
-      if (!store) return;
-      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : prev);
-      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
+    changePlan(plan, storeId) {
+      const targetId = storeId ?? currentStoreId;
+      if (!targetId) return;
+      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : s));
+      setAdminAuditLog((prev) => [{ id: uid("au"), action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
     },
-    setSubscriptionStatus(status) {
-      if (!store) return;
-      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, status } } : prev);
-      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
+    setSubscriptionStatus(status, storeId) {
+      const targetId = storeId ?? currentStoreId;
+      if (!targetId) return;
+      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, status } } : s));
+      setAdminAuditLog((prev) => [{ id: uid("au"), action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
     },
     adminAuditLog,
     subscriptionDaysLeft() {
@@ -978,7 +1055,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, superAdminSignedIn, adminAuditLog]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
