@@ -554,6 +554,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [stores]);
 
+  // Update a customer's per-canteen wallet balance. Keeps legacy wallet_balance in sync
+  // when the target canteen is their home store, so existing UIs keep rendering.
+  const setWallet = useCallback((profileId: string, storeId: string, delta: number) => {
+    setProfiles((prev) => prev.map((p) => {
+      if (p.id !== profileId) return p;
+      const wallets = { ...(p.wallets ?? {}) };
+      const cur = wallets[storeId] ?? (p.store_id === storeId ? p.wallet_balance : 0);
+      const nv = cur + delta;
+      wallets[storeId] = nv;
+      const legacy = p.store_id === storeId ? nv : p.wallet_balance;
+      return { ...p, wallets, wallet_balance: legacy };
+    }));
+  }, []);
+
+
   const nextReceiptNo = () => {
     const day = todayKey();
     let no = "";
