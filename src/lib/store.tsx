@@ -419,6 +419,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedCanteenId, setSelectedCanteenId] = useState<string | null>(null);
+
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
