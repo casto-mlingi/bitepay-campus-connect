@@ -417,6 +417,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [store, setStore] = useState<Store | null>(null);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
+  const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
+  const superAdmin: SuperAdmin = { username: "admin", password: "bitepay2025", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
