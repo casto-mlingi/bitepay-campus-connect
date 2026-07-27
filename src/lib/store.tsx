@@ -407,13 +407,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return PERMISSIONS[role].includes(perm);
   }, [currentUser]);
 
+  const pushNotification = useCallback((n: Omit<AppNotification, "id" | "created_at" | "read">) => {
+    setNotifications((prev) => [{ ...n, id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`, created_at: Date.now(), read: false }, ...prev]);
+  }, []);
+
   const pushNudgeIfLow = useCallback((customer: Profile) => {
     if (customer.wallet_balance >= LOW_BALANCE_THRESHOLD) return;
-    setSmsLogs((prev) => [{
-      id: `sms${Date.now()}`, channel: "sms", to_phone: customer.phone, to_name: customer.full_name,
-      message: `Hi ${customer.full_name.split(" ")[0]}, your BitePay wallet is low (TZS ${customer.wallet_balance.toLocaleString()}). Top up via Lipa Namba to keep ordering.`,
-      kind: "nudge", created_at: Date.now(),
-    }, ...prev]);
+    // Suppress duplicates: skip if an unread low_balance notification already exists for this user
+    setNotifications((prev) => {
+      if (prev.some((n) => n.user_id === customer.id && n.kind === "low_balance" && !n.read)) return prev;
+      return [{
+        id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        user_id: customer.id,
+        title: "Wallet running low",
+        body: `Your balance is TZS ${customer.wallet_balance.toLocaleString()}. Top up now so you don't get stuck at checkout.`,
+        kind: "low_balance",
+        created_at: Date.now(),
+        read: false,
+      }, ...prev];
+    });
   }, [LOW_BALANCE_THRESHOLD]);
 
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
