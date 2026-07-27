@@ -252,6 +252,10 @@ type Ctx = {
   activeShift: Shift | null;
   pendingSales: PendingSale[];
   smsLogs: SmsLog[];
+  notifications: AppNotification[];
+  unreadNotifications: (userId: string) => AppNotification[];
+  markNotificationsRead: (userId: string) => void;
+  dismissNotification: (id: string) => void;
   isOnline: boolean;
   LOW_BALANCE_THRESHOLD: number;
   store: Store | null;
