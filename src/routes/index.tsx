@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChefHat, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -105,8 +105,8 @@ function AuthPage() {
           <div className="mt-6 pt-5 border-t">
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2.5 text-center">Try demo accounts</p>
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => quickFill("customer")}>Customer</Button>
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => quickFill("staff")}>Staff</Button>
+              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={quickFillCustomer}>Customer demo</Button>
+              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => navigate({ to: "/setup" })}>Store setup</Button>
             </div>
           </div>
         </div>
