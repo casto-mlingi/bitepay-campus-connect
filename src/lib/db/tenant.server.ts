@@ -24,7 +24,7 @@ export async function withTenant<T>(
   const pool = getSql();
   const reserved = await pool.reserve();
   try {
-    return await reserved.begin(async (tx) => {
+    const result = await reserved.begin(async (tx) => {
       await tx.unsafe(
         `SELECT set_config('app.current_store_id', $1, true),
                 set_config('app.current_actor_id',  $2, true)`,
@@ -33,6 +33,7 @@ export async function withTenant<T>(
       const db = drizzle(tx as unknown as Sql);
       return fn({ sql: tx as unknown as Sql, db });
     });
+    return result as T;
   } finally {
     reserved.release();
   }
