@@ -16,6 +16,16 @@ export type Profile = {
   created_at?: number;
 };
 
+export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
+export type SubscriptionStatus = "active" | "suspended" | "expired";
+export type Subscription = {
+  plan: SubscriptionPlan;
+  started_at: number;
+  expires_at: number;
+  status: SubscriptionStatus;
+  monthly_price: number;
+};
+
 export type Store = {
   name: string;
   location: string;
@@ -24,7 +34,31 @@ export type Store = {
   low_balance_threshold: number;
   enable_mobile_tender: boolean;
   created_at: number;
+  subscription: Subscription;
 };
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketReply = { id: string; from: "store" | "admin"; author_name: string; body: string; created_at: number };
+export type Ticket = {
+  id: string;
+  subject: string;
+  message: string;
+  category: "billing" | "technical" | "feature" | "other";
+  priority: TicketPriority;
+  status: TicketStatus;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: number;
+  updated_at: number;
+  replies: TicketReply[];
+};
+
+export type SuperAdmin = { username: string; password: string; full_name: string };
+export type AdminAuditLog = { id: string; action: string; detail: string; created_at: number };
+
+export const PLAN_PRICE: Record<SubscriptionPlan, number> = { trial: 0, starter: 25000, pro: 60000, enterprise: 150000 };
+export const PLAN_LABEL: Record<SubscriptionPlan, string> = { trial: "Free Trial", starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
 
 export type Permission =
   | "pos.sell"
