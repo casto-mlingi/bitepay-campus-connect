@@ -821,7 +821,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return u;
     },
 
-    logout() { setCurrentUserId(null); setCart([]); },
+    logout() { setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);
