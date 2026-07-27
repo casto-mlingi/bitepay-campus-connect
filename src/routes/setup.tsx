@@ -89,8 +89,8 @@ function SetupWizard() {
 
       <div className="flex-1 -mt-8 px-5 pb-8 relative z-10">
         <div className="max-w-md mx-auto bg-surface rounded-3xl shadow-xl shadow-black/5 p-6 sm:p-8 border">
-          {step === 1 ? (
-            <form onSubmit={goNext} className="space-y-4">
+          {step === 1 && (
+            <form onSubmit={goStep2} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <StoreIcon className="w-5 h-5 text-primary" />
                 <h2 className="text-xl font-bold">Store details</h2>
@@ -108,14 +108,43 @@ function SetupWizard() {
                 <FormRow label="Currency">
                   <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="TZS" className="h-11 rounded-xl" />
                 </FormRow>
-                <FormRow label="Low-balance nudge (TZS)">
+                <FormRow label="Low-balance nudge">
                   <Input type="number" value={lowThreshold} onChange={(e) => setLowThreshold(Number(e.target.value) || 0)} className="h-11 rounded-xl" />
                 </FormRow>
               </div>
+              <p className="text-xs text-muted-foreground flex items-start gap-1.5 -mt-1">
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span><strong>Low-balance nudge</strong> is the wallet balance at which BitePay auto-sends a reminder to top up. If a customer's wallet drops below this amount after a purchase, they'll get an SMS/WhatsApp nudge so they don't get stuck at checkout next time.</span>
+              </p>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
             </form>
-          ) : (
+          )}
+
+          {step === 2 && (
+            <form onSubmit={goStep3} className="space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold">Liquidity accounts</h2>
+              </div>
+              <p className="text-sm text-muted-foreground -mt-1">Opening balances for your treasury. These fund purchases and expenses, and receive sales & top-ups.</p>
+              <FormRow label="Cash on hand (till float)">
+                <Input type="number" min={0} value={openingCash} onChange={(e) => setOpeningCash(Number(e.target.value) || 0)} placeholder="0" className="h-11 rounded-xl" />
+              </FormRow>
+              <p className="text-xs text-muted-foreground -mt-2">Physical cash in the till at the start. Cash sales add to this; cash purchases/expenses reduce it.</p>
+              <FormRow label="Bank / mobile-money balance">
+                <Input type="number" min={0} value={openingBank} onChange={(e) => setOpeningBank(Number(e.target.value) || 0)} placeholder="0" className="h-11 rounded-xl" />
+              </FormRow>
+              <p className="text-xs text-muted-foreground -mt-2">Money in your bank account or Lipa Namba wallet. Mobile-money top-ups & sales settle here.</p>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
+              </div>
+            </form>
+          )}
+
+          {step === 3 && (
             <form onSubmit={submit} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-5 h-5 text-primary" />
@@ -141,7 +170,7 @@ function SetupWizard() {
               </FormRow>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="button" variant="outline" onClick={() => setStep(2)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
                 <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Create store <CheckCircle2 className="ml-2 w-4 h-4" /></Button>
               </div>
             </form>
