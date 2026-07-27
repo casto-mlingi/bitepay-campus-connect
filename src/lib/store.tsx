@@ -807,11 +807,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     signup(name, phone, password, store_id) {
       if (!store_id || !stores.some((s) => s.id === store_id)) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, role: "customer", created_at: Date.now(), store_id };
+      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [store_id]: 0 }, role: "customer", created_at: Date.now(), store_id };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
+      setSelectedCanteenId(store_id);
       return u;
     },
+
     logout() { setCurrentUserId(null); setCart([]); },
     addToCart(p) {
       setCart((prev) => {
