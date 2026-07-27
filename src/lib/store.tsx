@@ -366,9 +366,11 @@ const seedProducts: Product[] = [
   { id: "p9", name: "Coffee", description: "Freshly brewed Tanzanian coffee", price: 1800, category: "Drinks", emoji: "☕", gradient: "from-amber-700 to-yellow-800" },
 ];
 
-// Only a single demo customer is seeded. Staff & store are created by the owner during first-run setup.
+// Only a small demo set is seeded. Staff & store are created by the owner during first-run setup.
 const seedProfiles: Profile[] = [
-  { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
+  { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer", created_at: Date.now() - 6 * 86400000 },
+  { id: "u2", full_name: "John Mwakalinga", phone: "0754112233", password: "1234", wallet_balance: 8500, role: "customer", created_at: Date.now() - 4 * 86400000 },
+  { id: "u3", full_name: "Fatuma Said", phone: "0688776655", password: "1234", wallet_balance: 22000, role: "customer", created_at: Date.now() - 2 * 86400000 },
 ];
 
 const seedOrders: Order[] = [];
