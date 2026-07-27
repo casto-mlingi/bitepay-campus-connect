@@ -120,10 +120,11 @@ function SubscriptionBanner({ daysLeft, blocked, status }: { daysLeft: number; b
   return null;
 }
 
-function TopLink({ to, icon, label, active }: { to: string; icon: ReactNode; label: string; active?: boolean }) {
+function TopLink({ to, icon, label, active, badge }: { to: string; icon: ReactNode; label: string; active?: boolean; badge?: number }) {
   return (
-    <Link to={to} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+    <Link to={to} className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
       {icon}{label}
+      {badge && badge > 0 ? <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-amber-500 text-white">{badge}</span> : null}
     </Link>
   );
 }
