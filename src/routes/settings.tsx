@@ -18,9 +18,11 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { currentUser, store, can, updateStore } = useStore();
+  const { currentUser, store, can, updateStore, subscriptionDaysLeft, changePlan } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
+  const [showPlans, setShowPlans] = useState(false);
+
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
