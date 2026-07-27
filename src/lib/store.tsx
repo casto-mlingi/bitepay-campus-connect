@@ -893,9 +893,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
       if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
-        setProfiles((prev) => prev.map((p) => p.id === original.customer_id ? { ...p, wallet_balance: p.wallet_balance + (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0) } : p));
+        const refund = (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0);
+        setWallet(original.customer_id, currentStoreId!, refund);
         setTransactions((prev) => [{ id: uid("tr"), store_id: currentStoreId!, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
       }
+
       const cashPart = original.cash_paid ?? 0;
       if (cashPart > 0) {
         if (original.tender === "mobile") adjustBank((b) => b - cashPart);
