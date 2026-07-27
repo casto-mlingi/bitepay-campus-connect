@@ -862,12 +862,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!currentStoreId) return;
-      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setWallet(customerId, currentStoreId, amount);
       const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
       setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
     },
+
     posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
       return _executePosSale(customerId, items, cashPortion, tender, reference);
     },
