@@ -7,15 +7,17 @@ export type Profile = {
   full_name: string;
   phone: string;
   password: string;
-  wallet_balance: number;
+  wallet_balance: number; // legacy — for customers this reflects the ACTIVE canteen wallet
+  wallets?: Record<string, number>; // per-canteen balances (customers only)
   role: Role;
   staff_role?: StaffRole;
   staff_pin?: string;
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
-  store_id?: string; // tenant scope — staff always set; customer set at signup
+  store_id?: string; // home canteen (customer signup) / tenant (staff)
 };
+
 
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
 export type SubscriptionStatus = "active" | "suspended" | "expired";
