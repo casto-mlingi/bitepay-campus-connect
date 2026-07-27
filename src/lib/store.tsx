@@ -11,6 +11,49 @@ export type Profile = {
   role: Role;
   staff_role?: StaffRole;
   staff_pin?: string;
+  disabled?: boolean;
+  last_login?: number;
+  created_at?: number;
+};
+
+export type Store = {
+  name: string;
+  location: string;
+  contact_phone: string;
+  currency: string; // label only
+  low_balance_threshold: number;
+  enable_mobile_tender: boolean;
+  created_at: number;
+};
+
+export type Permission =
+  | "pos.sell"
+  | "pos.refund"
+  | "shift.manage"
+  | "customers.view"
+  | "customers.topup"
+  | "inventory.view"
+  | "inventory.edit"
+  | "finance.view"
+  | "finance.edit"
+  | "analytics.view"
+  | "team.view"
+  | "team.manage_cashier"
+  | "team.manage_all"
+  | "settings.manage";
+
+const PERMISSIONS: Record<StaffRole, Permission[]> = {
+  cashier: ["pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view"],
+  supervisor: [
+    "pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup",
+    "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view",
+    "team.view", "team.manage_cashier",
+  ],
+  owner: [
+    "pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup",
+    "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view",
+    "team.view", "team.manage_cashier", "team.manage_all", "settings.manage",
+  ],
 };
 
 export type TopUpRequestStatus = "pending" | "approved" | "rejected";
@@ -58,10 +101,10 @@ export type Order = {
   wallet_paid?: number;
   loyalty_earned?: number;
   tender?: "cash" | "mobile";
-  reference?: string;              // Mobile money confirmation / Lipa Namba code
+  reference?: string;
   reversed?: boolean;
-  reversal_of?: string;            // pointer to reversed order
-  is_reversal?: boolean;           // this order IS a credit-note
+  reversal_of?: string;
+  is_reversal?: boolean;
   cashier_id?: string;
   cashier_name?: string;
   shift_id?: string;
@@ -174,6 +217,12 @@ export type SmsLog = {
 };
 
 type SaleResult = { ok: true; order: Order } | { ok: false; reason: string };
+type Ok<T = undefined> = T extends undefined ? { ok: true } : { ok: true; value: T };
+type Fail = { ok: false; reason: string };
+
+export type AddStaffInput = {
+  full_name: string; phone: string; password: string; role: StaffRole; staff_pin: string;
+};
 
 type Ctx = {
   currentUser: Profile | null;
@@ -195,21 +244,30 @@ type Ctx = {
   smsLogs: SmsLog[];
   isOnline: boolean;
   LOW_BALANCE_THRESHOLD: number;
+  store: Store | null;
+  hasOwner: boolean;
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string) => Profile | null;
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
+  can: (perm: Permission) => boolean;
+  completeSetup: (input: { store: Omit<Store, "created_at">; owner: Omit<AddStaffInput, "role"> }) => Ok | Fail;
+  updateStore: (patch: Partial<Omit<Store, "created_at">>) => void;
+  addStaff: (input: AddStaffInput) => Ok | Fail;
+  updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
+  disableStaff: (id: string, disabled: boolean) => Ok | Fail;
+  resetStaffCredential: (id: string, kind: "password" | "pin", value: string) => Ok | Fail;
   addToCart: (p: Product) => void;
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
   placeOrder: (deliveryType: DeliveryType) => Order | null;
   advanceOrder: (id: string) => void;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
-  staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => { ok: true } | { ok: false; reason: string };
+  staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
   topUpRequests: TopUpRequest[];
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
   rejectTopUpRequest: (id: string, reason: string) => void;
-  setStaffPin: (currentPin: string | null, newPin: string) => { ok: true } | { ok: false; reason: string };
+  setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
@@ -222,7 +280,7 @@ type Ctx = {
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
-  availablePlates: (product_id: string) => number | null; // null = no batch tracking, unlimited
+  availablePlates: (product_id: string) => number | null;
   openShift: (opening_float: number) => Shift | null;
   closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at">) => void;
@@ -244,33 +302,13 @@ const seedProducts: Product[] = [
   { id: "p9", name: "Coffee", description: "Freshly brewed Tanzanian coffee", price: 1800, category: "Drinks", emoji: "☕", gradient: "from-amber-700 to-yellow-800" },
 ];
 
+// Only a single demo customer is seeded. Staff & store are created by the owner during first-run setup.
 const seedProfiles: Profile[] = [
   { id: "u1", full_name: "Amina Hassan", phone: "0712345678", password: "1234", wallet_balance: 15000, role: "customer" },
-  { id: "u2", full_name: "Neema Supervisor", phone: "0700000000", password: "staff", wallet_balance: 0, role: "staff", staff_role: "supervisor", staff_pin: "1234" },
-  { id: "u3", full_name: "Juma Cashier", phone: "0700111222", password: "cashier", wallet_balance: 0, role: "staff", staff_role: "cashier", staff_pin: "1234" },
-  { id: "u4", full_name: "Owner Admin", phone: "0700999888", password: "owner", wallet_balance: 0, role: "staff", staff_role: "owner", staff_pin: "1234" },
 ];
 
-const seedOrders: Order[] = [
-  {
-    id: "O-1042", customer_id: "u1", customer_name: "Amina Hassan",
-    items: [{ product_id: "p1", name: "Chicken Burger", price: 4500, qty: 1 }],
-    total_amount: 4500, status: "in-progress", delivery_type: "pickup", payment_status: "paid",
-    created_at: Date.now() - 1000 * 60 * 12,
-  },
-  {
-    id: "O-1041", customer_id: "u1", customer_name: "Amina Hassan",
-    items: [{ product_id: "p7", name: "Fresh Juice", price: 2000, qty: 2 }],
-    total_amount: 4000, status: "completed", delivery_type: "pickup", payment_status: "paid",
-    created_at: Date.now() - 1000 * 60 * 60 * 22,
-  },
-];
-
-const seedTx: Transaction[] = [
-  { id: "t1", customer_id: "u1", type: "topup", amount: 20000, description: "Cash top-up at counter", created_at: Date.now() - 1000 * 60 * 60 * 48 },
-  { id: "t2", customer_id: "u1", order_id: "O-1041", type: "deduction", amount: 4000, description: "Order O-1041", created_at: Date.now() - 1000 * 60 * 60 * 22 },
-  { id: "t3", customer_id: "u1", order_id: "O-1042", type: "deduction", amount: 4500, description: "Order O-1042", created_at: Date.now() - 1000 * 60 * 12 },
-];
+const seedOrders: Order[] = [];
+const seedTx: Transaction[] = [];
 
 let counter = 1043;
 const nextOrderId = () => `O-${counter++}`;
@@ -281,7 +319,6 @@ const todayKey = () => {
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
 const LOYALTY_RATE = 0.01;
-const LOW_BALANCE_THRESHOLD = 3000;
 
 const roleRank: Record<StaffRole, number> = { cashier: 1, supervisor: 2, owner: 3 };
 
@@ -306,14 +343,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [wastage, setWastage] = useState<WastageLog[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [cash, setCash] = useState<number>(500000);
-  const [bank, setBank] = useState<number>(1500000);
+  const [cash, setCash] = useState<number>(0);
+  const [bank, setBank] = useState<number>(0);
   const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
+  const [store, setStore] = useState<Store | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
@@ -339,11 +377,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? null;
   const activeShift = shifts.find((s) => s.id === activeShiftId && !s.closed_at) ?? null;
+  const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
+  const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
 
   const hasStaffRole = useCallback((min: StaffRole) => {
     if (!currentUser || currentUser.role !== "staff") return false;
     const rank = roleRank[currentUser.staff_role ?? "cashier"];
     return rank >= roleRank[min];
+  }, [currentUser]);
+
+  const can = useCallback((perm: Permission) => {
+    if (!currentUser || currentUser.role !== "staff") return false;
+    const role = currentUser.staff_role ?? "cashier";
+    return PERMISSIONS[role].includes(perm);
   }, [currentUser]);
 
   const pushNudgeIfLow = useCallback((customer: Profile) => {
@@ -353,7 +399,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       message: `Hi ${customer.full_name.split(" ")[0]}, your BitePay wallet is low (TZS ${customer.wallet_balance.toLocaleString()}). Top up via Lipa Namba to keep ordering.`,
       kind: "nudge", created_at: Date.now(),
     }, ...prev]);
-  }, []);
+  }, [LOW_BALANCE_THRESHOLD]);
 
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -413,7 +459,79 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Ctx = useMemo(() => ({
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
-    topUpRequests,
+    topUpRequests, store, hasOwner,
+    can, hasStaffRole,
+    completeSetup({ store: s, owner }) {
+      if (hasOwner) return { ok: false, reason: "Store is already set up" };
+      if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
+      if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
+      if (!/^\d{4,6}$/.test(owner.staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
+      if (profiles.some((p) => p.phone === owner.phone.trim())) return { ok: false, reason: "That phone is already in use" };
+      const ownerProfile: Profile = {
+        id: `u${Date.now()}`, full_name: owner.full_name.trim(), phone: owner.phone.trim(),
+        password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
+        staff_pin: owner.staff_pin, created_at: Date.now(),
+      };
+      setProfiles((prev) => [...prev, ownerProfile]);
+      setStore({ ...s, name: s.name.trim(), created_at: Date.now() });
+      setCurrentUserId(ownerProfile.id);
+      return { ok: true };
+    },
+    updateStore(patch) {
+      setStore((prev) => prev ? { ...prev, ...patch, name: (patch.name ?? prev.name).trim() || prev.name } : prev);
+    },
+    addStaff({ full_name, phone, password, role, staff_pin }) {
+      if (!can("team.view")) return { ok: false, reason: "Not allowed" };
+      if (role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can add supervisors or owners" };
+      if (!full_name.trim() || !phone.trim() || !password) return { ok: false, reason: "All fields are required" };
+      if (!/^\d{4,6}$/.test(staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
+      if (profiles.some((p) => p.phone === phone.trim())) return { ok: false, reason: "Phone already in use" };
+      const p: Profile = {
+        id: `u${Date.now()}`, full_name: full_name.trim(), phone: phone.trim(), password,
+        wallet_balance: 0, role: "staff", staff_role: role, staff_pin, created_at: Date.now(),
+      };
+      setProfiles((prev) => [...prev, p]);
+      return { ok: true };
+    },
+    updateStaff(id, patch) {
+      if (!can("team.view")) return { ok: false, reason: "Not allowed" };
+      const target = profiles.find((p) => p.id === id);
+      if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
+      if (patch.staff_role && patch.staff_role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
+      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
+      if (patch.phone && profiles.some((p) => p.phone === patch.phone!.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
+      setProfiles((prev) => prev.map((p) => p.id === id ? {
+        ...p,
+        full_name: patch.full_name?.trim() || p.full_name,
+        phone: patch.phone?.trim() || p.phone,
+        staff_role: patch.staff_role ?? p.staff_role,
+      } : p));
+      return { ok: true };
+    },
+    disableStaff(id, disabled) {
+      if (!can("team.view")) return { ok: false, reason: "Not allowed" };
+      const target = profiles.find((p) => p.id === id);
+      if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
+      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
+      if (target.id === currentUser?.id) return { ok: false, reason: "You cannot disable yourself" };
+      if (disabled && target.staff_role === "owner") {
+        const activeOwners = profiles.filter((p) => p.staff_role === "owner" && !p.disabled && p.id !== id).length;
+        if (activeOwners === 0) return { ok: false, reason: "At least one active owner is required" };
+      }
+      setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, disabled } : p));
+      return { ok: true };
+    },
+    resetStaffCredential(id, kind, value) {
+      const target = profiles.find((p) => p.id === id);
+      if (!target) return { ok: false, reason: "User not found" };
+      const isSelf = currentUser?.id === id;
+      if (!isSelf && !can("team.view")) return { ok: false, reason: "Not allowed" };
+      if (!isSelf && target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can reset an owner's credentials" };
+      if (kind === "pin" && !/^\d{4,6}$/.test(value)) return { ok: false, reason: "PIN must be 4–6 digits" };
+      if (kind === "password" && value.length < 4) return { ok: false, reason: "Password must be at least 4 characters" };
+      setProfiles((prev) => prev.map((p) => p.id === id ? (kind === "pin" ? { ...p, staff_pin: value } : { ...p, password: value }) : p));
+      return { ok: true };
+    },
     submitTopUpRequest({ amount, reference, note }) {
       if (!currentUser || currentUser.role !== "customer") return null;
       if (amount <= 0 || !reference.trim()) return null;
@@ -437,6 +555,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     staffTopUp({ customerId, amount, tender, reference, pin, requestId }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not signed in as staff" };
+      if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
       if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
       if (amount <= 0) return { ok: false, reason: "Enter an amount" };
@@ -455,18 +574,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
-      if (u) setCurrentUserId(u.id);
-      return u ?? null;
+      if (!u) return null;
+      if (u.disabled) return null;
+      setCurrentUserId(u.id);
+      setProfiles((prev) => prev.map((p) => p.id === u.id ? { ...p, last_login: Date.now() } : p));
+      return u;
     },
     signup(name, phone, password) {
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone, password, wallet_balance: 0, role: "customer" };
+      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone, password, wallet_balance: 0, role: "customer", created_at: Date.now() };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
       return u;
     },
     logout() { setCurrentUserId(null); setCart([]); },
-    hasStaffRole,
     addToCart(p) {
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);
@@ -531,12 +652,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         is_reversal: true, reversal_of: original.id,
       };
       setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
-      // Refund wallet
       if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
         setProfiles((prev) => prev.map((p) => p.id === original.customer_id ? { ...p, wallet_balance: p.wallet_balance + (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0) } : p));
         setTransactions((prev) => [{ id: `tr${Date.now()}`, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
       }
-      // Refund cash/bank
       const cashPart = original.cash_paid ?? 0;
       if (cashPart > 0) {
         if (original.tender === "mobile") setBank((b) => b - cashPart);
@@ -554,7 +673,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const ph = phone.trim();
       if (!name || !ph) return null;
       if (profiles.some((p) => p.phone === ph)) return null;
-      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer" };
+      const u: Profile = { id: `u${Date.now()}`, full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer", created_at: Date.now() };
       setProfiles((prev) => [...prev, u]);
       if (initial_balance > 0) {
         setTransactions((prev) => [{ id: `t${Date.now()}`, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
@@ -628,7 +747,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     availablePlates(product_id) {
       const rel = batches.filter((b) => b.product_id === product_id);
-      if (rel.length === 0) return null; // untracked → unlimited
+      if (rel.length === 0) return null;
       return rel.reduce((s, b) => s + b.plates_remaining, 0);
     },
     openShift(opening_float) {
@@ -691,7 +810,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, topUpRequests, isOnline, hasStaffRole, _executePosSale, _executeCashSale, pushNudgeIfLow]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

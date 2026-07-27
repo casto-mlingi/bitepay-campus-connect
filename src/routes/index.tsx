@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChefHat, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
 });
 
 function AuthPage() {
-  const { login, signup } = useStore();
+  const { login, signup, hasOwner } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
@@ -21,12 +21,16 @@ function AuthPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!hasOwner) navigate({ to: "/setup" });
+  }, [hasOwner, navigate]);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (mode === "login") {
       const u = login(phone, password);
-      if (!u) return setError("Invalid phone or password");
+      if (!u) return setError("Invalid phone or password (or account disabled)");
       navigate({ to: u.role === "staff" ? "/staff" : "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
@@ -36,11 +40,7 @@ function AuthPage() {
     }
   };
 
-  const quickFill = (role: "customer" | "staff") => {
-    if (role === "customer") { setPhone("0712345678"); setPassword("1234"); }
-    else { setPhone("0700000000"); setPassword("staff"); }
-    setMode("login");
-  };
+  const quickFillCustomer = () => { setPhone("0712345678"); setPassword("1234"); setMode("login"); };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -105,8 +105,8 @@ function AuthPage() {
           <div className="mt-6 pt-5 border-t">
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2.5 text-center">Try demo accounts</p>
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => quickFill("customer")}>Customer</Button>
-              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => quickFill("staff")}>Staff</Button>
+              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={quickFillCustomer}>Customer demo</Button>
+              <Button variant="outline" size="sm" className="rounded-xl h-10" onClick={() => navigate({ to: "/setup" })}>Store setup</Button>
             </div>
           </div>
         </div>

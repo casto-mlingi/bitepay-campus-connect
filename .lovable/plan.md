@@ -1,24 +1,61 @@
+# Owner Onboarding & Staff Management
 
-Big-scope client-side upgrade (all state stays in `src/lib/store.tsx` — no backend). Everything is one coordinated batch.
+Right now the app ships with pre-seeded demo staff (`u2`–`u4`). You want a real first-run flow: the **store owner** creates their account, sets up the store, and then invites staff members with specific roles. Role gates already partially exist (cashier / supervisor / owner) — this pass makes them meaningful end-to-end.
 
-## Store additions (`src/lib/store.tsx`)
-- Types: `StaffRole = "cashier"|"supervisor"|"owner"`; `Profile.staff_role?`; `Order.reference? / reversed? / reversal_of? / cashier_id? / shift_id?`; `Transaction.reference?`; `Shift`, `PendingSale`, `SmsLog`.
-- New state: `shifts`, `activeShiftId`, `pendingSales`, `smsLogs`, `LOW_BALANCE_THRESHOLD`.
-- New actions: `openShift(float)`, `closeShift(counted_cash, counted_mobile, notes)`, `reverseSale(orderId, reason)`, `enqueueSale(payload)`, `syncOutbox()`, `sendReceiptMessage(order, channel)`, `availablePlates(productId)`, `hasStaffRole(min)`.
-- Every `posSale` / `posCashSale` / `topUp` now: accepts `reference?`, stamps `cashier_id` + `shift_id`, and low-balance nudge appended to smsLogs if wallet < threshold.
+## 1. First-run owner setup
 
-## Routes / components
-- **`src/routes/shift.tsx` (new)** — open shift form, live Z-report per tender (cash/mobile/wallet), counted-cash + counted-mobile inputs with variance flag, close-shift button. Nav entry in staff-shell.
-- **`src/components/staff-shell.tsx`** — add Shift nav item, show staff role badge + active-shift indicator, gate nav items behind role (cashier hides Finance/Analytics/Inventory create actions still visible but forms gated).
-- **`src/routes/pos.tsx`** — add: reference field when tender=mobile (for both cash sale + split); refund button on Last Receipt panel that calls `reverseSale`; grey out products with 0 plates via `availablePlates`; guard sale if no active shift → toast + link to /shift; offline banner + auto-enqueue when `!navigator.onLine` with Sync button; "Send receipt SMS/WhatsApp" buttons on Last Receipt.
-- **`src/routes/menu.tsx`** — hide products whose backing batches have 0 remaining (only when at least one batch exists for that product).
-- **`src/routes/dashboard.tsx`** — add "My QR" card (QRCodeSVG with student id) + low-balance nudge banner when balance < threshold.
-- **`src/routes/finance.tsx`** — add "Journal" tab: daily settlement entries per day (Sales credit, Cash/Bank debit, Wallet Liability entries, COGS→Inventory, Mobile Settlement T+1); breakdown of revenue by tender. Gate purchase/expense forms to supervisor+ (read-only otherwise).
+- On app boot, if there is no `owner` profile in the store, `/` redirects to a new **`/setup`** route (a 2-step wizard):
+  1. **Store details** — store name, location, contact phone, currency label (default TZS), low-balance threshold.
+  2. **Owner account** — full name, phone, password, staff PIN (4-digit).
+- Submitting creates the owner profile (`role: staff`, `staff_role: owner`) and a `store` record in the store, then auto-signs the owner in and routes to `/staff`.
+- Existing demo seed profiles are removed. The login screen "demo" quick-fill is replaced by a "First time? **Set up your store**" link.
 
-## Notes
-- Mobile provider simplified to a single "Mobile Money (Lipa Namba)" tender with a reference/confirmation code captured per sale/top-up, as user asked.
-- Offline outbox is real: uses `navigator.onLine`; queued payloads replay via `syncOutbox()` when back online.
-- Reversal creates a mirrored `reversal_of` order with negative amounts, refunds wallet, and reverses cash/bank movements.
-- Roles seeded: existing `u2` becomes supervisor; add `u3` cashier + `u4` owner demo accounts on the login screen quick-fill.
+## 2. Staff management (owner + supervisor)
 
-Deferred (out of scope for this pass): real SMS/WhatsApp provider integration — the button logs a mock delivery entry in `smsLogs` and toasts. Wiring to Twilio/GatewayAPI is a separate task requiring the user to pick a provider + secrets.
+- New route **`/team`** (nav item "Team", visible to supervisor+; only owner can create/delete owners).
+- Lists all staff with: name, phone, role badge, status (active/disabled), last sign-in.
+- Actions:
+  - **Add member** modal — name, phone, temp password, role (cashier / supervisor / owner), staff PIN.
+  - **Edit role** — change role or disable account (owner-only for owner-role edits).
+  - **Reset PIN / password** — owner or the member themselves.
+  - **Remove** — soft-disable (can't sign in), owner-only.
+- Cashiers cannot see /team.
+
+## 3. Role-gated features (single source of truth)
+
+Centralize permissions in `store.tsx` as a `PERMISSIONS` map keyed by role, and expose `can(perm)` on the store. Nav items and page bodies use `can(...)` instead of ad-hoc `hasStaffRole`.
+
+| Feature                          | Cashier | Supervisor | Owner |
+|----------------------------------|:-------:|:----------:|:-----:|
+| POS sales / refunds              |    ✓    |     ✓      |   ✓   |
+| Shift open/close                 |    ✓    |     ✓      |   ✓   |
+| Customers list & top-up request approval |    ✓    |     ✓      |   ✓   |
+| Inventory read                   |    ✓    |     ✓      |   ✓   |
+| Inventory edits / batches / wastage |         |     ✓      |   ✓   |
+| Finance dashboard & journal      |         |     ✓      |   ✓   |
+| Purchases / expenses / transfers |         |     ✓      |   ✓   |
+| Analytics                        |         |     ✓      |   ✓   |
+| Team management                  |         |    ✓ (view / add cashier) |   ✓ (full)   |
+| Store settings                   |         |            |   ✓   |
+| Delete owner / change store name |         |            |   ✓   |
+
+Pages hit by unauthorized users show a friendly "You don't have access to this area — ask your store manager" card instead of blanking.
+
+## 4. Store settings (owner only)
+
+Small **`/settings`** route (nav item, owner only) to edit the store details captured at setup, plus toggle features (e.g. enable/disable mobile-money tender). Values live in the same `store` object added in step 1.
+
+## 5. Small polish
+
+- Staff shell header shows the store name next to the BitePay logo.
+- Signup on `/` stays **customer-only** (the current customer signup); staff accounts can only be created by an owner/supervisor from `/team`, never via public signup.
+- All new routes get proper `head()` meta.
+
+## Technical notes
+
+- All state stays in `src/lib/store.tsx` (localStorage-backed) — no backend changes.
+- New types: `Store`, `PERMISSIONS: Record<StaffRole, Permission[]>`, `Permission` union.
+- New store fields: `store: Store | null`, `hasOwner: boolean` (derived).
+- New actions: `completeSetup(store, ownerInput)`, `addStaff(input)`, `updateStaff(id, patch)`, `disableStaff(id)`, `resetStaffCredential(id, kind, value)`, `updateStore(patch)`, `can(perm)`.
+- Files touched: `src/lib/store.tsx`, `src/routes/index.tsx`, `src/routes/__root.tsx` (redirect guard), `src/components/staff-shell.tsx`. New files: `src/routes/setup.tsx`, `src/routes/team.tsx`, `src/routes/settings.tsx`, `src/components/access-denied.tsx`.
+- Existing demo quick-fill buttons and seeded staff profiles are removed; a single demo customer stays for convenience.
