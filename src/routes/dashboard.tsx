@@ -12,20 +12,36 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function Dashboard() {
-  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD } = useStore();
+  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification } = useStore();
   const navigate = useNavigate();
   const [showId, setShowId] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
+  const [popup, setPopup] = useState<null | { title: string; body: string; kind: string }>(null);
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
     else if (currentUser.role === "staff") navigate({ to: "/staff" });
   }, [currentUser, navigate]);
 
+  // Auto-popup the newest unread notification on login/mount
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "customer") return;
+    const unread = notifications.filter((n) => n.user_id === currentUser.id && !n.read);
+    if (unread.length > 0) {
+      const latest = unread[0];
+      setPopup({ title: latest.title, body: latest.body, kind: latest.kind });
+    }
+    // Only run once on mount per user
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
   if (!currentUser || currentUser.role !== "customer") return null;
 
   const myOrders = orders.filter((o) => o.customer_id === currentUser.id).slice(0, 4);
   const featured = products.slice(0, 6);
   const isLow = currentUser.wallet_balance < LOW_BALANCE_THRESHOLD;
+  const myNotifs = notifications.filter((n) => n.user_id === currentUser.id);
+  const unreadCount = unreadNotifications(currentUser.id).length;
 
   return (
     <CustomerShell active="home">
@@ -38,11 +54,21 @@ function Dashboard() {
           <button onClick={() => setShowId(true)} aria-label="My QR ID" className="w-10 h-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-md shadow-orange-500/30">
             <QrCode className="w-4 h-4" />
           </button>
-          <button aria-label="Notifications" className="w-10 h-10 rounded-full bg-surface border grid place-items-center">
+          <button
+            onClick={() => { setShowNotif(true); markNotificationsRead(currentUser.id); }}
+            aria-label="Notifications"
+            className="relative w-10 h-10 rounded-full bg-surface border grid place-items-center"
+          >
             <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold grid place-items-center">
+                {unreadCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
+
 
       {isLow && (
         <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 flex items-center gap-3">
