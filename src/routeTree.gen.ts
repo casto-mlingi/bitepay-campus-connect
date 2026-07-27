@@ -28,6 +28,7 @@ import { Route as CartRouteImport } from './routes/cart'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicHealthDbRouteImport } from './routes/api/public/health/db'
 
 const TopupRoute = TopupRouteImport.update({
   id: '/topup',
@@ -124,6 +125,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHealthDbRoute = ApiPublicHealthDbRouteImport.update({
+  id: '/api/public/health/db',
+  path: '/api/public/health/db',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/api/public/health/db': typeof ApiPublicHealthDbRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/api/public/health/db': typeof ApiPublicHealthDbRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/api/public/health/db': typeof ApiPublicHealthDbRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/team'
     | '/topup'
+    | '/api/public/health/db'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/team'
     | '/topup'
+    | '/api/public/health/db'
   id:
     | '__root__'
     | '/'
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/team'
     | '/topup'
+    | '/api/public/health/db'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -275,6 +287,7 @@ export interface RootRouteChildren {
   SupportRoute: typeof SupportRoute
   TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
+  ApiPublicHealthDbRoute: typeof ApiPublicHealthDbRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -412,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/health/db': {
+      id: '/api/public/health/db'
+      path: '/api/public/health/db'
+      fullPath: '/api/public/health/db'
+      preLoaderRoute: typeof ApiPublicHealthDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -435,17 +455,8 @@ const rootRouteChildren: RootRouteChildren = {
   SupportRoute: SupportRoute,
   TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
+  ApiPublicHealthDbRoute: ApiPublicHealthDbRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
