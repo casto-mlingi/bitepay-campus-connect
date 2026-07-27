@@ -114,7 +114,7 @@ function SetupWizard() {
               </div>
               <p className="text-xs text-muted-foreground flex items-start gap-1.5 -mt-1">
                 <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                <span><strong>Low-balance nudge</strong> is the wallet balance at which BitePay auto-sends a reminder to top up. If a customer's wallet drops below this amount after a purchase, they'll get an SMS/WhatsApp nudge so they don't get stuck at checkout next time.</span>
+                <span><strong>Low-balance nudge</strong> is the wallet balance at which BitePay sends the customer an in-app push notification. When their balance drops below this amount after a purchase, they'll see a pop-up reminder next time they open the app so they can top up before their next order.</span>
               </p>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>

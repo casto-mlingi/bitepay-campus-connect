@@ -216,6 +216,16 @@ export type SmsLog = {
   created_at: number;
 };
 
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  kind: "low_balance" | "topup" | "order" | "info";
+  created_at: number;
+  read: boolean;
+};
+
 type SaleResult = { ok: true; order: Order } | { ok: false; reason: string };
 type Ok<T = undefined> = T extends undefined ? { ok: true } : { ok: true; value: T };
 type Fail = { ok: false; reason: string };
@@ -242,6 +252,10 @@ type Ctx = {
   activeShift: Shift | null;
   pendingSales: PendingSale[];
   smsLogs: SmsLog[];
+  notifications: AppNotification[];
+  unreadNotifications: (userId: string) => AppNotification[];
+  markNotificationsRead: (userId: string) => void;
+  dismissNotification: (id: string) => void;
   isOnline: boolean;
   LOW_BALANCE_THRESHOLD: number;
   store: Store | null;
@@ -350,6 +364,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [store, setStore] = useState<Store | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -392,13 +407,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return PERMISSIONS[role].includes(perm);
   }, [currentUser]);
 
+  const pushNotification = useCallback((n: Omit<AppNotification, "id" | "created_at" | "read">) => {
+    setNotifications((prev) => [{ ...n, id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`, created_at: Date.now(), read: false }, ...prev]);
+  }, []);
+
   const pushNudgeIfLow = useCallback((customer: Profile) => {
     if (customer.wallet_balance >= LOW_BALANCE_THRESHOLD) return;
-    setSmsLogs((prev) => [{
-      id: `sms${Date.now()}`, channel: "sms", to_phone: customer.phone, to_name: customer.full_name,
-      message: `Hi ${customer.full_name.split(" ")[0]}, your BitePay wallet is low (TZS ${customer.wallet_balance.toLocaleString()}). Top up via Lipa Namba to keep ordering.`,
-      kind: "nudge", created_at: Date.now(),
-    }, ...prev]);
+    // Suppress duplicates: skip if an unread low_balance notification already exists for this user
+    setNotifications((prev) => {
+      if (prev.some((n) => n.user_id === customer.id && n.kind === "low_balance" && !n.read)) return prev;
+      return [{
+        id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        user_id: customer.id,
+        title: "Wallet running low",
+        body: `Your balance is TZS ${customer.wallet_balance.toLocaleString()}. Top up now so you don't get stuck at checkout.`,
+        kind: "low_balance",
+        created_at: Date.now(),
+        read: false,
+      }, ...prev];
+    });
   }, [LOW_BALANCE_THRESHOLD]);
 
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
@@ -460,6 +487,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
     topUpRequests, store, hasOwner,
+    notifications,
+    unreadNotifications: (userId) => notifications.filter((n) => n.user_id === userId && !n.read),
+    markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
+    dismissNotification(id) { setNotifications((prev) => prev.filter((n) => n.id !== id)); },
     can, hasStaffRole,
     completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0 }) {
       if (hasOwner) return { ok: false, reason: "Store is already set up" };
@@ -573,6 +604,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (requestId) {
         setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
       }
+      pushNotification({
+        user_id: customerId,
+        title: "Wallet topped up",
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance: TZS ${(cust.wallet_balance + amount).toLocaleString()}.`,
+        kind: "topup",
+      });
       return { ok: true };
     },
     login(phone, password) {
@@ -813,7 +850,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow]);
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
