@@ -48,11 +48,14 @@ function LoginPage() {
       navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
-      const u = signup(name, phone, password);
+      const targetStore = stores.length === 1 ? stores[0].id : signupStoreId;
+      if (!targetStore) return setError("Choose which store to sign up for");
+      const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
       navigate({ to: "/dashboard" });
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
