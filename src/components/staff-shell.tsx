@@ -95,9 +95,28 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
         </div>
       </header>
+      <SubscriptionBanner daysLeft={subscriptionDaysLeft()} blocked={isSubscriptionBlocked()} status={store?.subscription.status} />
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6">{children}</main>
     </div>
   );
+}
+
+function SubscriptionBanner({ daysLeft, blocked, status }: { daysLeft: number; blocked: boolean; status?: string }) {
+  if (blocked) {
+    return (
+      <div className="bg-red-600 text-white px-4 py-3 text-sm text-center font-semibold">
+        {status === "suspended" ? "Your BitePay account is suspended." : "Your BitePay subscription has expired."} Contact <Link to="/support" className="underline">support</Link> to reactivate.
+      </div>
+    );
+  }
+  if (daysLeft > 0 && daysLeft <= 7) {
+    return (
+      <div className="bg-amber-100 text-amber-800 px-4 py-2 text-xs text-center font-semibold">
+        Subscription expires in {daysLeft} day{daysLeft === 1 ? "" : "s"}. <Link to="/support" className="underline">Renew now</Link>.
+      </div>
+    );
+  }
+  return null;
 }
 
 function TopLink({ to, icon, label, active }: { to: string; icon: ReactNode; label: string; active?: boolean }) {
