@@ -906,7 +906,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSmsLogs((prev) => [log, ...prev]);
       return log;
     },
-  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification]);
+    tickets,
+    submitTicket({ subject, message, category, priority }) {
+      if (!currentUser || currentUser.role !== "staff") return null;
+      if (!subject.trim() || !message.trim()) return null;
+      const now = Date.now();
+      const t: Ticket = {
+        id: `TK-${now}`, subject: subject.trim(), message: message.trim(), category, priority,
+        status: "open", created_by_id: currentUser.id, created_by_name: currentUser.full_name,
+        created_at: now, updated_at: now, replies: [],
+      };
+      setTickets((prev) => [t, ...prev]);
+      return t;
+    },
+    replyToTicket(ticketId, body) {
+      if (!body.trim()) return { ok: false, reason: "Reply cannot be empty" };
+      const from: "store" | "admin" = superAdminSignedIn ? "admin" : "store";
+      const author_name = superAdminSignedIn ? superAdmin.full_name : (currentUser?.full_name ?? "Unknown");
+      const now = Date.now();
+      setTickets((prev) => prev.map((t) => t.id === ticketId ? {
+        ...t, updated_at: now,
+        status: t.status === "open" ? "in_progress" : t.status,
+        replies: [...t.replies, { id: `rep${now}`, from, author_name, body: body.trim(), created_at: now }],
+      } : t));
+      return { ok: true };
+    },
+    updateTicketStatus(ticketId, status) {
+      setTickets((prev) => prev.map((t) => t.id === ticketId ? { ...t, status, updated_at: Date.now() } : t));
+    },
+    superAdmin,
+    isAdminSignedIn: superAdminSignedIn,
+    adminLogin(username, password) {
+      if (username.trim().toLowerCase() === superAdmin.username && password === superAdmin.password) {
+        setSuperAdminSignedIn(true);
+        setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
+        return true;
+      }
+      return false;
+    },
+    adminLogout() { setSuperAdminSignedIn(false); },
+    addSubscriptionDays(days) {
+      if (!store || days === 0) return;
+      const nowMs = Date.now();
+      const base = Math.max(store.subscription.expires_at, nowMs);
+      const newExpiry = base + days * 86400000;
+      const newStatus: SubscriptionStatus = newExpiry > nowMs ? "active" : "expired";
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, expires_at: newExpiry, status: newStatus } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "extend_subscription", detail: `${days > 0 ? "+" : ""}${days} days`, created_at: Date.now() }, ...prev]);
+    },
+    changePlan(plan) {
+      if (!store) return;
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
+    },
+    setSubscriptionStatus(status) {
+      if (!store) return;
+      setStore((prev) => prev ? { ...prev, subscription: { ...prev.subscription, status } } : prev);
+      setAdminAuditLog((prev) => [{ id: `au${Date.now()}`, action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
+    },
+    adminAuditLog,
+    subscriptionDaysLeft() {
+      if (!store) return 0;
+      return Math.max(0, Math.ceil((store.subscription.expires_at - Date.now()) / 86400000));
+    },
+    isSubscriptionBlocked() {
+      if (!store) return false;
+      const s = store.subscription;
+      if (s.status === "suspended") return true;
+      if (s.expires_at < Date.now()) return true;
+      return false;
+    },
+  }), [currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage, purchases, expenses, cash, bank, receiptSeq, shifts, activeShift, pendingSales, smsLogs, notifications, topUpRequests, isOnline, store, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, superAdminSignedIn, adminAuditLog]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
