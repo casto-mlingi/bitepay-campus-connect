@@ -197,7 +197,67 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {popup && (
+        <div className="fixed inset-0 z-[60] bg-black/60 grid place-items-center p-4 animate-in fade-in" onClick={() => setPopup(null)}>
+          <div className="bg-background rounded-3xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className={`w-11 h-11 rounded-2xl grid place-items-center shrink-0 ${popup.kind === "low_balance" ? "bg-amber-100 text-amber-700" : popup.kind === "topup" ? "bg-emerald-100 text-emerald-700" : "bg-primary/10 text-primary"}`}>
+                {popup.kind === "low_balance" ? <AlertTriangle className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold">{popup.title}</div>
+                <div className="text-sm text-muted-foreground mt-1">{popup.body}</div>
+              </div>
+              <button onClick={() => setPopup(null)} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="mt-5 flex gap-2">
+              {popup.kind === "low_balance" ? (
+                <Link to="/topup" onClick={() => setPopup(null)} className="flex-1 inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground font-semibold px-4 py-2.5 rounded-xl">
+                  Top up now <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <button onClick={() => setPopup(null)} className="flex-1 bg-primary text-primary-foreground font-semibold px-4 py-2.5 rounded-xl">Got it</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNotif && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center sm:justify-center" onClick={() => setShowNotif(false)}>
+          <div className="bg-background rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-bold text-lg">Notifications</div>
+              <button onClick={() => setShowNotif(false)} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            {myNotifs.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Bell className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <div className="text-sm">You're all caught up</div>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {myNotifs.map((n) => (
+                  <li key={n.id} className="rounded-2xl border p-3 flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${n.kind === "low_balance" ? "bg-amber-100 text-amber-700" : n.kind === "topup" ? "bg-emerald-100 text-emerald-700" : "bg-primary/10 text-primary"}`}>
+                      {n.kind === "low_balance" ? <AlertTriangle className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm">{n.title}</div>
+                      <div className="text-xs text-muted-foreground">{n.body}</div>
+                      <div className="text-[10px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString()}</div>
+                    </div>
+                    <button onClick={() => dismissNotification(n.id)} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </CustomerShell>
+
   );
 }
 
