@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff, Wallet, Info } from "lucide-react";
+import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff, Wallet, Info, Loader2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useServerFn } from "@tanstack/react-start";
+import { registerOwnerAndStore } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
@@ -16,10 +18,12 @@ export const Route = createFileRoute("/setup")({
 
 function SetupWizard() {
   const { hasOwner, completeSetup } = useStore();
+  const registerFn = useServerFn(registerOwnerAndStore);
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [storeName, setStoreName] = useState("");
   const [location, setLocation] = useState("");
@@ -53,16 +57,30 @@ function SetupWizard() {
     setStep(3);
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
       opening_bank: openingBank,
     });
-    if (!res.ok) return setError(res.reason);
+    if (!res.ok) { setSubmitting(false); return setError(res.reason); }
+    // Persist to Postgres as well; the local store already navigated the UX.
+    try {
+      await registerFn({ data: {
+        store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold },
+        owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
+        opening_cash: openingCash,
+        opening_bank: openingBank,
+      }});
+    } catch (err) {
+      // DB write failed — surface it but don't block the local UX.
+      console.warn("[setup] DB registration failed:", err);
+    }
+    setSubmitting(false);
     navigate({ to: "/staff" });
   };
 
@@ -170,8 +188,10 @@ function SetupWizard() {
               </FormRow>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(2)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
-                <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Create store <CheckCircle2 className="ml-2 w-4 h-4" /></Button>
+                <Button type="button" variant="outline" onClick={() => setStep(2)} className="h-12 rounded-xl" disabled={submitting}><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="submit" disabled={submitting} className="flex-1 h-12 rounded-xl text-base font-semibold">
+                  {submitting ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating…</>) : (<>Create store <CheckCircle2 className="ml-2 w-4 h-4" /></>)}
+                </Button>
               </div>
             </form>
           )}
