@@ -334,6 +334,22 @@ type Ctx = {
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at">) => void;
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
+
+  // Subscription & SaaS admin
+  tickets: Ticket[];
+  submitTicket: (input: { subject: string; message: string; category: Ticket["category"]; priority: TicketPriority }) => Ticket | null;
+  replyToTicket: (ticketId: string, body: string) => Ok | Fail;
+  updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
+  superAdmin: SuperAdmin | null;
+  isAdminSignedIn: boolean;
+  adminLogin: (username: string, password: string) => boolean;
+  adminLogout: () => void;
+  addSubscriptionDays: (days: number) => void;
+  changePlan: (plan: SubscriptionPlan) => void;
+  setSubscriptionStatus: (status: SubscriptionStatus) => void;
+  adminAuditLog: AdminAuditLog[];
+  subscriptionDaysLeft: () => number;
+  isSubscriptionBlocked: () => boolean;
 };
 
 const StoreContext = createContext<Ctx | null>(null);
