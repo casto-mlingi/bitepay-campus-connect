@@ -18,6 +18,7 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as FinanceRouteImport } from './routes/finance'
@@ -71,6 +72,11 @@ const PosRoute = PosRouteImport.update({
 const MenuRoute = MenuRouteImport.update({
   id: '/menu',
   path: '/menu',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InventoryRoute = InventoryRouteImport.update({
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/finance': typeof FinanceRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/finance'
     | '/history'
     | '/inventory'
+    | '/login'
     | '/menu'
     | '/pos'
     | '/settings'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/finance'
     | '/history'
     | '/inventory'
+    | '/login'
     | '/menu'
     | '/pos'
     | '/settings'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/finance'
     | '/history'
     | '/inventory'
+    | '/login'
     | '/menu'
     | '/pos'
     | '/settings'
@@ -253,6 +265,7 @@ export interface RootRouteChildren {
   FinanceRoute: typeof FinanceRoute
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
+  LoginRoute: typeof LoginRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
   SettingsRoute: typeof SettingsRoute
@@ -327,6 +340,13 @@ declare module '@tanstack/react-router' {
       path: '/menu'
       fullPath: '/menu'
       preLoaderRoute: typeof MenuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inventory': {
@@ -405,6 +425,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceRoute: FinanceRoute,
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
+  LoginRoute: LoginRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
   SettingsRoute: SettingsRoute,
@@ -418,3 +439,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
