@@ -487,6 +487,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     currentUser, profiles, products, orders, transactions, cart, rawMaterials, batches, wastage,
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
     topUpRequests, store, hasOwner,
+    notifications,
+    unreadNotifications: (userId) => notifications.filter((n) => n.user_id === userId && !n.read),
+    markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
+    dismissNotification(id) { setNotifications((prev) => prev.filter((n) => n.id !== id)); },
     can, hasStaffRole,
     completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0 }) {
       if (hasOwner) return { ok: false, reason: "Store is already set up" };
