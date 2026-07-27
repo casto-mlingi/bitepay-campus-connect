@@ -251,7 +251,7 @@ type Ctx = {
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
   can: (perm: Permission) => boolean;
-  completeSetup: (input: { store: Omit<Store, "created_at">; owner: Omit<AddStaffInput, "role"> }) => Ok | Fail;
+  completeSetup: (input: { store: Omit<Store, "created_at">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
   updateStore: (patch: Partial<Omit<Store, "created_at">>) => void;
   addStaff: (input: AddStaffInput) => Ok | Fail;
   updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
@@ -461,11 +461,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     purchases, expenses, cash, bank, shifts, activeShift, pendingSales, smsLogs, isOnline, LOW_BALANCE_THRESHOLD,
     topUpRequests, store, hasOwner,
     can, hasStaffRole,
-    completeSetup({ store: s, owner }) {
+    completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0 }) {
       if (hasOwner) return { ok: false, reason: "Store is already set up" };
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
+      if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
       if (profiles.some((p) => p.phone === owner.phone.trim())) return { ok: false, reason: "That phone is already in use" };
       const ownerProfile: Profile = {
         id: `u${Date.now()}`, full_name: owner.full_name.trim(), phone: owner.phone.trim(),
@@ -474,6 +475,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setProfiles((prev) => [...prev, ownerProfile]);
       setStore({ ...s, name: s.name.trim(), created_at: Date.now() });
+      setCash(opening_cash);
+      setBank(opening_bank);
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
