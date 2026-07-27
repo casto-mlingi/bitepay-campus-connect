@@ -216,6 +216,16 @@ export type SmsLog = {
   created_at: number;
 };
 
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  kind: "low_balance" | "topup" | "order" | "info";
+  created_at: number;
+  read: boolean;
+};
+
 type SaleResult = { ok: true; order: Order } | { ok: false; reason: string };
 type Ok<T = undefined> = T extends undefined ? { ok: true } : { ok: true; value: T };
 type Fail = { ok: false; reason: string };
