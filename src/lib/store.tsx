@@ -777,23 +777,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
       if (amount <= 0) return { ok: false, reason: "Enter an amount" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
-      const cust = profiles.find((p) => p.id === customerId && p.store_id === currentStoreId);
+      const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
       if (!cust) return { ok: false, reason: "Customer not found" };
       const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
-      setProfiles((prev) => prev.map((p) => p.id === customerId ? { ...p, wallet_balance: p.wallet_balance + amount } : p));
+      setWallet(customerId, currentStoreId!, amount);
       setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId!, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
       if (requestId) {
         setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
       }
+      const prevBal = walletFor(cust, currentStoreId!);
       pushNotification({
         store_id: currentStoreId!, user_id: customerId,
         title: "Wallet topped up",
-        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance: TZS ${(cust.wallet_balance + amount).toLocaleString()}.`,
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance at this canteen: TZS ${(prevBal + amount).toLocaleString()}.`,
         kind: "topup",
       });
       return { ok: true };
+
     },
     login(phone, password) {
       const u = profiles.find((p) => p.phone === phone && p.password === password);
