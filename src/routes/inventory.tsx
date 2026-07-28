@@ -309,10 +309,12 @@ function BatchesPanel() {
         <div className="grid md:grid-cols-2 gap-3">
           <label className="text-sm">
             <div className="text-muted-foreground mb-1">Finished Dish</div>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)} className="w-full px-3 py-2 rounded-lg border bg-background">
+            <select value={productId} onChange={(e) => setProductId(e.target.value)} className="w-full px-3 py-2 rounded-lg border bg-background" disabled={products.length === 0}>
+              {products.length === 0 && <option value="">No dishes yet — add one in Menu / Dishes</option>}
               {products.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
             </select>
           </label>
+
           <label className="text-sm">
             <div className="text-muted-foreground mb-1">Total Plates Produced</div>
             <input type="number" min={1} value={plates} onChange={(e) => setPlates(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border bg-background" />
