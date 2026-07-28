@@ -17,7 +17,7 @@ export const Route = createFileRoute("/inventory")({
   }),
 });
 
-type Tab = "raw" | "batches";
+type Tab = "raw" | "menu" | "batches";
 
 function InventoryPage() {
   const { currentUser } = useStore();
@@ -34,19 +34,23 @@ function InventoryPage() {
   return (
     <StaffShell active="inventory">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2"><Boxes className="w-7 h-7 text-primary" /> Store & Inventory</h1>
-        <p className="text-muted-foreground">Raw materials, batch costing, and finished plates.</p>
+        <h1 className="text-3xl font-bold flex items-center gap-2"><UtensilsCrossed className="w-7 h-7 text-primary" /> Store & Inventory</h1>
+        <p className="text-muted-foreground">Raw materials, finished dishes, and batch costing.</p>
       </div>
 
-      <div className="flex gap-1 mb-6 border-b">
+      <div className="flex gap-1 mb-6 border-b overflow-x-auto">
         <TabBtn active={tab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />
+        <TabBtn active={tab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label="Menu / Dishes" />
         <TabBtn active={tab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
       </div>
 
-      {tab === "raw" ? <RawMaterialsPanel /> : <BatchesPanel />}
+      {tab === "raw" && <RawMaterialsPanel />}
+      {tab === "menu" && <MenuPanel />}
+      {tab === "batches" && <BatchesPanel />}
     </StaffShell>
   );
 }
+
 
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
