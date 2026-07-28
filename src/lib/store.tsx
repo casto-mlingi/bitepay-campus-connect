@@ -931,6 +931,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setRawMaterials((prev) => [...prev, { ...r, id: uid("r"), store_id: currentStoreId }]);
     },
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
+    addProduct(p) {
+      if (!currentStoreId) return null;
+      const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId };
+      setProducts((prev) => [...prev, prod]);
+      return prod;
+    },
     createBatch({ product_id, ingredients, labor_cost, plates }) {
       if (!currentStoreId || plates <= 0 || ingredients.length === 0) return null;
       let raw_cost = 0;
