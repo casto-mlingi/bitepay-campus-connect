@@ -349,6 +349,8 @@ type Ctx = {
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
   updateRawStock: (id: string, delta: number) => void;
+  addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
+
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
@@ -929,6 +931,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setRawMaterials((prev) => [...prev, { ...r, id: uid("r"), store_id: currentStoreId }]);
     },
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
+    addProduct(p) {
+      if (!currentStoreId) return null;
+      const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId };
+      setProducts((prev) => [...prev, prod]);
+      return prod;
+    },
     createBatch({ product_id, ingredients, labor_cost, plates }) {
       if (!currentStoreId || plates <= 0 || ingredients.length === 0) return null;
       let raw_cost = 0;
