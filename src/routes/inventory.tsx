@@ -205,14 +205,31 @@ function MenuPanel() {
   const { products, addProduct } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Omit<Product, "id" | "store_id">>({
-    name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0],
+    name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined,
   });
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file?: File | null) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const image = await fileToResizedDataUrl(file);
+      setForm((f) => ({ ...f, image }));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const reset = () =>
+    setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || form.price <= 0) return;
     addProduct(form);
-    setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0] });
+    reset();
     setShowForm(false);
   };
 
@@ -227,35 +244,63 @@ function MenuPanel() {
 
       {showForm && (
         <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">
-          <label className="col-span-2 text-sm">
+          {/* Photo picker */}
+          <div className="col-span-2 md:col-span-2 md:row-span-3">
+            <div className="text-muted-foreground text-sm mb-1">Dish Photo</div>
+            <div className={`relative aspect-square rounded-xl overflow-hidden border-2 border-dashed ${form.image ? "border-transparent" : "border-border"} bg-muted/30 grid place-items-center`}>
+              {form.image ? (
+                <>
+                  <img src={form.image} alt="Dish preview" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => setForm({ ...form, image: undefined })} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5" aria-label="Remove photo">
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <div className="text-center text-xs text-muted-foreground px-3">
+                  {uploading ? "Processing…" : "Add a photo of the dish"}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button type="button" onClick={() => cameraRef.current?.click()} className="flex items-center justify-center gap-1.5 border rounded-lg py-2 text-xs font-semibold hover:bg-muted">
+                <Camera className="w-4 h-4" /> Camera
+              </button>
+              <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-1.5 border rounded-lg py-2 text-xs font-semibold hover:bg-muted">
+                <Upload className="w-4 h-4" /> Upload
+              </button>
+            </div>
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
+          </div>
+
+          <label className="col-span-2 md:col-span-4 text-sm">
             <div className="text-muted-foreground mb-1">Dish Name</div>
             <input required placeholder="e.g. Pilau" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </label>
-          <label className="col-span-2 text-sm">
+          <label className="col-span-2 md:col-span-2 text-sm">
             <div className="text-muted-foreground mb-1">Category</div>
             <input placeholder="e.g. Main Course" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
           </label>
-          <label className="text-sm">
-            <div className="text-muted-foreground mb-1">Emoji</div>
-            <input maxLength={4} className="w-full px-3 py-2 rounded-lg border bg-background text-center text-lg" value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value || "🍽️" })} />
-          </label>
-          <label className="text-sm">
+          <label className="col-span-2 md:col-span-2 text-sm">
             <div className="text-muted-foreground mb-1">Price (TZS)</div>
             <input type="number" min={0} className="w-full px-3 py-2 rounded-lg border bg-background" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
           </label>
-          <label className="col-span-2 text-sm">
+          <label className="col-span-2 md:col-span-4 text-sm">
             <div className="text-muted-foreground mb-1">Description</div>
             <input placeholder="Short menu blurb" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </label>
-          <label className="col-span-2 text-sm">
-            <div className="text-muted-foreground mb-1">Card Color</div>
+          <label className="col-span-2 md:col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Fallback Color (no photo)</div>
             <div className="flex gap-2 flex-wrap">
               {GRADIENTS.map((g) => (
                 <button key={g} type="button" onClick={() => setForm({ ...form, gradient: g })} className={`w-8 h-8 rounded-full bg-gradient-to-br ${g} ${form.gradient === g ? "ring-2 ring-offset-2 ring-primary" : ""}`} />
               ))}
             </div>
           </label>
-          <button className="col-span-2 md:col-span-2 bg-foreground text-background rounded-lg font-semibold text-sm py-2 self-end">Save Dish</button>
+          <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
+            <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 py-2 rounded-lg border text-sm font-semibold">Cancel</button>
+            <button className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm">Save Dish</button>
+          </div>
         </form>
       )}
 
@@ -264,6 +309,32 @@ function MenuPanel() {
           No dishes yet. Add your first finished product — it will show up in the POS, customer menu, and the cooking batch dropdown.
         </div>
       ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {products.map((p) => (
+            <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
+              {p.image ? (
+                <img src={p.image} alt={p.name} className="h-32 w-full object-cover" />
+              ) : (
+                <div className={`h-32 bg-gradient-to-br ${p.gradient} flex items-center justify-center text-4xl`}>{p.emoji}</div>
+              )}
+              <div className="p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-bold">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">{p.category || "Uncategorized"}</div>
+                  </div>
+                  <div className="text-sm font-mono font-bold text-primary">{formatTZS(p.price)}</div>
+                </div>
+                {p.description && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {products.map((p) => (
             <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
