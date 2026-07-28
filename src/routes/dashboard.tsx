@@ -129,7 +129,11 @@ function Dashboard() {
           <div className="flex gap-3 pb-1">
             {featured.map((p) => (
               <Link key={p.id} to="/menu" className="w-36 shrink-0 bg-surface border rounded-2xl p-3">
-                <div className={`w-full aspect-square rounded-xl bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl`}>{p.emoji}</div>
+                {p.image ? (
+                  <img src={p.image} alt={p.name} className="w-full aspect-square rounded-xl object-cover" />
+                ) : (
+                  <div className={`w-full aspect-square rounded-xl bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl`}>{p.emoji}</div>
+                )}
                 <div className="mt-2 font-semibold text-sm leading-tight line-clamp-1">{p.name}</div>
                 <div className="text-primary font-bold text-sm mt-0.5">{formatTZS(p.price)}</div>
               </Link>
