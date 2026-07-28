@@ -101,7 +101,11 @@ function MenuPage() {
 function ProductCard({ p, qty, onAdd, onQty }: { p: Product; qty: number; onAdd: () => void; onQty: (n: number) => void }) {
   return (
     <div className="bg-surface border rounded-3xl p-3 pt-4 flex flex-col">
-      <div className={`aspect-square rounded-2xl bg-gradient-to-br ${p.gradient} grid place-items-center text-6xl shadow-inner`}>{p.emoji}</div>
+      {p.image ? (
+        <img src={p.image} alt={p.name} className="aspect-square rounded-2xl w-full object-cover shadow-inner" />
+      ) : (
+        <div className={`aspect-square rounded-2xl bg-gradient-to-br ${p.gradient} grid place-items-center text-6xl shadow-inner`}>{p.emoji}</div>
+      )}
       <div className="mt-3 flex-1">
         <div className="font-semibold text-sm leading-tight line-clamp-1">{p.name}</div>
         <div className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{p.description}</div>
