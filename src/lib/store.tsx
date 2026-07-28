@@ -349,6 +349,8 @@ type Ctx = {
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
   updateRawStock: (id: string, delta: number) => void;
+  addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
+
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
