@@ -165,6 +165,101 @@ function RawMaterialsPanel() {
   );
 }
 
+/* ────────────── Menu / Finished Dishes ────────────── */
+const GRADIENTS = [
+  "from-orange-400 to-red-500",
+  "from-emerald-400 to-teal-500",
+  "from-sky-400 to-indigo-500",
+  "from-fuchsia-400 to-pink-500",
+  "from-amber-400 to-orange-500",
+  "from-lime-400 to-emerald-500",
+];
+
+function MenuPanel() {
+  const { products, addProduct } = useStore();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<Omit<Product, "id" | "store_id">>({
+    name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0],
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || form.price <= 0) return;
+    addProduct(form);
+    setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0] });
+    setShowForm(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">{products.length} dishes on the menu</div>
+        <button onClick={() => setShowForm((v) => !v)} className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-primary/90">
+          <Plus className="w-4 h-4" /> Add Dish
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Dish Name</div>
+            <input required placeholder="e.g. Pilau" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </label>
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Category</div>
+            <input placeholder="e.g. Main Course" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Emoji</div>
+            <input maxLength={4} className="w-full px-3 py-2 rounded-lg border bg-background text-center text-lg" value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value || "🍽️" })} />
+          </label>
+          <label className="text-sm">
+            <div className="text-muted-foreground mb-1">Price (TZS)</div>
+            <input type="number" min={0} className="w-full px-3 py-2 rounded-lg border bg-background" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+          </label>
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Description</div>
+            <input placeholder="Short menu blurb" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </label>
+          <label className="col-span-2 text-sm">
+            <div className="text-muted-foreground mb-1">Card Color</div>
+            <div className="flex gap-2 flex-wrap">
+              {GRADIENTS.map((g) => (
+                <button key={g} type="button" onClick={() => setForm({ ...form, gradient: g })} className={`w-8 h-8 rounded-full bg-gradient-to-br ${g} ${form.gradient === g ? "ring-2 ring-offset-2 ring-primary" : ""}`} />
+              ))}
+            </div>
+          </label>
+          <button className="col-span-2 md:col-span-2 bg-foreground text-background rounded-lg font-semibold text-sm py-2 self-end">Save Dish</button>
+        </form>
+      )}
+
+      {products.length === 0 ? (
+        <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">
+          No dishes yet. Add your first finished product — it will show up in the POS, customer menu, and the cooking batch dropdown.
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {products.map((p) => (
+            <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
+              <div className={`h-20 bg-gradient-to-br ${p.gradient} flex items-center justify-center text-4xl`}>{p.emoji}</div>
+              <div className="p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-bold">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">{p.category || "Uncategorized"}</div>
+                  </div>
+                  <div className="text-sm font-mono font-bold text-primary">{formatTZS(p.price)}</div>
+                </div>
+                {p.description && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ────────────── Cooking Batches ────────────── */
 function BatchesPanel() {
   const { rawMaterials, products, batches, createBatch } = useStore();
@@ -172,6 +267,12 @@ function BatchesPanel() {
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!productId && products[0]) setProductId(products[0].id);
+  }, [products, productId]);
+
+
 
   const rawCost = useMemo(() => ings.reduce((s, i) => {
     const r = rawMaterials.find((x) => x.id === i.raw_id);
