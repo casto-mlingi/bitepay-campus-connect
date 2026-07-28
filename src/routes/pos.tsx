@@ -209,7 +209,11 @@ function POS() {
               return (
                 <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
                   className={`bg-surface border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition active:scale-[0.98] ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
-                  <div className={`h-20 rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-4xl mb-2`}>{p.emoji}</div>
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} className="h-20 w-full object-cover rounded-lg mb-2" />
+                  ) : (
+                    <div className={`h-20 rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-4xl mb-2`}>{p.emoji}</div>
+                  )}
                   <div className="font-semibold text-sm leading-tight">{p.name}</div>
                   <div className="text-xs text-muted-foreground flex items-center justify-between">
                     <span>{p.category}</span>

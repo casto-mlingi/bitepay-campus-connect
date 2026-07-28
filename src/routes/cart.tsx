@@ -61,7 +61,11 @@ function CartPage() {
           <ul className="mt-4 space-y-2">
             {cart.map((c) => (
               <li key={c.product.id} className="bg-surface border rounded-2xl p-3 flex items-center gap-3">
-                <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${c.product.gradient} grid place-items-center text-2xl shrink-0`}>{c.product.emoji}</div>
+                {c.product.image ? (
+                  <img src={c.product.image} alt={c.product.name} className="w-14 h-14 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${c.product.gradient} grid place-items-center text-2xl shrink-0`}>{c.product.emoji}</div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold truncate">{c.product.name}</div>
                   <div className="text-sm text-primary font-bold">{formatTZS(c.product.price)}</div>

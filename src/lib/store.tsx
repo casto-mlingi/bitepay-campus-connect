@@ -120,7 +120,9 @@ export type Product = {
   category: string;
   emoji: string;
   gradient: string;
+  image?: string; // data URL or asset URL for a dish photo
 };
+
 
 export type OrderStatus = "new" | "in-progress" | "ready" | "completed";
 export type DeliveryType = "pickup" | "delivery";
