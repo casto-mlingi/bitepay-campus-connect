@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Boxes } from "lucide-react";
-import { useStore, formatTZS, type BatchIngredient } from "@/lib/store";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
+import { useStore, formatTZS, type BatchIngredient, type Product } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
+
 
 export const Route = createFileRoute("/inventory")({
   component: InventoryPage,
