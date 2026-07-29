@@ -1215,7 +1215,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
