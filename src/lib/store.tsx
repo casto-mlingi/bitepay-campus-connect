@@ -111,6 +111,26 @@ export type TopUpRequest = {
   reject_reason?: string;
 };
 
+export type CustomDishRequestStatus = "pending" | "accepted" | "rejected";
+export type CustomDishRequest = {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  dish_name: string;
+  description: string;
+  ingredients: string[];
+  suggested_price?: number;
+  status: CustomDishRequestStatus;
+  staff_price?: number;
+  staff_note?: string;
+  reject_reason?: string;
+  created_at: number;
+  resolved_at?: number;
+  resolved_by?: string;
+};
+
 export type Product = {
   id: string;
   store_id: string;
