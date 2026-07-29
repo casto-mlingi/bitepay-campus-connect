@@ -98,7 +98,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 lg:px-8 flex gap-1 overflow-x-auto pb-2">
-          {(["overview", "subscription", "tickets", "audit"] as const).map((t) => (
+          {(["overview", "subscription", "tickets", "database", "audit"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize whitespace-nowrap ${tab === t ? "bg-primary text-white" : "text-slate-300 hover:bg-slate-800"}`}>
               {t === "audit" ? "Audit log" : t}
