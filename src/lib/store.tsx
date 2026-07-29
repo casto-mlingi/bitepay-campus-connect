@@ -463,6 +463,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
+  const [customDishRequests, setCustomDishRequests] = useState<CustomDishRequest[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
