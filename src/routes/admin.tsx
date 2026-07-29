@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat, Database, RefreshCw } from "lucide-react";
 import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, type TicketStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
