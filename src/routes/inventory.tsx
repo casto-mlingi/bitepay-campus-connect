@@ -1,33 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, Camera, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
 import { useStore, formatTZS, type BatchIngredient, type Product } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
+import { DishImagePicker } from "@/components/dish-image-picker";
 
-// Resize + compress an image File into a data URL so it fits in localStorage.
-async function fileToResizedDataUrl(file: File, maxSize = 640, quality = 0.82): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result));
-    fr.onerror = () => reject(fr.error);
-    fr.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = reject;
-    i.src = dataUrl;
-  });
-  const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-  const w = Math.round(img.width * scale);
-  const h = Math.round(img.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", quality);
-}
 
 
 
@@ -208,25 +185,13 @@ function MenuPanel() {
     name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined,
   });
   const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = async (file?: File | null) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const image = await fileToResizedDataUrl(file);
-      setForm((f) => ({ ...f, image }));
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const reset = () =>
     setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploading) return;
     if (!form.name.trim() || form.price <= 0) return;
     addProduct(form);
     reset();
@@ -244,34 +209,14 @@ function MenuPanel() {
 
       {showForm && (
         <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">
-          {/* Photo picker */}
           <div className="col-span-2 md:col-span-2 md:row-span-3">
-            <div className="text-muted-foreground text-sm mb-1">Dish Photo</div>
-            <div className={`relative aspect-square rounded-xl overflow-hidden border-2 border-dashed ${form.image ? "border-transparent" : "border-border"} bg-muted/30 grid place-items-center`}>
-              {form.image ? (
-                <>
-                  <img src={form.image} alt="Dish preview" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => setForm({ ...form, image: undefined })} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5" aria-label="Remove photo">
-                    <X className="w-4 h-4" />
-                  </button>
-                </>
-              ) : (
-                <div className="text-center text-xs text-muted-foreground px-3">
-                  {uploading ? "Processing…" : "Add a photo of the dish"}
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <button type="button" onClick={() => cameraRef.current?.click()} className="flex items-center justify-center gap-1.5 border rounded-lg py-2 text-xs font-semibold hover:bg-muted">
-                <Camera className="w-4 h-4" /> Camera
-              </button>
-              <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-1.5 border rounded-lg py-2 text-xs font-semibold hover:bg-muted">
-                <Upload className="w-4 h-4" /> Upload
-              </button>
-            </div>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
-            <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
+            <DishImagePicker
+              value={form.image}
+              onChange={(image) => setForm((f) => ({ ...f, image }))}
+              onBusyChange={setUploading}
+            />
           </div>
+
 
           <label className="col-span-2 md:col-span-4 text-sm">
             <div className="text-muted-foreground mb-1">Dish Name</div>
@@ -299,8 +244,16 @@ function MenuPanel() {
           </label>
           <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
             <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 py-2 rounded-lg border text-sm font-semibold">Cancel</button>
-            <button className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm">Save Dish</button>
+            <button
+              type="submit"
+              disabled={uploading}
+              className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title={uploading ? "Finish the photo step before saving" : ""}
+            >
+              {uploading ? "Processing photo…" : "Save Dish"}
+            </button>
           </div>
+
         </form>
       )}
 
@@ -313,9 +266,9 @@ function MenuPanel() {
           {products.map((p) => (
             <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
               {p.image ? (
-                <img src={p.image} alt={p.name} className="h-32 w-full object-cover" />
+                <img src={p.image} alt={p.name} className="aspect-square w-full object-cover" />
               ) : (
-                <div className={`h-32 bg-gradient-to-br ${p.gradient} flex items-center justify-center text-4xl`}>{p.emoji}</div>
+                <div className={`aspect-square bg-gradient-to-br ${p.gradient} flex items-center justify-center text-5xl`}>{p.emoji}</div>
               )}
               <div className="p-3">
                 <div className="flex items-start justify-between gap-2">

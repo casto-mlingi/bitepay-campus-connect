@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat, Database, RefreshCw } from "lucide-react";
 import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, type TicketStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +68,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     addSubscriptionDays, changePlan, setSubscriptionStatus, subscriptionDaysLeft,
     superAdmin, adminAuditLog,
   } = useStore();
-  const [tab, setTab] = useState<"overview" | "subscription" | "tickets" | "audit">("overview");
+  const [tab, setTab] = useState<"overview" | "subscription" | "tickets" | "database" | "audit">("overview");
 
   const customerCount = profiles.filter((p) => p.role === "customer").length;
   const staffCount = profiles.filter((p) => p.role === "staff" && !p.disabled).length;
@@ -98,7 +98,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 lg:px-8 flex gap-1 overflow-x-auto pb-2">
-          {(["overview", "subscription", "tickets", "audit"] as const).map((t) => (
+          {(["overview", "subscription", "tickets", "database", "audit"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize whitespace-nowrap ${tab === t ? "bg-primary text-white" : "text-slate-300 hover:bg-slate-800"}`}>
               {t === "audit" ? "Audit log" : t}
@@ -174,6 +174,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         />}
 
         {tab === "tickets" && <TicketsTab />}
+
+        {tab === "database" && <DatabaseTab />}
 
         {tab === "audit" && (
           <div className="bg-white border rounded-2xl p-6">
@@ -381,3 +383,97 @@ function Bubble({ from, author, body, at }: { from: "store" | "admin"; author: s
     </div>
   );
 }
+
+type DbProfileId = "memory" | "postgres";
+type DbProfile = { id: DbProfileId; label: string; description: string; connection: string };
+const DB_PROFILES: DbProfile[] = [
+  { id: "memory", label: "In-Memory (Demo)", description: "Client-side store — no persistence. Great for demos and previews.", connection: "browser://localStorage" },
+  { id: "postgres", label: "Postgres (Coolify · Contabo)", description: "Production database wired through /api/public/health/db.", connection: "postgres://…@contabo:5432/bitepay" },
+];
+const DB_PROFILE_KEY = "bitepay.active_db_profile";
+
+function DatabaseTab() {
+  const [active, setActive] = useState<DbProfileId>(() => {
+    if (typeof window === "undefined") return "memory";
+    return (localStorage.getItem(DB_PROFILE_KEY) as DbProfileId) || "memory";
+  });
+  const [health, setHealth] = useState<{ ok?: boolean; latency_ms?: number; version?: string; table_count?: number; error?: string; loading: boolean; checked_at?: number }>({ loading: false });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem(DB_PROFILE_KEY, active);
+  }, [active]);
+
+  const ping = async () => {
+    setHealth((h) => ({ ...h, loading: true }));
+    try {
+      const res = await fetch("/api/public/health/db");
+      const json = await res.json();
+      setHealth({ ...json, loading: false, checked_at: Date.now() });
+    } catch (err) {
+      setHealth({ ok: false, loading: false, error: err instanceof Error ? err.message : String(err), checked_at: Date.now() });
+    }
+  };
+
+  useEffect(() => { if (active === "postgres") ping(); }, [active]);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-1"><Database className="w-5 h-5 text-primary" /><h3 className="font-bold">Active database connection</h3></div>
+        <p className="text-sm text-muted-foreground mb-4">Pick which backend the app should treat as the source of truth. Selection is stored on this device.</p>
+        <div className="grid gap-2">
+          {DB_PROFILES.map((p) => {
+            const selected = active === p.id;
+            return (
+              <label key={p.id} className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition ${selected ? "border-primary bg-primary/5" : "border-transparent bg-slate-50 hover:border-slate-300"}`}>
+                <input
+                  type="radio"
+                  name="db-profile"
+                  className="mt-1 accent-primary"
+                  checked={selected}
+                  onChange={() => setActive(p.id)}
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-bold">{p.label}</div>
+                    {selected && <span className="text-[10px] font-bold uppercase tracking-wider bg-primary text-white px-2 py-0.5 rounded-full">Active</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{p.description}</div>
+                  <div className="text-[11px] font-mono text-slate-500 mt-1">{p.connection}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-2xl p-6">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="font-bold">Postgres health</h3>
+          <button onClick={ping} disabled={health.loading} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-semibold hover:bg-muted disabled:opacity-60">
+            <RefreshCw className={`w-4 h-4 ${health.loading ? "animate-spin" : ""}`} /> {health.loading ? "Checking…" : "Re-check"}
+          </button>
+        </div>
+        {health.checked_at ? (
+          health.ok ? (
+            <div className="grid sm:grid-cols-3 gap-3 text-sm">
+              <Kv k="Status" v="Connected" />
+              <Kv k="Latency" v={`${health.latency_ms} ms`} />
+              <Kv k="Tables" v={String(health.table_count ?? 0)} />
+              <Kv k="Version" v={(health.version ?? "").split(" on ")[0]} />
+              <Kv k="Checked" v={new Date(health.checked_at).toLocaleTimeString()} />
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+              <div className="font-semibold">Connection failed</div>
+              <div className="text-xs mt-1 break-all">{health.error}</div>
+            </div>
+          )
+        ) : (
+          <p className="text-sm text-muted-foreground">Run a check to see live connection details.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+

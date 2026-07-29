@@ -111,6 +111,26 @@ export type TopUpRequest = {
   reject_reason?: string;
 };
 
+export type CustomDishRequestStatus = "pending" | "accepted" | "rejected";
+export type CustomDishRequest = {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  dish_name: string;
+  description: string;
+  ingredients: string[];
+  suggested_price?: number;
+  status: CustomDishRequestStatus;
+  staff_price?: number;
+  staff_note?: string;
+  reject_reason?: string;
+  created_at: number;
+  resolved_at?: number;
+  resolved_by?: string;
+};
+
 export type Product = {
   id: string;
   store_id: string;
@@ -362,6 +382,11 @@ type Ctx = {
   openShift: (opening_float: number) => Shift | null;
   closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
+
+  customDishRequests: CustomDishRequest[];
+  submitCustomDishRequest: (input: { dish_name: string; description: string; ingredients: string[]; suggested_price?: number }) => CustomDishRequest | null;
+  respondCustomDishRequest: (id: string, input: { action: "accept" | "reject"; price?: number; note?: string; reason?: string }) => Ok | Fail;
+
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
 
@@ -438,6 +463,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
+  const [customDishRequests, setCustomDishRequests] = useState<CustomDishRequest[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
@@ -499,6 +525,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const scopedSms = useMemo(() => currentStoreId ? smsLogs.filter((s) => s.store_id === currentStoreId) : [], [smsLogs, currentStoreId]);
   const scopedNotifs = useMemo(() => currentStoreId ? notifications.filter((n) => n.store_id === currentStoreId) : notifications, [notifications, currentStoreId]);
   const scopedRequests = useMemo(() => currentStoreId ? topUpRequests.filter((r) => r.store_id === currentStoreId) : [], [topUpRequests, currentStoreId]);
+  const scopedCustomDishes = useMemo(() => {
+    if (!currentUserId) return [];
+    if (rawUser?.role === "customer") return customDishRequests.filter((r) => r.customer_id === currentUserId);
+    return currentStoreId ? customDishRequests.filter((r) => r.store_id === currentStoreId) : [];
+  }, [customDishRequests, currentStoreId, currentUserId, rawUser]);
   const scopedTickets = useMemo(() => superAdminSignedIn ? tickets : (currentStoreId ? tickets.filter((t) => t.store_id === currentStoreId) : []), [tickets, currentStoreId, superAdminSignedIn]);
 
   const treasury: Treasury = (currentStoreId && treasuries[currentStoreId]) || { cash: 0, bank: 0 };
@@ -1040,6 +1071,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const p: PendingSale = { id: `PQ-${Date.now()}`, store_id: currentStoreId, queued_at: Date.now(), ...payload };
       setPendingSales((prev) => [p, ...prev]);
     },
+    customDishRequests: scopedCustomDishes,
+    submitCustomDishRequest({ dish_name, description, ingredients, suggested_price }) {
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
+      if (!dish_name.trim() || !description.trim()) return null;
+      const req: CustomDishRequest = {
+        id: uid("cd"), store_id: sid, customer_id: currentUser.id,
+        customer_name: currentUser.full_name, customer_phone: currentUser.phone,
+        dish_name: dish_name.trim(), description: description.trim(),
+        ingredients: ingredients.map((i) => i.trim()).filter(Boolean),
+        suggested_price: suggested_price && suggested_price > 0 ? suggested_price : undefined,
+        status: "pending", created_at: Date.now(),
+      };
+      setCustomDishRequests((prev) => [req, ...prev]);
+      pushNotification({
+        store_id: sid, user_id: currentUser.id, kind: "info",
+        title: "Dish request submitted", body: `We sent "${req.dish_name}" to the kitchen for review.`,
+      });
+      return req;
+    },
+    respondCustomDishRequest(id, { action, price, note, reason }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
+      const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status !== "pending") return { ok: false, reason: "Already resolved" };
+      const now = Date.now();
+      const patched: CustomDishRequest = action === "accept"
+        ? { ...req, status: "accepted", staff_price: price && price > 0 ? price : req.suggested_price, staff_note: note, resolved_at: now, resolved_by: currentUser.full_name }
+        : { ...req, status: "rejected", reject_reason: reason ?? "Unavailable", resolved_at: now, resolved_by: currentUser.full_name };
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id ? patched : r));
+      pushNotification({
+        store_id: req.store_id, user_id: req.customer_id, kind: "info",
+        title: action === "accept" ? "Dish request accepted 🎉" : "Dish request declined",
+        body: action === "accept"
+          ? `"${req.dish_name}" is on the menu${patched.staff_price ? ` at TZS ${patched.staff_price.toLocaleString()}` : ""}. Come pick it up!`
+          : `"${req.dish_name}" — ${patched.reject_reason}`,
+      });
+      return { ok: true };
+    },
     syncOutbox() {
       let synced = 0, failed = 0;
       const rem: PendingSale[] = [];
@@ -1143,7 +1215,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
