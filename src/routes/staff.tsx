@@ -51,6 +51,8 @@ function StaffDashboard() {
         </div>
       </div>
 
+      <CustomDishRequestsPanel />
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {columns.map((col) => {
           const list = orders.filter((o) => o.status === col.key);
