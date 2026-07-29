@@ -266,9 +266,9 @@ function MenuPanel() {
           {products.map((p) => (
             <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
               {p.image ? (
-                <img src={p.image} alt={p.name} className="h-32 w-full object-cover" />
+                <img src={p.image} alt={p.name} className="aspect-square w-full object-cover" />
               ) : (
-                <div className={`h-32 bg-gradient-to-br ${p.gradient} flex items-center justify-center text-4xl`}>{p.emoji}</div>
+                <div className={`aspect-square bg-gradient-to-br ${p.gradient} flex items-center justify-center text-5xl`}>{p.emoji}</div>
               )}
               <div className="p-3">
                 <div className="flex items-start justify-between gap-2">
