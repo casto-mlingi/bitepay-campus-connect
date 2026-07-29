@@ -382,6 +382,11 @@ type Ctx = {
   openShift: (opening_float: number) => Shift | null;
   closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
+
+  customDishRequests: CustomDishRequest[];
+  submitCustomDishRequest: (input: { dish_name: string; description: string; ingredients: string[]; suggested_price?: number }) => CustomDishRequest | null;
+  respondCustomDishRequest: (id: string, input: { action: "accept" | "reject"; price?: number; note?: string; reason?: string }) => Ok | Fail;
+
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
 
