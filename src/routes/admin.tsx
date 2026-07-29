@@ -175,6 +175,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
         {tab === "tickets" && <TicketsTab />}
 
+        {tab === "database" && <DatabaseTab />}
+
         {tab === "audit" && (
           <div className="bg-white border rounded-2xl p-6">
             <h3 className="font-bold mb-3">Admin audit log</h3>
