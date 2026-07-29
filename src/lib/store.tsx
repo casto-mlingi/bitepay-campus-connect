@@ -1071,6 +1071,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const p: PendingSale = { id: `PQ-${Date.now()}`, store_id: currentStoreId, queued_at: Date.now(), ...payload };
       setPendingSales((prev) => [p, ...prev]);
     },
+    customDishRequests: scopedCustomDishes,
+    submitCustomDishRequest({ dish_name, description, ingredients, suggested_price }) {
+      if (!currentUser || currentUser.role !== "customer") return null;
+      const sid = activeStoreId;
+      if (!sid) return null;
+      if (!dish_name.trim() || !description.trim()) return null;
+      const req: CustomDishRequest = {
+        id: uid("cd"), store_id: sid, customer_id: currentUser.id,
+        customer_name: currentUser.full_name, customer_phone: currentUser.phone,
+        dish_name: dish_name.trim(), description: description.trim(),
+        ingredients: ingredients.map((i) => i.trim()).filter(Boolean),
+        suggested_price: suggested_price && suggested_price > 0 ? suggested_price : undefined,
+        status: "pending", created_at: Date.now(),
+      };
+      setCustomDishRequests((prev) => [req, ...prev]);
+      pushNotification({
+        store_id: sid, user_id: currentUser.id, kind: "info",
+        title: "Dish request submitted", body: `We sent "${req.dish_name}" to the kitchen for review.`,
+      });
+      return req;
+    },
+    respondCustomDishRequest(id, { action, price, note, reason }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
+      const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status !== "pending") return { ok: false, reason: "Already resolved" };
+      const now = Date.now();
+      const patched: CustomDishRequest = action === "accept"
+        ? { ...req, status: "accepted", staff_price: price && price > 0 ? price : req.suggested_price, staff_note: note, resolved_at: now, resolved_by: currentUser.full_name }
+        : { ...req, status: "rejected", reject_reason: reason ?? "Unavailable", resolved_at: now, resolved_by: currentUser.full_name };
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id ? patched : r));
+      pushNotification({
+        store_id: req.store_id, user_id: req.customer_id, kind: "info",
+        title: action === "accept" ? "Dish request accepted 🎉" : "Dish request declined",
+        body: action === "accept"
+          ? `"${req.dish_name}" is on the menu${patched.staff_price ? ` at TZS ${patched.staff_price.toLocaleString()}` : ""}. Come pick it up!`
+          : `"${req.dish_name}" — ${patched.reject_reason}`,
+      });
+      return { ok: true };
+    },
     syncOutbox() {
       let synced = 0, failed = 0;
       const rem: PendingSale[] = [];
