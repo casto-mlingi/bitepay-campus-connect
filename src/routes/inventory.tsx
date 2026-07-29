@@ -244,8 +244,16 @@ function MenuPanel() {
           </label>
           <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
             <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 py-2 rounded-lg border text-sm font-semibold">Cancel</button>
-            <button className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm">Save Dish</button>
+            <button
+              type="submit"
+              disabled={uploading}
+              className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title={uploading ? "Finish the photo step before saving" : ""}
+            >
+              {uploading ? "Processing photo…" : "Save Dish"}
+            </button>
           </div>
+
         </form>
       )}
 
