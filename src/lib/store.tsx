@@ -525,6 +525,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const scopedSms = useMemo(() => currentStoreId ? smsLogs.filter((s) => s.store_id === currentStoreId) : [], [smsLogs, currentStoreId]);
   const scopedNotifs = useMemo(() => currentStoreId ? notifications.filter((n) => n.store_id === currentStoreId) : notifications, [notifications, currentStoreId]);
   const scopedRequests = useMemo(() => currentStoreId ? topUpRequests.filter((r) => r.store_id === currentStoreId) : [], [topUpRequests, currentStoreId]);
+  const scopedCustomDishes = useMemo(() => {
+    if (!currentUserId) return [];
+    if (rawUser?.role === "customer") return customDishRequests.filter((r) => r.customer_id === currentUserId);
+    return currentStoreId ? customDishRequests.filter((r) => r.store_id === currentStoreId) : [];
+  }, [customDishRequests, currentStoreId, currentUserId, rawUser]);
   const scopedTickets = useMemo(() => superAdminSignedIn ? tickets : (currentStoreId ? tickets.filter((t) => t.store_id === currentStoreId) : []), [tickets, currentStoreId, superAdminSignedIn]);
 
   const treasury: Treasury = (currentStoreId && treasuries[currentStoreId]) || { cash: 0, bank: 0 };
