@@ -122,10 +122,9 @@ function OrderCard({ order, nextLabel, onAdvance }: { order: Order; nextLabel: s
 }
 
 function CustomDishRequestsPanel() {
-  const { customDishRequests, respondCustomDishRequest, can } = useStore();
+  const { customDishRequests, respondCustomDishRequest } = useStore();
   const pending = customDishRequests.filter((r) => r.status === "pending");
   const recent = customDishRequests.filter((r) => r.status !== "pending").slice(0, 3);
-  if (!can("customers.read")) return null;
   if (pending.length === 0 && recent.length === 0) return null;
 
   return (
