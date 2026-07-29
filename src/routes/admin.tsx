@@ -68,7 +68,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     addSubscriptionDays, changePlan, setSubscriptionStatus, subscriptionDaysLeft,
     superAdmin, adminAuditLog,
   } = useStore();
-  const [tab, setTab] = useState<"overview" | "subscription" | "tickets" | "audit">("overview");
+  const [tab, setTab] = useState<"overview" | "subscription" | "tickets" | "database" | "audit">("overview");
 
   const customerCount = profiles.filter((p) => p.role === "customer").length;
   const staffCount = profiles.filter((p) => p.role === "staff" && !p.disabled).length;
