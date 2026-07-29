@@ -79,6 +79,9 @@ function MenuPage() {
         <div className="mt-10 text-center text-muted-foreground text-sm">No dishes match your search.</div>
       )}
 
+      <RequestDishSection />
+
+
       {cartCount > 0 && (
         <Link
           to="/cart"
