@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { Clock, ChefHat, PackageCheck, CheckCircle2, MapPin, ShoppingBag, ArrowRight } from "lucide-react";
-import { useStore, formatTZS, type Order, type OrderStatus } from "@/lib/store";
+import { useEffect, useState } from "react";
+import { Clock, ChefHat, PackageCheck, CheckCircle2, MapPin, ShoppingBag, ArrowRight, Sparkles, Check, X } from "lucide-react";
+import { useStore, formatTZS, type Order, type OrderStatus, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 
 export const Route = createFileRoute("/staff")({
