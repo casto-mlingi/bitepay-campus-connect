@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus, ShoppingCart, Search } from "lucide-react";
+import { Minus, Plus, ShoppingCart, Search, Sparkles, X, Check, Clock, XCircle } from "lucide-react";
 import { useStore, formatTZS, type Product } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 
