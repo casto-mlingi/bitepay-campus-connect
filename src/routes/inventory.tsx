@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
-import { useStore, formatTZS, type BatchIngredient, type Product } from "@/lib/store";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User } from "lucide-react";
+import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 
@@ -20,12 +20,13 @@ export const Route = createFileRoute("/inventory")({
   }),
 });
 
-type Tab = "raw" | "menu" | "batches";
+type Tab = "raw" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
-  const { currentUser } = useStore();
+  const { currentUser, customDishRequests } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("raw");
+  const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
@@ -45,11 +46,13 @@ function InventoryPage() {
         <TabBtn active={tab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />
         <TabBtn active={tab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label="Menu / Dishes" />
         <TabBtn active={tab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
+        <TabBtn active={tab === "requests"} onClick={() => setTab("requests")} icon={<ClipboardList className="w-4 h-4" />} label={`Menu Requests${pendingRequests ? ` (${pendingRequests})` : ""}`} />
       </div>
 
       {tab === "raw" && <RawMaterialsPanel />}
       {tab === "menu" && <MenuPanel />}
       {tab === "batches" && <BatchesPanel />}
+      {tab === "requests" && <MenuRequestsPanel />}
     </StaffShell>
   );
 }
