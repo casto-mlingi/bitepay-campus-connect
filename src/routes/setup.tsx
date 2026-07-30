@@ -17,7 +17,7 @@ export const Route = createFileRoute("/setup")({
 });
 
 function SetupWizard() {
-  const { hasOwner, completeSetup } = useStore();
+  const { hasOwner, completeSetup, stores } = useStore();
   const registerFn = useServerFn(registerOwnerAndStore);
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
