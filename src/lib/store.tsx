@@ -524,6 +524,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
   const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
+  const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([]);
   const superAdmin: SuperAdmin = { username: "admin", password: "bitepay2025", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
@@ -542,12 +543,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
-      adminAuditLog, receiptSeq,
+      adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
-     adminAuditLog, receiptSeq],
+     adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
 
@@ -573,6 +574,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
     if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
+    if (s.subscriptionPayments) setSubscriptionPayments(s.subscriptionPayments);
     if (s.receiptSeq) setReceiptSeq(s.receiptSeq);
   }, []);
 
@@ -1386,6 +1388,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAdminAuditLog((prev) => [{ id: uid("au"), action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
     },
     adminAuditLog,
+    subscriptionPayments,
+    submitSubscriptionPayment({ plan, receipt_no, payer_name, amount, storeId }) {
+      const targetId = storeId ?? currentStoreId;
+      const target = stores.find((s) => s.id === targetId);
+      if (!target) return { ok: false, reason: "No store selected" };
+      if (!receipt_no.trim()) return { ok: false, reason: "Enter the payment receipt number" };
+      if (subscriptionPayments.some((p) => p.receipt_no.trim().toLowerCase() === receipt_no.trim().toLowerCase())) {
+        return { ok: false, reason: "That receipt number was already submitted" };
+      }
+      const row: SubscriptionPayment = {
+        id: uid("sp"), store_id: target.id, store_name: target.name, plan,
+        amount: amount ?? PLAN_PRICE[plan], receipt_no: receipt_no.trim(),
+        payer_name: (payer_name ?? currentUser?.full_name ?? "").trim(),
+        submitted_by_id: currentUser?.id ?? "", submitted_by_name: currentUser?.full_name ?? "Owner",
+        status: "pending", created_at: Date.now(),
+      };
+      setSubscriptionPayments((prev) => [row, ...prev]);
+      setAdminAuditLog((prev) => [{ id: uid("au"), action: "subscription_payment_submitted", detail: `${target.name} · ${PLAN_LABEL[plan]} · receipt ${row.receipt_no}`, created_at: Date.now() }, ...prev]);
+      return { ok: true };
+    },
+    reviewSubscriptionPayment(id, action, note) {
+      const row = subscriptionPayments.find((p) => p.id === id);
+      if (!row || row.status !== "pending") return { ok: false, reason: "Payment not found" };
+      setSubscriptionPayments((prev) => prev.map((p) => p.id === id ? { ...p, status: action === "approve" ? "approved" : "rejected", reviewed_at: Date.now(), note } : p));
+      if (action === "approve") {
+        const nowMs = Date.now();
+        setStores((prev) => prev.map((s) => {
+          if (s.id !== row.store_id) return s;
+          const base = Math.max(s.subscription.expires_at, nowMs);
+          return { ...s, subscription: { ...s.subscription, plan: row.plan, monthly_price: PLAN_PRICE[row.plan], expires_at: base + 30 * 86400000, status: "active" } };
+        }));
+      }
+      setAdminAuditLog((prev) => [{ id: uid("au"), action: action === "approve" ? "subscription_payment_approved" : "subscription_payment_rejected", detail: `${row.store_name} · ${PLAN_LABEL[row.plan]} · receipt ${row.receipt_no}`, created_at: Date.now() }, ...prev]);
+      return { ok: true };
+    },
     subscriptionDaysLeft() {
       if (!store) return 0;
       return Math.max(0, Math.ceil((store.subscription.expires_at - Date.now()) / 86400000));
@@ -1397,7 +1434,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
