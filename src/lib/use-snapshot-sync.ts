@@ -64,7 +64,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         suppressRef.current = true;
         revisionRef.current = res.revision;
         applyRef.current(JSON.parse(res.payload) as T);
-        localStorage.setItem(SNAPSHOT_KEY, res.payload);
+        try {
+          localStorage.setItem(SNAPSHOT_KEY, res.payload);
+          localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(res.revision));
+          localStorage.setItem(DIRTY_KEY, "0");
+        } catch { /* ignore */ }
       }
       setState((s) => ({
         ...s,
