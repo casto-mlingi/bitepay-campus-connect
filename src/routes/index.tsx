@@ -182,10 +182,10 @@ function HomePage() {
       {/* Pricing teaser */}
       <section id="pricing" className="max-w-4xl mx-auto px-5 py-16 text-center">
         <h2 className="text-3xl font-extrabold tracking-tight">Simple pricing.</h2>
-        <p className="text-muted-foreground mt-2">Start with a 14-day free trial. Upgrade when you're ready.</p>
+        <p className="text-muted-foreground mt-2">Start with a 14-day free trial. Upgrade with mobile money — no card, no paperwork.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 text-left">
           {[
-            { name: "Trial", price: "Free", body: "14 days, all features." },
+            { name: "Trial", price: "Free", body: "14 days, all features, one store." },
             { name: "Starter", price: "TZS 50k / mo", body: "1 outlet, up to 500 wallets.", highlight: true },
             { name: "Pro", price: "TZS 120k / mo", body: "Multi-outlet, unlimited wallets." },
           ].map((p) => (
@@ -196,7 +196,31 @@ function HomePage() {
             </div>
           ))}
         </div>
+
+        {/* How upgrading works — mobile money + receipt approval */}
+        <div className="mt-8 p-6 rounded-2xl border bg-surface text-left">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 grid place-items-center">
+              <Smartphone className="w-4.5 h-4.5" />
+            </div>
+            <h3 className="font-bold">Pay by mobile money, activated after review</h3>
+          </div>
+          <div className="mt-4 grid sm:grid-cols-3 gap-4 text-sm">
+            {[
+              { n: "1", t: "Pick your plan", b: "Open Settings → Subscription and tap Upgrade now." },
+              { n: "2", t: "Send the payment", b: "TTCL Lipa number 30030336 — name: Computerized Africa." },
+              { n: "3", t: "Submit the receipt", b: "Paste the receipt number; approval activates the plan for 30 days." },
+            ].map((s) => (
+              <div key={s.n} className="p-4 rounded-xl bg-muted/50">
+                <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold grid place-items-center">{s.n}</span>
+                <p className="font-semibold mt-2">{s.t}</p>
+                <p className="text-muted-foreground mt-1">{s.b}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
+
 
       {/* Footer */}
       <footer className="border-t bg-surface">
