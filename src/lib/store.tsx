@@ -314,6 +314,20 @@ type Ctx = {
   currentUser: Profile | null;
   profiles: Profile[]; // filtered to current store
   allProfiles: Profile[]; // unfiltered (for admin / login lookup)
+  // Unfiltered, cross-tenant data for the super-admin console only
+  adminData: {
+    orders: Order[];
+    transactions: Transaction[];
+    tickets: Ticket[];
+    topUpRequests: TopUpRequest[];
+    purchases: Purchase[];
+    expenses: Expense[];
+    wastage: WastageLog[];
+    shifts: Shift[];
+    customDishRequests: CustomDishRequest[];
+    notifications: AppNotification[];
+    treasuries: Record<string, { cash: number; bank: number }>;
+  };
   products: Product[]; // filtered
   orders: Order[]; // filtered
   transactions: Transaction[]; // filtered
