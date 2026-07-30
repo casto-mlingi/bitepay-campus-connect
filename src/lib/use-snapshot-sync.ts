@@ -1,15 +1,17 @@
 /**
- * Offline-first snapshot sync with explicit conflict resolution.
+ * Offline-first snapshot sync with automatic merging.
  *
  * - Every state change is mirrored to localStorage immediately (works offline).
  * - When online, the snapshot is pushed to Postgres almost immediately.
  * - On boot (and on manual pull) the remote snapshot is fetched.
- * - Last-write-wins is only applied when it is SAFE (one side has no unsynced
- *   edits). When both sides changed, the sync engine stops, raises a
- *   `conflict` and lets the user review and pick a winner.
+ * - When this device and the database both changed, the two snapshots are
+ *   merged record-by-record (see `mergeSnapshots`) and the result is published.
+ *   The user is never asked to choose a winner and nothing is discarded, so the
+ *   same device can be shared by many owners without any prompts.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pushSnapshot, pullSnapshot } from "@/lib/sync.functions";
+import { mergeSnapshots } from "@/lib/snapshot-merge";
 
 export const SNAPSHOT_KEY = "bitepay.snapshot.v1";
 const DIRTY_KEY = `${SNAPSHOT_KEY}.dirty`;
@@ -23,17 +25,7 @@ export function activeDbProfile(): DbProfileId {
   return (localStorage.getItem(DB_PROFILE_KEY) as DbProfileId) || "postgres";
 }
 
-export type SyncStatus = "idle" | "pulling" | "pushing" | "synced" | "offline" | "error" | "conflict";
-
-/** A detected last-write-wins collision awaiting a human decision. */
-export type SnapshotConflict = {
-  detectedAt: number;
-  localRevision: number;
-  remoteRevision: number;
-  localPayload: string;
-  remotePayload: string;
-  remoteUpdatedAt: string | null;
-};
+export type SyncStatus = "idle" | "pulling" | "pushing" | "merging" | "synced" | "offline" | "error";
 
 export type SyncState = {
   status: SyncStatus;
@@ -41,7 +33,8 @@ export type SyncState = {
   lastSyncedAt: number | null;
   pendingPush: boolean;
   error: string | null;
-  conflict: SnapshotConflict | null;
+  /** Kept for API compatibility — conflicts are merged automatically now. */
+  conflict: null;
 };
 
 type Options<T> = {
@@ -65,19 +58,17 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     conflict: null,
   });
   const revisionRef = useRef(0);
-  const baseRef = useRef(0);
   const dirtyRef = useRef(false);
-  const conflictRef = useRef<SnapshotConflict | null>(null);
   const applyRef = useRef(apply);
   applyRef.current = apply;
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressRef = useRef(false);
+  const busyRef = useRef(false);
 
   const markClean = useCallback((rev: number) => {
     revisionRef.current = rev;
-    baseRef.current = rev;
     dirtyRef.current = false;
     try {
       localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(rev));
@@ -86,106 +77,105 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     } catch { /* ignore */ }
   }, []);
 
-  const raiseConflict = useCallback((c: SnapshotConflict) => {
-    conflictRef.current = c;
-    setState((s) => ({ ...s, status: "conflict", conflict: c, pendingPush: true }));
-  }, []);
-
-  /** Adopt a remote payload as the new local truth. */
-  const adoptRemote = useCallback((payload: string, revision: number) => {
+  /** Adopt a payload as the new local truth without re-triggering a push. */
+  const adopt = useCallback((payload: string, revision: number) => {
     suppressRef.current = true;
     applyRef.current(JSON.parse(payload) as T);
     try { localStorage.setItem(SNAPSHOT_KEY, payload); } catch { /* ignore */ }
     markClean(revision);
   }, [markClean]);
 
+  /** Merge the remote payload with local edits, adopt it and publish the result. */
+  const mergeAndPublish = useCallback(async (remotePayload: string, remoteRevision: number) => {
+    setState((s) => ({ ...s, status: "merging" }));
+    let merged: T;
+    try {
+      merged = mergeSnapshots(snapshotRef.current, JSON.parse(remotePayload) as T);
+    } catch {
+      merged = snapshotRef.current;
+    }
+    const payload = JSON.stringify(merged);
+    const revision = remoteRevision + 1;
+    suppressRef.current = true;
+    applyRef.current(merged);
+    try { localStorage.setItem(SNAPSHOT_KEY, payload); } catch { /* ignore */ }
+    try {
+      const res = await pushSnapshot({ data: { key, revision, payload } });
+      if (res.ok) {
+        markClean(res.revision ?? revision);
+        setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
+        return;
+      }
+    } catch (err) {
+      setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
+      return;
+    }
+    // Someone published again mid-merge — the next tick will merge that too.
+    revisionRef.current = revision;
+    dirtyRef.current = true;
+    setState((s) => ({ ...s, status: "pushing", pendingPush: true, revision }));
+  }, [key, markClean]);
+
   const remotePull = useCallback(async (force = false) => {
     if (activeDbProfile() !== "postgres") return;
-    if (conflictRef.current && !force) return; // wait for the human decision
+    if (busyRef.current) return;
+    busyRef.current = true;
     setState((s) => ({ ...s, status: "pulling", error: null }));
     try {
       const res = await pullSnapshot({ data: { key } });
-      if (res.found && res.revision > revisionRef.current) {
+      if (res.found && (force || res.revision > revisionRef.current)) {
         if (dirtyRef.current && !force) {
-          // Both sides moved since the last agreed revision → collision.
-          raiseConflict({
-            detectedAt: Date.now(),
-            localRevision: revisionRef.current,
-            remoteRevision: res.revision,
-            localPayload: JSON.stringify(snapshotRef.current),
-            remotePayload: res.payload,
-            remoteUpdatedAt: res.updated_at,
-          });
+          await mergeAndPublish(res.payload, res.revision);
           return;
         }
-        adoptRemote(res.payload, res.revision);
-      } else if (res.found && force) {
-        adoptRemote(res.payload, res.revision);
+        adopt(res.payload, res.revision);
       }
       setState((s) => ({
         ...s,
         status: "synced",
-        conflict: null,
         pendingPush: dirtyRef.current,
         revision: revisionRef.current,
         lastSyncedAt: Date.now(),
       }));
     } catch (err) {
       setState((s) => ({ ...s, status: "error", error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      busyRef.current = false;
     }
-  }, [key, adoptRemote, raiseConflict]);
+  }, [key, adopt, mergeAndPublish]);
 
-  const remotePush = useCallback(async (overrideRevision?: number) => {
+  const remotePush = useCallback(async () => {
     if (activeDbProfile() !== "postgres") return;
-    if (conflictRef.current && overrideRevision === undefined) return; // frozen until resolved
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setState((s) => ({ ...s, status: "offline", pendingPush: true }));
       return;
     }
+    if (busyRef.current) return;
+    busyRef.current = true;
     setState((s) => ({ ...s, status: "pushing", error: null }));
     try {
       const payload = JSON.stringify(snapshotRef.current);
-      const revision = overrideRevision ?? revisionRef.current;
+      const revision = revisionRef.current;
       const res = await pushSnapshot({ data: { key, revision, payload } });
       if (!res.ok && res.stale) {
-        // The server holds a newer snapshot than ours — fetch it and let the
-        // user decide instead of silently discarding either side.
+        // The server holds a newer snapshot — merge both sides, then republish.
         const remote = await pullSnapshot({ data: { key } });
-        if (remote.found) {
-          raiseConflict({
-            detectedAt: Date.now(),
-            localRevision: revision,
-            remoteRevision: remote.revision,
-            localPayload: payload,
-            remotePayload: remote.payload,
-            remoteUpdatedAt: remote.updated_at,
-          });
-        }
+        if (remote.found) await mergeAndPublish(remote.payload, remote.revision);
         return;
       }
-      conflictRef.current = null;
       markClean(res.revision ?? revision);
-      setState((s) => ({ ...s, status: "synced", conflict: null, pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now() }));
+      setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now() }));
     } catch (err) {
       setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      busyRef.current = false;
     }
-  }, [key, markClean, raiseConflict]);
+  }, [key, markClean, mergeAndPublish]);
 
-  /** User decision: keep this device's version, or the database version. */
-  const resolveConflict = useCallback(async (choice: "local" | "remote") => {
-    const c = conflictRef.current;
-    if (!c) return;
-    if (choice === "remote") {
-      conflictRef.current = null;
-      adoptRemote(c.remotePayload, c.remoteRevision);
-      setState((s) => ({ ...s, status: "synced", conflict: null, pendingPush: false, revision: c.remoteRevision, lastSyncedAt: Date.now() }));
-      return;
-    }
-    // Keep local: republish it on top of the remote revision so it wins.
-    conflictRef.current = null;
-    setState((s) => ({ ...s, conflict: null }));
-    await remotePush(c.remoteRevision + 1);
-  }, [adoptRemote, remotePush]);
+  /** Retained for API compatibility: merging happens automatically. */
+  const resolveConflict = useCallback(async (_choice: "local" | "remote") => {
+    await remotePull(false);
+  }, [remotePull]);
 
   // Boot: local first (instant + offline safe), then remote.
   useEffect(() => {
@@ -197,7 +187,6 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         applyRef.current(JSON.parse(raw) as T);
       }
       revisionRef.current = Number(localStorage.getItem(`${SNAPSHOT_KEY}.rev`) ?? 0);
-      baseRef.current = Number(localStorage.getItem(BASE_KEY) ?? revisionRef.current);
       dirtyRef.current = localStorage.getItem(DIRTY_KEY) === "1";
     } catch {
       /* corrupt snapshot — start fresh */
@@ -227,7 +216,6 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       /* quota exceeded — remote push still carries the data */
     }
     setState((s) => ({ ...s, revision: rev, pendingPush: true }));
-    if (conflictRef.current) return; // don't push while awaiting a decision
     // The 250ms window only coalesces the burst of updates a single user
     // action produces, so every data injection lands in Postgres right away.
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -237,7 +225,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
 
   // Flush the queue as soon as connectivity returns.
   useEffect(() => {
-    if (isOnline && hydrated && state.pendingPush && !conflictRef.current) void remotePush();
+    if (isOnline && hydrated && state.pendingPush) void remotePush();
     if (!isOnline) setState((s) => ({ ...s, status: "offline" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, hydrated]);
@@ -249,7 +237,6 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     if (!hydrated) return;
     const id = setInterval(() => {
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      if (conflictRef.current) return;
       if (pendingRef.current) { void remotePush(); return; }
       void remotePull(false);
     }, 5000);
@@ -260,12 +247,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
     const refresh = () => {
-      if (conflictRef.current) return;
       if (pendingRef.current) void remotePush(); else void remotePull(false);
     };
     const onVisibility = () => {
       if (document.visibilityState === "visible") refresh();
-      else if (pendingRef.current && !conflictRef.current) void remotePush();
+      else if (pendingRef.current) void remotePush();
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", onVisibility);
