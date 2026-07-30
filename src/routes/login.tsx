@@ -110,15 +110,23 @@ function LoginPage() {
                   <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
                   <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
                 </div>
-                {stores.length > 1 && (
+                {canteenGroups.length > 1 && (
                   <div>
                     <Label htmlFor="store" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Choose your store</Label>
                     <select id="store" value={signupStoreId} onChange={(e) => setSignupStoreId(e.target.value)} className="mt-1.5 h-12 w-full rounded-xl border bg-background px-3 text-sm">
                       <option value="">Select a store…</option>
-                      {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.location}</option>)}
+                      {canteenGroups.map((g) => (
+                        <option key={g.orgId} value={g.orgId}>
+                          {g.name}{g.canteens.length > 1 ? ` — ${g.canteens.length} canteens` : g.canteens[0]?.location ? ` — ${g.canteens[0].location}` : ""}
+                        </option>
+                      ))}
                     </select>
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      One wallet works at every canteen in the store you pick. You can shop at other stores later — each keeps its own balance.
+                    </p>
                   </div>
                 )}
+
               </>
             )}
 
