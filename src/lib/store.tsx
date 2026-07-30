@@ -314,6 +314,20 @@ type Ctx = {
   currentUser: Profile | null;
   profiles: Profile[]; // filtered to current store
   allProfiles: Profile[]; // unfiltered (for admin / login lookup)
+  // Unfiltered, cross-tenant data for the super-admin console only
+  adminData: {
+    orders: Order[];
+    transactions: Transaction[];
+    tickets: Ticket[];
+    topUpRequests: TopUpRequest[];
+    purchases: Purchase[];
+    expenses: Expense[];
+    wastage: WastageLog[];
+    shifts: Shift[];
+    customDishRequests: CustomDishRequest[];
+    notifications: AppNotification[];
+    treasuries: Record<string, { cash: number; bank: number }>;
+  };
   products: Product[]; // filtered
   orders: Order[]; // filtered
   transactions: Transaction[]; // filtered
@@ -723,6 +737,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    adminData: {
+      orders, transactions, tickets, topUpRequests, purchases, expenses,
+      wastage, shifts, customDishRequests, notifications, treasuries,
+    },
     orders: scopedOrders, transactions: scopedTx, cart,
     rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
@@ -1259,7 +1277,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

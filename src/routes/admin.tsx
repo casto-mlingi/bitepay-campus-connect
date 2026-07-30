@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat, Database, RefreshCw } from "lucide-react";
 import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, type TicketStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -63,20 +63,75 @@ function AdminLogin({ onLogin }: { onLogin: (u: string, p: string) => boolean })
   );
 }
 
+type SystemLogEntry = {
+  id: string;
+  ts: number;
+  category: string;
+  action: string;
+  detail: string;
+  store: string;
+};
+
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const {
-    store, profiles, orders, transactions, tickets, cash, bank,
-    addSubscriptionDays, changePlan, setSubscriptionStatus, subscriptionDaysLeft,
+    stores, allProfiles, adminData,
+    addSubscriptionDays, changePlan, setSubscriptionStatus,
     superAdmin, adminAuditLog,
   } = useStore();
   const [tab, setTab] = useState<"overview" | "subscription" | "tickets" | "database" | "audit">("overview");
+  const [storeId, setStoreId] = useState<string | null>(null);
+
+  // Admin isn't tied to a tenant, so pick the first provisioned store by default.
+  useEffect(() => {
+    if (stores.length === 0) { setStoreId(null); return; }
+    if (!storeId || !stores.some((s) => s.id === storeId)) setStoreId(stores[0].id);
+  }, [stores, storeId]);
+
+  const store = stores.find((s) => s.id === storeId) ?? null;
+  const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? "—";
+
+  const profiles = allProfiles.filter((p) => p.store_id === storeId);
+  const orders = adminData.orders.filter((o) => o.store_id === storeId);
+  const transactions = adminData.transactions.filter((t) => t.store_id === storeId);
+  const tickets = adminData.tickets;
+  const treasury = (storeId && adminData.treasuries[storeId]) || { cash: 0, bank: 0 };
+  const cash = treasury.cash;
+  const bank = treasury.bank;
 
   const customerCount = profiles.filter((p) => p.role === "customer").length;
   const staffCount = profiles.filter((p) => p.role === "staff" && !p.disabled).length;
   const totalRevenue = orders.filter((o) => !o.is_reversal).reduce((s, o) => s + o.total_amount, 0);
-  const walletLiability = profiles.filter((p) => p.role === "customer").reduce((s, p) => s + p.wallet_balance, 0);
+  const walletLiability = profiles.filter((p) => p.role === "customer")
+    .reduce((s, p) => s + (p.wallets?.[storeId ?? ""] ?? p.wallet_balance), 0);
   const openTickets = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
-  const daysLeft = subscriptionDaysLeft();
+  const daysLeft = store ? Math.max(0, Math.ceil((store.subscription.expires_at - Date.now()) / 86400000)) : 0;
+
+  // ---- Unified system log (every subsystem, all tenants) -----------------
+  const systemLog = useMemo<SystemLogEntry[]>(() => {
+    const out: SystemLogEntry[] = [];
+    const push = (e: SystemLogEntry) => out.push(e);
+
+    adminAuditLog.forEach((a) => push({ id: a.id, ts: a.created_at, category: "Admin", action: a.action, detail: a.detail, store: "Platform" }));
+    stores.forEach((s) => push({ id: `store-${s.id}`, ts: s.created_at, category: "Store", action: "store_created", detail: `${s.name}${s.location ? ` · ${s.location}` : ""} · ${s.subscription.plan} plan`, store: s.name }));
+    allProfiles.forEach((p) => push({
+      id: `prof-${p.id}`, ts: (p as { created_at?: number }).created_at ?? 0, category: p.role === "staff" ? "Staff" : "Customer",
+      action: p.role === "staff" ? "staff_added" : "customer_registered",
+      detail: `${p.full_name}${p.staff_role ? ` · ${p.staff_role}` : ""}${p.disabled ? " · disabled" : ""}`,
+      store: storeName(p.store_id ?? ""),
+    }));
+    adminData.orders.forEach((o) => push({ id: `ord-${o.id}`, ts: o.created_at, category: "Order", action: o.is_reversal ? "order_refunded" : "order_placed", detail: `${o.items.length} item(s) · ${formatTZS(o.total_amount)} · ${o.status}`, store: storeName(o.store_id) }));
+    adminData.transactions.forEach((t) => push({ id: `tx-${t.id}`, ts: t.created_at, category: "Wallet", action: t.type, detail: `${formatTZS(t.amount)} · ${t.description ?? ""}`, store: storeName(t.store_id) }));
+    adminData.topUpRequests.forEach((r) => push({ id: `top-${r.id}`, ts: r.created_at, category: "Top-up", action: `topup_${r.status}`, detail: `${formatTZS(r.amount)} · ${r.customer_name}`, store: storeName(r.store_id) }));
+    adminData.purchases.forEach((p) => push({ id: `pur-${p.id}`, ts: p.date, category: "Procurement", action: "purchase", detail: `${p.supplier || "Supplier"} · ${p.raw_name} · ${formatTZS(p.total_cost)}`, store: storeName(p.store_id) }));
+    adminData.expenses.forEach((e) => push({ id: `exp-${e.id}`, ts: e.date, category: "Expense", action: e.category, detail: `${e.description} · ${formatTZS(e.amount)}`, store: storeName(e.store_id) }));
+    adminData.wastage.forEach((w) => push({ id: `was-${w.id}`, ts: w.created_at, category: "Wastage", action: "wastage_logged", detail: `${w.product_name} · ${w.plates} plate(s) · ${w.reason}`, store: storeName(w.store_id) }));
+    adminData.shifts.forEach((s) => push({ id: `shf-${s.id}`, ts: s.opened_at, category: "Shift", action: s.closed_at ? "shift_closed" : "shift_opened", detail: `${s.cashier_name} · opening ${formatTZS(s.opening_float)}`, store: storeName(s.store_id) }));
+    adminData.customDishRequests.forEach((c) => push({ id: `cdr-${c.id}`, ts: c.created_at, category: "Custom dish", action: `dish_${c.status}`, detail: `${c.dish_name} · ${c.customer_name}`, store: storeName(c.store_id) }));
+    adminData.tickets.forEach((t) => push({ id: `tkt-${t.id}`, ts: t.created_at, category: "Support", action: `ticket_${t.status}`, detail: `${t.subject} · ${t.created_by_name}`, store: storeName(t.store_id) }));
+    adminData.notifications.forEach((n) => push({ id: `ntf-${n.id}`, ts: n.created_at, category: "Notification", action: n.kind, detail: `${n.title} — ${n.body}`, store: storeName(n.store_id) }));
+
+    return out.sort((a, b) => b.ts - a.ts);
+  }, [adminAuditLog, stores, allProfiles, adminData]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -110,9 +165,24 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
-        {!store && (
+        {stores.length === 0 && (
           <div className="bg-white border border-amber-300 rounded-2xl p-6 flex items-center gap-3 text-amber-800">
             <AlertTriangle className="w-5 h-5" /> No store has been provisioned yet. Ask the owner to run first-time setup.
+          </div>
+        )}
+
+        {stores.length > 0 && tab !== "audit" && tab !== "database" && (
+          <div className="bg-white border rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+            <span className="text-xs uppercase tracking-widest text-muted-foreground">Store</span>
+            <div className="flex gap-2 flex-wrap">
+              {stores.map((s) => (
+                <button key={s.id} onClick={() => setStoreId(s.id)}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold border ${storeId === s.id ? "bg-primary text-white border-primary" : "hover:bg-muted"}`}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground ml-auto">{stores.length} store{stores.length === 1 ? "" : "s"} registered</span>
           </div>
         )}
 
@@ -139,9 +209,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 <StatusBadge status={store.subscription.status} daysLeft={daysLeft} />
               </div>
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <button onClick={() => addSubscriptionDays(7)} className="h-10 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 7 days</button>
-                <button onClick={() => addSubscriptionDays(30)} className="h-10 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 30 days</button>
-                <button onClick={() => addSubscriptionDays(90)} className="h-10 rounded-lg bg-emerald-700 text-white text-sm font-semibold hover:bg-emerald-800 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 90 days</button>
+                <button onClick={() => addSubscriptionDays(7, store.id)} className="h-10 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 7 days</button>
+                <button onClick={() => addSubscriptionDays(30, store.id)} className="h-10 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 30 days</button>
+                <button onClick={() => addSubscriptionDays(90, store.id)} className="h-10 rounded-lg bg-emerald-700 text-white text-sm font-semibold hover:bg-emerald-800 flex items-center justify-center gap-1"><Plus className="w-4 h-4" /> 90 days</button>
                 <button onClick={() => setTab("subscription")} className="h-10 rounded-lg border text-sm font-semibold hover:bg-muted">Manage plan →</button>
               </div>
             </div>
@@ -171,35 +241,93 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         {tab === "subscription" && store && <SubscriptionTab
           plan={store.subscription.plan} status={store.subscription.status}
           expiresAt={store.subscription.expires_at} daysLeft={daysLeft}
-          onAddDays={addSubscriptionDays} onChangePlan={changePlan} onSetStatus={setSubscriptionStatus}
+          onAddDays={(d) => addSubscriptionDays(d, store.id)}
+          onChangePlan={(p) => changePlan(p, store.id)}
+          onSetStatus={(s) => setSubscriptionStatus(s, store.id)}
         />}
 
         {tab === "tickets" && <TicketsTab />}
 
         {tab === "database" && <DatabaseTab />}
 
-        {tab === "audit" && (
-          <div className="bg-white border rounded-2xl p-6">
-            <h3 className="font-bold mb-3">Admin audit log</h3>
-            {adminAuditLog.length === 0 ? <p className="text-sm text-muted-foreground">No actions recorded yet.</p> : (
-              <div className="divide-y">
-                {adminAuditLog.map((a) => (
-                  <div key={a.id} className="py-2.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm">{a.action}</p>
-                      <p className="text-xs text-muted-foreground">{a.detail}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground whitespace-nowrap">{new Date(a.created_at).toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {tab === "audit" && <SystemLogTab entries={systemLog} />}
       </main>
     </div>
   );
 }
+
+function SystemLogTab({ entries }: { entries: SystemLogEntry[] }) {
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("All");
+  const [limit, setLimit] = useState(100);
+
+  const categories = useMemo(() => ["All", ...Array.from(new Set(entries.map((e) => e.category))).sort()], [entries]);
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return entries.filter((e) =>
+      (cat === "All" || e.category === cat) &&
+      (!term || `${e.action} ${e.detail} ${e.store} ${e.category}`.toLowerCase().includes(term))
+    );
+  }, [entries, q, cat]);
+
+  const exportCsv = () => {
+    const rows = [["timestamp", "category", "action", "detail", "store"],
+      ...filtered.map((e) => [new Date(e.ts).toISOString(), e.category, e.action, e.detail, e.store])];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `bitepay-system-log-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="bg-white border rounded-2xl p-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="font-bold">System log</h3>
+          <p className="text-xs text-muted-foreground">Every recorded event across all stores — {entries.length} entries.</p>
+        </div>
+        <Button variant="outline" onClick={exportCsv} className="h-9">Export CSV</Button>
+      </div>
+
+      <div className="mt-4 flex gap-2 flex-wrap items-center">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search action, detail, store…" className="h-10 max-w-sm" />
+        <div className="flex gap-1.5 flex-wrap">
+          {categories.map((c) => (
+            <button key={c} onClick={() => setCat(c)}
+              className={`px-3 h-8 rounded-full text-xs font-semibold border ${cat === c ? "bg-primary text-white border-primary" : "hover:bg-muted"}`}>{c}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground mt-6">No events match this filter.</p>
+      ) : (
+        <>
+          <div className="mt-4 divide-y">
+            {filtered.slice(0, limit).map((e) => (
+              <div key={e.id} className="py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">{e.category}</span>
+                    <p className="font-semibold text-sm">{e.action}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 break-words">{e.detail}</p>
+                  <p className="text-[11px] text-muted-foreground/80">{e.store}</p>
+                </div>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">{e.ts ? new Date(e.ts).toLocaleString() : "—"}</p>
+              </div>
+            ))}
+          </div>
+          {filtered.length > limit && (
+            <button onClick={() => setLimit((l) => l + 200)} className="mt-4 text-sm font-semibold text-primary">Load more ({filtered.length - limit} remaining)</button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 
 function MetricCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
