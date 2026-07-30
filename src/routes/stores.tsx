@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Building2, Plus, ArrowRight, Check, Clock, ShieldAlert } from "lucide-react";
-import { useStore, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan } from "@/lib/store";
+import { useStore, duplicateStoreReason, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ function NewStoreForm({
   onCancel,
 }: {
   onCreate: (input: {
-    store: { name: string; location: string; contact_phone: string; currency: string; low_balance_threshold: number; enable_mobile_tender: boolean };
+    store: { name: string; location: string; contact_phone: string; admin_email: string; currency: string; low_balance_threshold: number; enable_mobile_tender: boolean };
     plan: SubscriptionPlan;
     opening_cash: number;
     opening_bank: number;
@@ -134,18 +134,25 @@ function NewStoreForm({
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [contact, setContact] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
   const [currency, setCurrency] = useState("TZS");
   const [low, setLow] = useState(3000);
   const [cash, setCash] = useState(0);
   const [bank, setBank] = useState(0);
   const [plan, setPlan] = useState<SubscriptionPlan>("starter");
+  const [error, setError] = useState("");
+  const { stores } = useStore();
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        setError("");
+        if (!/^\S+@\S+\.\S+$/.test(adminEmail.trim())) return setError("Enter a valid admin email");
+        const dup = duplicateStoreReason(stores, { contact_phone: contact, admin_email: adminEmail });
+        if (dup) return setError(dup);
         onCreate({
-          store: { name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: true },
+          store: { name, location, contact_phone: contact, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: low, enable_mobile_tender: true },
           plan, opening_cash: cash, opening_bank: bank,
         });
       }}
@@ -154,13 +161,14 @@ function NewStoreForm({
       <div>
         <h2 className="font-bold text-lg">Open another store</h2>
         <p className="text-sm text-muted-foreground">
-          It starts completely empty and is billed separately — the free trial only applies to your first store.
+          Each canteen you open is a separate store with its own data and its own monthly subscription — the free trial only applies to your first store. Phone and admin email must be unique across all stores.
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
         <Field label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
         <Field label="Contact phone"><Input value={contact} onChange={(e) => setContact(e.target.value)} required /></Field>
+        <Field label="Admin email"><Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required /></Field>
         <Field label="Currency"><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></Field>
         <Field label="Low-balance nudge"><Input type="number" value={low} onChange={(e) => setLow(Number(e.target.value) || 0)} /></Field>
         <Field label="Opening cash"><Input type="number" value={cash} onChange={(e) => setCash(Number(e.target.value) || 0)} /></Field>
@@ -178,6 +186,7 @@ function NewStoreForm({
           ))}
         </div>
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" className="h-11 rounded-xl flex-1">Create store</Button>
         <Button type="button" variant="secondary" onClick={onCancel} className="h-11 rounded-xl">Cancel</Button>
