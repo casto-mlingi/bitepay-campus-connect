@@ -65,6 +65,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
                 Open shift
               </Link>
             )}
+            <SyncPill className="hidden sm:inline-flex" />
             <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full ${isOnline ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
               {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
               {isOnline ? "Online" : `Offline · ${pendingSales.length} queued`}
