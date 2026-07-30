@@ -171,7 +171,11 @@ export type TopUpRequest = {
   reject_reason?: string;
 };
 
-export type CustomDishRequestStatus = "pending" | "accepted" | "rejected";
+// Funnel: pending → accepted (staff quotes a price) → confirmed (customer accepts
+// the quote, wallet is debited) → in_kitchen (owner assigned raw materials, order
+// pushed to the live board) → fulfilled. rejected/cancelled are terminal.
+export type CustomDishRequestStatus =
+  | "pending" | "accepted" | "rejected" | "confirmed" | "in_kitchen" | "fulfilled" | "cancelled";
 export type CustomDishRequest = {
   id: string;
   store_id: string;
@@ -189,7 +193,19 @@ export type CustomDishRequest = {
   created_at: number;
   resolved_at?: number;
   resolved_by?: string;
+  // Customer confirmation / prepayment
+  paid_amount?: number;
+  confirmed_at?: number;
+  // Costing performed by the owner when assigning stock
+  cost_ingredients?: BatchIngredient[];
+  labor_cost?: number;
+  raw_cost?: number;
+  total_cost?: number;
+  assigned_at?: number;
+  assigned_by?: string;
+  order_id?: string;
 };
+
 
 export type Product = {
   id: string;
