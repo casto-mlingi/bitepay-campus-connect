@@ -1,13 +1,14 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
 
-export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings";
+export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
-  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests } = useStore();
+  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests, myStores, currentStoreId, switchStore } = useStore();
+
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
@@ -44,6 +45,17 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Staff Console</div>
               </div>
             </Link>
+            {myStores.length > 1 && (
+              <select
+                aria-label="Switch store"
+                value={currentStoreId ?? ""}
+                onChange={(e) => switchStore(e.target.value)}
+                className="hidden lg:block h-9 max-w-[180px] rounded-lg border bg-background px-2 text-sm font-medium"
+              >
+                {myStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+
             <nav className="hidden md:flex items-center gap-1">
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
@@ -54,6 +66,8 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
               {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
               {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
+              {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
+
             </nav>
           </div>
           <div className="flex items-center gap-2">
@@ -96,6 +110,8 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
           {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
           {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
+          {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
+
         </div>
       </header>
       <SubscriptionBanner daysLeft={subscriptionDaysLeft()} blocked={isSubscriptionBlocked()} status={store?.subscription.status} />

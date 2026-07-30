@@ -3,6 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 export type Role = "customer" | "staff";
 export type StaffRole = "cashier" | "supervisor" | "owner";
+/** A staff member's role in one specific store (multi-store support). */
+export type StoreMembership = { store_id: string; staff_role: StaffRole };
+
 export type Profile = {
   id: string;
   full_name: string;
@@ -16,7 +19,9 @@ export type Profile = {
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
-  store_id?: string; // home canteen (customer signup) / tenant (staff)
+  store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
+  memberships?: StoreMembership[]; // staff only — every store this person belongs to
+
 };
 
 
@@ -32,7 +37,9 @@ export type Subscription = {
 
 export type Store = {
   id: string;
+  owner_user_id?: string; // billing owner — groups stores under one account
   name: string;
+
   location: string;
   contact_phone: string;
   currency: string;
@@ -357,6 +364,16 @@ type Ctx = {
   setSelectedCanteen: (storeId: string) => void;
   availableCanteens: Store[]; // active canteens a customer can shop from
   hasOwner: boolean;
+  myStores: Store[]; // every store the signed-in staff member belongs to
+  myRoleAt: (storeId: string) => StaffRole | null;
+  switchStore: (storeId: string) => Ok | Fail;
+  createStore: (input: {
+    store: Omit<Store, "id" | "created_at" | "subscription" | "owner_user_id">;
+    plan?: SubscriptionPlan;
+    opening_cash?: number;
+    opening_bank?: number;
+  }) => Ok | Fail;
+
 
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string, store_id: string) => Profile | null;
@@ -561,16 +578,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (p.store_id === sid) return p.wallet_balance; // legacy migration
     return 0;
   };
+  // A staff member's effective role is the one attached to the store they are
+  // currently working in (falls back to the legacy single-store staff_role).
+  const membershipsOf = (p: Profile): StoreMembership[] => {
+    const list = p.memberships ?? [];
+    if (list.length) return list;
+    return p.role === "staff" && p.store_id
+      ? [{ store_id: p.store_id, staff_role: p.staff_role ?? "cashier" }]
+      : [];
+  };
+  const roleAt = (p: Profile, sid: string | null): StaffRole | null => {
+    if (!sid || p.role !== "staff") return null;
+    return membershipsOf(p).find((m) => m.store_id === sid)?.staff_role ?? null;
+  };
+
   const currentUser: Profile | null = rawUser
     ? rawUser.role === "customer"
       ? { ...rawUser, wallet_balance: walletFor(rawUser, activeStoreId) }
-      : rawUser
+      : { ...rawUser, staff_role: roleAt(rawUser, activeStoreId) ?? rawUser.staff_role }
     : null;
+
+  const myStores = useMemo(() => {
+    if (!rawUser || rawUser.role !== "staff") return [];
+    const ids = new Set(membershipsOf(rawUser).map((m) => m.store_id));
+    return stores.filter((s) => ids.has(s.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawUser, stores]);
 
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
-  const scopedProfiles = useMemo(() => currentStoreId ? profiles.filter((p) => p.store_id === currentStoreId) : [], [profiles, currentStoreId]);
+  const scopedProfiles = useMemo(
+    () => currentStoreId
+      ? profiles.filter((p) => p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
+      : [],
+    [profiles, currentStoreId],
+  );
+
   const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
   const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
   const scopedRaw = useMemo(() => currentStoreId ? rawMaterials.filter((r) => r.store_id === currentStoreId) : [], [rawMaterials, currentStoreId]);
@@ -769,14 +813,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
       const trialDays = 14;
       const storeId = uid("s");
+      const ownerId = uid("u");
       const newStore: Store = {
-        id: storeId, ...s, name: s.name.trim(), created_at: now,
+        id: storeId, ...s, owner_user_id: ownerId, name: s.name.trim(), created_at: now,
         subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 },
       };
       const ownerProfile: Profile = {
-        id: uid("u"), full_name: owner.full_name.trim(), phone: owner.phone.trim(),
+        id: ownerId, full_name: owner.full_name.trim(), phone: owner.phone.trim(),
         password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
         staff_pin: owner.staff_pin, created_at: now, store_id: storeId,
+        memberships: [{ store_id: storeId, staff_role: "owner" }],
       };
       // New stores start empty — no seeded products, raw materials, customers, or transactions.
       setStores((prev) => [...prev, newStore]);
@@ -786,6 +832,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
+    myStores,
+    myRoleAt: (storeId) => (rawUser ? roleAt(rawUser, storeId) : null),
+    switchStore(storeId) {
+      if (!rawUser || rawUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      const target = stores.find((s) => s.id === storeId);
+      if (!target) return { ok: false, reason: "Store not found" };
+      const role = roleAt(rawUser, storeId);
+      if (!role) return { ok: false, reason: "You are not a member of that store" };
+      setProfiles((prev) => prev.map((p) => p.id === rawUser.id ? { ...p, store_id: storeId, staff_role: role } : p));
+      return { ok: true };
+    },
+    createStore({ store: s, plan = "starter", opening_cash = 0, opening_bank = 0 }) {
+      if (!rawUser || rawUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      // Only someone who already owns at least one store can open another.
+      if (!membershipsOf(rawUser).some((m) => m.staff_role === "owner")) {
+        return { ok: false, reason: "Only a store owner can create another store" };
+      }
+      if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
+      if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
+      const now = Date.now();
+      const storeId = uid("s");
+      // The free trial applies to the first store only — additional stores start
+      // on a paid plan immediately, billed to the same owner account.
+      const paidPlan: SubscriptionPlan = plan === "trial" ? "starter" : plan;
+      const newStore: Store = {
+        id: storeId, ...s, name: s.name.trim(), owner_user_id: rawUser.id, created_at: now,
+        subscription: {
+          plan: paidPlan, started_at: now, expires_at: now + 30 * 86400000,
+          status: "active", monthly_price: PLAN_PRICE[paidPlan],
+        },
+      };
+      setStores((prev) => [...prev, newStore]);
+      setProfiles((prev) => prev.map((p) => p.id === rawUser.id
+        ? { ...p, store_id: storeId, staff_role: "owner", memberships: [...membershipsOf(p), { store_id: storeId, staff_role: "owner" as StaffRole }] }
+        : p));
+      setTreasuries((prev) => ({ ...prev, [storeId]: { cash: opening_cash, bank: opening_bank } }));
+      return { ok: true };
+    },
+
     updateStore(patch) {
       if (!currentStoreId) return;
       setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, name: (patch.name ?? s.name).trim() || s.name } : s));
@@ -801,35 +886,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: uid("u"), full_name: full_name.trim(), phone: phone.trim(), password,
         wallet_balance: 0, role: "staff", staff_role: role, staff_pin, created_at: Date.now(),
         store_id: currentStoreId,
+        memberships: [{ store_id: currentStoreId, staff_role: role }],
       };
+
       setProfiles((prev) => [...prev, p]);
       return { ok: true };
     },
     updateStaff(id, patch) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
+      const target = profiles.find((p) => p.id === id && (p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId)));
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
+      const targetRole = roleAt(target, currentStoreId) ?? target.staff_role;
       if (patch.staff_role && patch.staff_role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
-      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
+      if (targetRole === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
       if (patch.phone && profiles.some((p) => p.phone === patch.phone!.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
-      setProfiles((prev) => prev.map((p) => p.id === id ? {
-        ...p, full_name: patch.full_name?.trim() || p.full_name,
-        phone: patch.phone?.trim() || p.phone, staff_role: patch.staff_role ?? p.staff_role,
-      } : p));
+      setProfiles((prev) => prev.map((p) => {
+        if (p.id !== id) return p;
+        const nextRole = patch.staff_role ?? targetRole;
+        const memberships = membershipsOf(p).map((m) => m.store_id === currentStoreId && nextRole ? { ...m, staff_role: nextRole } : m);
+        return {
+          ...p, full_name: patch.full_name?.trim() || p.full_name,
+          phone: patch.phone?.trim() || p.phone,
+          staff_role: p.store_id === currentStoreId ? (nextRole ?? p.staff_role) : p.staff_role,
+          memberships,
+        };
+      }));
       return { ok: true };
     },
     disableStaff(id, disabled) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
+      const target = profiles.find((p) => p.id === id && (p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId)));
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
-      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
+      const targetRole = roleAt(target, currentStoreId) ?? target.staff_role;
+      if (targetRole === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
       if (target.id === currentUser?.id) return { ok: false, reason: "You cannot disable yourself" };
-      if (disabled && target.staff_role === "owner") {
-        const activeOwners = profiles.filter((p) => p.store_id === currentStoreId && p.staff_role === "owner" && !p.disabled && p.id !== id).length;
+      if (disabled && targetRole === "owner") {
+        const activeOwners = profiles.filter((p) => p.id !== id && !p.disabled && roleAt(p, currentStoreId) === "owner").length;
         if (activeOwners === 0) return { ok: false, reason: "At least one active owner is required" };
       }
       setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, disabled } : p));
       return { ok: true };
+
     },
     resetStaffCredential(id, kind, value) {
       const target = profiles.find((p) => p.id === id);

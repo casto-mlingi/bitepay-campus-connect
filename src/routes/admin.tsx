@@ -186,7 +186,46 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {tab === "overview" && stores.length > 0 && (
+          <div className="bg-white border rounded-2xl p-6">
+            <h3 className="font-bold mb-1">Billing accounts</h3>
+            <p className="text-xs text-muted-foreground mb-4">Owners grouped with every store they run — each store is billed on its own plan.</p>
+            <div className="space-y-3">
+              {Object.entries(
+                stores.reduce<Record<string, typeof stores>>((acc, s) => {
+                  const key = s.owner_user_id ?? "unassigned";
+                  (acc[key] ||= []).push(s);
+                  return acc;
+                }, {}),
+              ).map(([ownerId, group]) => {
+                const owner = allProfiles.find((p) => p.id === ownerId);
+                const mrr = group.reduce((sum, s) => sum + (s.subscription.status === "active" ? PLAN_PRICE[s.subscription.plan] : 0), 0);
+                return (
+                  <div key={ownerId} className="border rounded-xl p-4 flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <div className="font-semibold">{owner?.full_name ?? "Unassigned owner"}</div>
+                      <div className="text-xs text-muted-foreground">{owner?.phone ?? "—"} · {group.length} store{group.length === 1 ? "" : "s"}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {group.map((s) => (
+                          <span key={s.id} className="text-[11px] font-semibold px-2 py-1 rounded-full bg-muted">
+                            {s.name} · {PLAN_LABEL[s.subscription.plan]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">MRR</div>
+                      <div className="text-xl font-extrabold">{formatTZS(mrr)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {tab === "overview" && store && (
+
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <MetricCard icon={<StoreIcon className="w-5 h-5" />} label="Active store" value={store.name} sub={store.location || "—"} />

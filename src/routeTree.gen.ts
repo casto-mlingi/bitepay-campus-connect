@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as StoresRouteImport } from './routes/stores'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as SetupRouteImport } from './routes/setup'
@@ -43,6 +44,11 @@ const TeamRoute = TeamRouteImport.update({
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StoresRoute = StoresRouteImport.update({
+  id: '/stores',
+  path: '/stores',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StaffRoute = StaffRouteImport.update({
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/stores': typeof StoresRoute
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/stores': typeof StoresRoute
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
   '/staff': typeof StaffRoute
+  '/stores': typeof StoresRoute
   '/support': typeof SupportRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/stores'
     | '/support'
     | '/team'
     | '/topup'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/stores'
     | '/support'
     | '/team'
     | '/topup'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/shift'
     | '/staff'
+    | '/stores'
     | '/support'
     | '/team'
     | '/topup'
@@ -284,6 +296,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   ShiftRoute: typeof ShiftRoute
   StaffRoute: typeof StaffRoute
+  StoresRoute: typeof StoresRoute
   SupportRoute: typeof SupportRoute
   TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stores': {
+      id: '/stores'
+      path: '/stores'
+      fullPath: '/stores'
+      preLoaderRoute: typeof StoresRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/staff': {
@@ -452,6 +472,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   ShiftRoute: ShiftRoute,
   StaffRoute: StaffRoute,
+  StoresRoute: StoresRoute,
   SupportRoute: SupportRoute,
   TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
