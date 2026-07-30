@@ -66,6 +66,8 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
               {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
               {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
+              {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
+
             </nav>
           </div>
           <div className="flex items-center gap-2">
