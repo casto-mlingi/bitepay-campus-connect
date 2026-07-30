@@ -79,6 +79,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <StoreProvider>
         <Outlet />
+        <SyncConflictDialog />
       </StoreProvider>
     </QueryClientProvider>
   );
