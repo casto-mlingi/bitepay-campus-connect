@@ -4,10 +4,11 @@ import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
 
-export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings";
+export type StaffTab = "orders" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
-  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests } = useStore();
+  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests, myStores, currentStoreId, switchStore } = useStore();
+
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
