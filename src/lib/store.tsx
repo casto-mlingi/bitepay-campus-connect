@@ -52,6 +52,15 @@ export type Store = {
 };
 
 /** Normalizers used for duplicate-account detection. */
+/** A store group ("organisation") = every canteen sharing one billing owner. */
+export const orgIdOf = (s: Store) => s.owner_user_id ?? s.id;
+/** Display name for a store group — the oldest canteen in it. */
+export function orgNameOf(stores: Store[], orgId: string): string {
+  const list = stores.filter((s) => orgIdOf(s) === orgId).sort((a, b) => a.created_at - b.created_at);
+  return list[0]?.name ?? "Store group";
+}
+
+/** Normalizers used for duplicate-account detection. */
 export const normPhone = (v: string) => (v ?? "").replace(/[^\d]/g, "").replace(/^0+/, "");
 export const normEmail = (v?: string) => (v ?? "").trim().toLowerCase();
 
