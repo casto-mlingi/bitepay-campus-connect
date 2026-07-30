@@ -858,7 +858,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
-      if (profiles.some((p) => p.phone === owner.phone.trim())) return { ok: false, reason: "That phone is already in use" };
+      if (profiles.some((p) => normPhone(p.phone) === normPhone(owner.phone))) return { ok: false, reason: "That owner phone is already registered. Sign in instead." };
+      const dup = duplicateStoreReason(stores, s);
+      if (dup) return { ok: false, reason: dup };
+
       const now = Date.now();
       const trialDays = 14;
       const storeId = uid("s");
