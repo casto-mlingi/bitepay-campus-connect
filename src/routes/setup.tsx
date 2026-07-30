@@ -122,6 +122,10 @@ function SetupWizard() {
               <FormRow label="Contact phone" required>
                 <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0712 000 000" className="h-11 rounded-xl" />
               </FormRow>
+              <FormRow label="Admin email" required>
+                <Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="owner@canteen.co.tz" className="h-11 rounded-xl" />
+              </FormRow>
+
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Currency">
                   <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="TZS" className="h-11 rounded-xl" />
