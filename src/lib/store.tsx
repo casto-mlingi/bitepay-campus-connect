@@ -456,6 +456,9 @@ type Ctx = {
   changePlan: (plan: SubscriptionPlan, storeId?: string) => void;
   setSubscriptionStatus: (status: SubscriptionStatus, storeId?: string) => void;
   adminAuditLog: AdminAuditLog[];
+  subscriptionPayments: SubscriptionPayment[];
+  submitSubscriptionPayment: (input: { plan: SubscriptionPlan; receipt_no: string; payer_name?: string; amount?: number; storeId?: string }) => Ok | Fail;
+  reviewSubscriptionPayment: (id: string, action: "approve" | "reject", note?: string) => Ok | Fail;
   subscriptionDaysLeft: () => number;
   isSubscriptionBlocked: () => boolean;
 };
