@@ -11,7 +11,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { StoreProvider } from "../lib/store";
-import { SyncConflictDialog } from "@/components/sync-conflict-dialog";
+
 
 function NotFoundComponent() {
   return (
