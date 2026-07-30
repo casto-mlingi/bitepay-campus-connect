@@ -620,13 +620,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
   const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
 
-  // Expose customer's wallet balance for the ACTIVE canteen (fallback to legacy field for home store).
+  // ---- Organisation (store group) helpers --------------------------------
+  // A "store group" is every canteen sharing the same billing owner. Customer
+  // wallets live at the GROUP level: one top-up spends at every canteen in it.
+  const orgIdOfId = useCallback(
+    (sid: string | null): string | null => {
+      if (!sid) return null;
+      const s = stores.find((x) => x.id === sid);
+      return s ? orgIdOf(s) : sid;
+    },
+    [stores],
+  );
+  const canteensInOrg = useCallback(
+    (orgId: string | null): Store[] => (orgId ? stores.filter((s) => orgIdOf(s) === orgId) : []),
+    [stores],
+  );
+
+  // Customer's wallet balance for the store group that owns `sid`. Legacy
+  // per-canteen balances inside the same group are merged into the total.
   const walletFor = (p: Profile, sid: string | null): number => {
     if (!sid) return 0;
-    if (p.wallets && sid in p.wallets) return p.wallets[sid];
-    if (p.store_id === sid) return p.wallet_balance; // legacy migration
-    return 0;
+    const org = orgIdOfId(sid);
+    if (!org) return 0;
+    const w = p.wallets ?? {};
+    let total = w[org] ?? 0;
+    for (const c of canteensInOrg(org)) {
+      if (c.id === org) continue;
+      if (c.id in w) total += w[c.id];
+      else if (p.store_id === c.id) total += p.wallet_balance; // legacy field
+    }
+    if (!(org in w) && p.store_id === org) total += p.wallet_balance; // legacy field
+    return total;
   };
+
   // A staff member's effective role is the one attached to the store they are
   // currently working in (falls back to the legacy single-store staff_role).
   const membershipsOf = (p: Profile): StoreMembership[] => {
