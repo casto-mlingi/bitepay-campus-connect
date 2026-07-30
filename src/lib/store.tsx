@@ -364,6 +364,16 @@ type Ctx = {
   setSelectedCanteen: (storeId: string) => void;
   availableCanteens: Store[]; // active canteens a customer can shop from
   hasOwner: boolean;
+  myStores: Store[]; // every store the signed-in staff member belongs to
+  myRoleAt: (storeId: string) => StaffRole | null;
+  switchStore: (storeId: string) => Ok | Fail;
+  createStore: (input: {
+    store: Omit<Store, "id" | "created_at" | "subscription" | "owner_user_id">;
+    plan?: SubscriptionPlan;
+    opening_cash?: number;
+    opening_bank?: number;
+  }) => Ok | Fail;
+
 
   login: (phone: string, password: string) => Profile | null;
   signup: (name: string, phone: string, password: string, store_id: string) => Profile | null;
