@@ -886,7 +886,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: uid("u"), full_name: full_name.trim(), phone: phone.trim(), password,
         wallet_balance: 0, role: "staff", staff_role: role, staff_pin, created_at: Date.now(),
         store_id: currentStoreId,
+        memberships: [{ store_id: currentStoreId, staff_role: role }],
       };
+
       setProfiles((prev) => [...prev, p]);
       return { ok: true };
     },
