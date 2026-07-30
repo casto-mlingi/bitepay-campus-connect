@@ -813,14 +813,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
       const trialDays = 14;
       const storeId = uid("s");
+      const ownerId = uid("u");
       const newStore: Store = {
-        id: storeId, ...s, name: s.name.trim(), created_at: now,
+        id: storeId, ...s, owner_user_id: ownerId, name: s.name.trim(), created_at: now,
         subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 },
       };
       const ownerProfile: Profile = {
-        id: uid("u"), full_name: owner.full_name.trim(), phone: owner.phone.trim(),
+        id: ownerId, full_name: owner.full_name.trim(), phone: owner.phone.trim(),
         password: owner.password, wallet_balance: 0, role: "staff", staff_role: "owner",
         staff_pin: owner.staff_pin, created_at: now, store_id: storeId,
+        memberships: [{ store_id: storeId, staff_role: "owner" }],
       };
       // New stores start empty — no seeded products, raw materials, customers, or transactions.
       setStores((prev) => [...prev, newStore]);
@@ -830,6 +832,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
+    myStores,
+    myRoleAt: (storeId) => (rawUser ? roleAt(rawUser, storeId) : null),
+    switchStore(storeId) {
+      if (!rawUser || rawUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      const target = stores.find((s) => s.id === storeId);
+      if (!target) return { ok: false, reason: "Store not found" };
+      const role = roleAt(rawUser, storeId);
+      if (!role) return { ok: false, reason: "You are not a member of that store" };
+      setProfiles((prev) => prev.map((p) => p.id === rawUser.id ? { ...p, store_id: storeId, staff_role: role } : p));
+      return { ok: true };
+    },
+    createStore({ store: s, plan = "starter", opening_cash = 0, opening_bank = 0 }) {
+      if (!rawUser || rawUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      // Only someone who already owns at least one store can open another.
+      if (!membershipsOf(rawUser).some((m) => m.staff_role === "owner")) {
+        return { ok: false, reason: "Only a store owner can create another store" };
+      }
+      if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
+      if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
+      const now = Date.now();
+      const storeId = uid("s");
+      // The free trial applies to the first store only — additional stores start
+      // on a paid plan immediately, billed to the same owner account.
+      const paidPlan: SubscriptionPlan = plan === "trial" ? "starter" : plan;
+      const newStore: Store = {
+        id: storeId, ...s, name: s.name.trim(), owner_user_id: rawUser.id, created_at: now,
+        subscription: {
+          plan: paidPlan, started_at: now, expires_at: now + 30 * 86400000,
+          status: "active", monthly_price: PLAN_PRICE[paidPlan],
+        },
+      };
+      setStores((prev) => [...prev, newStore]);
+      setProfiles((prev) => prev.map((p) => p.id === rawUser.id
+        ? { ...p, store_id: storeId, staff_role: "owner", memberships: [...membershipsOf(p), { store_id: storeId, staff_role: "owner" as StaffRole }] }
+        : p));
+      setTreasuries((prev) => ({ ...prev, [storeId]: { cash: opening_cash, bank: opening_bank } }));
+      return { ok: true };
+    },
+
     updateStore(patch) {
       if (!currentStoreId) return;
       setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, name: (patch.name ?? s.name).trim() || s.name } : s));
