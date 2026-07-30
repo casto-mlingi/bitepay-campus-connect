@@ -384,18 +384,16 @@ function Bubble({ from, author, body, at }: { from: "store" | "admin"; author: s
   );
 }
 
-type DbProfileId = "memory" | "postgres";
 type DbProfile = { id: DbProfileId; label: string; description: string; connection: string };
 const DB_PROFILES: DbProfile[] = [
-  { id: "memory", label: "In-Memory (Demo)", description: "Client-side store — no persistence. Great for demos and previews.", connection: "browser://localStorage" },
-  { id: "postgres", label: "Postgres (Coolify · Contabo)", description: "Production database wired through /api/public/health/db.", connection: "postgres://…@contabo:5432/bitepay" },
+  { id: "memory", label: "In-Memory (Demo)", description: "Client-side only — no server sync. Great for demos and previews.", connection: "browser://localStorage" },
+  { id: "postgres", label: "Postgres (Coolify · Contabo)", description: "Default. Data is saved locally and synchronised to the Contabo database — offline changes upload automatically once back online.", connection: "postgres://…@contabo:5432/bitepay" },
 ];
-const DB_PROFILE_KEY = "bitepay.active_db_profile";
+
 
 function DatabaseTab() {
   const [active, setActive] = useState<DbProfileId>(() => {
-    if (typeof window === "undefined") return "memory";
-    return (localStorage.getItem(DB_PROFILE_KEY) as DbProfileId) || "memory";
+    return activeDbProfile();
   });
   const [health, setHealth] = useState<{ ok?: boolean; latency_ms?: number; version?: string; table_count?: number; error?: string; loading: boolean; checked_at?: number }>({ loading: false });
 
