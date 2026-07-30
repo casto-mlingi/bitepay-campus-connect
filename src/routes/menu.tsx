@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus, ShoppingCart, Search, Sparkles, X, Check, Clock, XCircle } from "lucide-react";
-import { useStore, formatTZS, type Product } from "@/lib/store";
+import { useStore, formatTZS, type Product, type CustomDishRequestStatus } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 
 export const Route = createFileRoute("/menu")({
@@ -136,7 +136,7 @@ function ProductCard({ p, qty, onAdd, onQty }: { p: Product; qty: number; onAdd:
 }
 
 function RequestDishSection() {
-  const { customDishRequests, submitCustomDishRequest, store } = useStore();
+  const { customDishRequests, submitCustomDishRequest, confirmCustomDishQuote, declineCustomDishQuote, store } = useStore();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -197,11 +197,38 @@ function RequestDishSection() {
                   <div className="font-semibold text-sm truncate">{r.dish_name}</div>
                   <div className="text-xs text-muted-foreground line-clamp-1">{r.description}</div>
                   {r.status === "accepted" && r.staff_price != null && (
-                    <div className="text-xs text-emerald-700 font-semibold mt-0.5">Quoted at {formatTZS(r.staff_price)}{r.staff_note ? ` · ${r.staff_note}` : ""}</div>
+                    <div className="mt-1.5">
+                      <div className="text-xs text-emerald-700 font-semibold">Quoted at {formatTZS(r.staff_price)}{r.staff_note ? ` · ${r.staff_note}` : ""}</div>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => {
+                            const res = confirmCustomDishQuote(r.id);
+                            setToast(res.ok ? "Budget confirmed — amount held from your wallet." : res.reason);
+                            setTimeout(() => setToast(""), 3600);
+                          }}
+                          className="flex-1 bg-primary text-white rounded-lg h-9 text-xs font-bold"
+                        >
+                          Confirm & pay {formatTZS(r.staff_price)}
+                        </button>
+                        <button
+                          onClick={() => declineCustomDishQuote(r.id)}
+                          className="px-3 rounded-lg border text-xs font-semibold"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
                   )}
-                  {r.status === "rejected" && r.reject_reason && (
+                  {r.status === "confirmed" && (
+                    <div className="text-xs text-emerald-700 font-semibold mt-0.5">Paid {formatTZS(r.paid_amount ?? 0)} · waiting for the kitchen to assign stock</div>
+                  )}
+                  {r.status === "in_kitchen" && (
+                    <div className="text-xs text-primary font-semibold mt-0.5">Being prepared now 👨‍🍳</div>
+                  )}
+                  {(r.status === "rejected" || r.status === "cancelled") && r.reject_reason && (
                     <div className="text-xs text-red-600 mt-0.5">{r.reject_reason}</div>
                   )}
+
                 </div>
               </div>
             ))}
@@ -262,8 +289,11 @@ function RequestDishSection() {
   );
 }
 
-function StatusChip({ status }: { status: "pending" | "accepted" | "rejected" }) {
+function StatusChip({ status }: { status: CustomDishRequestStatus }) {
+  if (status === "confirmed" || status === "in_kitchen" || status === "fulfilled")
+    return <div className="w-9 h-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
+  if (status === "rejected" || status === "cancelled") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
   if (status === "accepted") return <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
-  if (status === "rejected") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
+  
   return <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 grid place-items-center shrink-0"><Clock className="w-4 h-4" /></div>;
 }

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
-import { useStore, formatTZS, type BatchIngredient, type Product } from "@/lib/store";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User } from "lucide-react";
+import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 
@@ -20,12 +20,13 @@ export const Route = createFileRoute("/inventory")({
   }),
 });
 
-type Tab = "raw" | "menu" | "batches";
+type Tab = "raw" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
-  const { currentUser } = useStore();
+  const { currentUser, customDishRequests } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("raw");
+  const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
@@ -45,11 +46,13 @@ function InventoryPage() {
         <TabBtn active={tab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />
         <TabBtn active={tab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label="Menu / Dishes" />
         <TabBtn active={tab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
+        <TabBtn active={tab === "requests"} onClick={() => setTab("requests")} icon={<ClipboardList className="w-4 h-4" />} label={`Menu Requests${pendingRequests ? ` (${pendingRequests})` : ""}`} />
       </div>
 
       {tab === "raw" && <RawMaterialsPanel />}
       {tab === "menu" && <MenuPanel />}
       {tab === "batches" && <BatchesPanel />}
+      {tab === "requests" && <MenuRequestsPanel />}
     </StaffShell>
   );
 }
@@ -425,6 +428,174 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between">
       <span>{label}</span>
       <span className="font-mono font-semibold">{value}</span>
+    </div>
+  );
+}
+
+/* ────────────── Menu Requests (custom dishes) ────────────── */
+function MenuRequestsPanel() {
+  const { customDishRequests } = useStore();
+  const awaiting = customDishRequests.filter((r) => r.status === "accepted");
+  const confirmed = customDishRequests.filter((r) => r.status === "confirmed");
+  const processing = customDishRequests.filter((r) => r.status === "in_kitchen" || r.status === "fulfilled");
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-surface border rounded-2xl p-4 text-sm text-muted-foreground">
+        Funnel: <span className="font-semibold text-foreground">Quote sent</span> → <span className="font-semibold text-foreground">Budget confirmed (wallet debited)</span> → <span className="font-semibold text-foreground">Stock assigned</span> → live order board.
+      </div>
+
+      <section>
+        <h2 className="font-bold mb-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary" /> Ready to cost ({confirmed.length})</h2>
+        {confirmed.length === 0
+          ? <div className="bg-surface border rounded-2xl p-8 text-center text-sm text-muted-foreground">No confirmed menu requests yet. They appear here the moment a client accepts your quote and their wallet is charged.</div>
+          : <div className="space-y-3">{confirmed.map((r) => <RequestCostCard key={r.id} req={r} />)}</div>}
+      </section>
+
+      {awaiting.length > 0 && (
+        <section>
+          <h2 className="font-bold mb-2">Awaiting client confirmation ({awaiting.length})</h2>
+          <div className="space-y-2">
+            {awaiting.map((r) => (
+              <div key={r.id} className="bg-surface border rounded-2xl p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold">{r.dish_name}</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-3 mt-0.5">
+                    <span className="flex items-center gap-1"><User className="w-3 h-3" />{r.customer_name}</span>
+                    <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{r.customer_phone}</span>
+                  </div>
+                </div>
+                <div className="text-sm font-mono font-bold text-primary shrink-0">{formatTZS(r.staff_price ?? 0)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {processing.length > 0 && (
+        <section>
+          <h2 className="font-bold mb-2">Processing orders ({processing.length})</h2>
+          <div className="space-y-2">
+            {processing.map((r) => (
+              <div key={r.id} className="bg-surface border rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold">{r.dish_name} <span className="text-xs font-normal text-muted-foreground">· {r.customer_name} · {r.customer_phone}</span></div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Order {r.order_id} · cost {formatTZS(r.total_cost ?? 0)} · paid {formatTZS(r.paid_amount ?? 0)}</div>
+                  </div>
+                  <span className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                    {r.status === "in_kitchen" ? "In kitchen" : "Fulfilled"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function RequestCostCard({ req }: { req: CustomDishRequest }) {
+  const { rawMaterials, assignCustomDishStock } = useStore();
+  const [open, setOpen] = useState(false);
+  const [ings, setIngs] = useState<BatchIngredient[]>([]);
+  const [labor, setLabor] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const rawCost = useMemo(() => ings.reduce((s, i) => {
+    const r = rawMaterials.find((x) => x.id === i.raw_id);
+    return s + (r ? r.avg_cost * i.qty : 0);
+  }, 0), [ings, rawMaterials]);
+  const totalCost = Math.round(rawCost + labor);
+  const paid = req.paid_amount ?? req.staff_price ?? 0;
+  const margin = paid - totalCost;
+
+  const addIng = () => {
+    if (rawMaterials.length === 0) return;
+    const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id)) ?? rawMaterials[0];
+    setIngs([...ings, { raw_id: avail.id, qty: 1 }]);
+  };
+  const updateIng = (i: number, patch: Partial<BatchIngredient>) => setIngs(ings.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+  const removeIng = (i: number) => setIngs(ings.filter((_, idx) => idx !== i));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = assignCustomDishStock(req.id, { ingredients: ings, labor_cost: labor });
+    if (!res.ok) { setError(res.reason); return; }
+    setError(null);
+  };
+
+  return (
+    <div className="bg-surface border rounded-2xl overflow-hidden">
+      <button onClick={() => setOpen((v) => !v)} className="w-full text-left p-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-bold">{req.dish_name}</div>
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-3 mt-1">
+            <span className="flex items-center gap-1"><User className="w-3 h-3" />{req.customer_name}</span>
+            <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{req.customer_phone}</span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{req.description}</div>
+          {req.ingredients.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {req.ingredients.map((v) => <span key={v} className="text-[11px] bg-muted rounded-full px-2 py-0.5">{v}</span>)}
+            </div>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-sm font-mono font-bold text-emerald-600">{formatTZS(paid)}</div>
+          <div className="text-[11px] text-muted-foreground">paid from wallet</div>
+        </div>
+      </button>
+
+      {open && (
+        <form onSubmit={submit} className="border-t p-4 grid lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Assign Raw Materials</div>
+              <button type="button" onClick={addIng} className="text-xs font-semibold text-primary flex items-center gap-1"><Plus className="w-3 h-3" /> Add</button>
+            </div>
+            {ings.length === 0 && <div className="text-xs text-muted-foreground border border-dashed rounded-lg py-4 text-center">No raw materials selected</div>}
+            {ings.map((ing, i) => {
+              const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+              return (
+                <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                  <select value={ing.raw_id} onChange={(e) => updateIng(i, { raw_id: e.target.value })} className="col-span-6 px-2 py-2 rounded-lg border bg-background text-sm">
+                    {rawMaterials.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.stock.toFixed(1)} {r.unit})</option>)}
+                  </select>
+                  <input type="number" min={0} step={0.1} value={ing.qty} onChange={(e) => updateIng(i, { qty: Number(e.target.value) })} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
+                  <div className="col-span-2 text-xs text-muted-foreground">{raw ? formatTZS(raw.avg_cost * ing.qty) : ""}</div>
+                  <button type="button" onClick={() => removeIng(i)} className="col-span-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              );
+            })}
+            <label className="block text-sm">
+              <div className="text-muted-foreground mb-1">Labour / gas cost (TZS)</div>
+              <input type="number" min={0} value={labor} onChange={(e) => setLabor(Number(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border bg-background" />
+            </label>
+            {error && <div className="text-sm text-red-600">{error}</div>}
+            <button className="w-full bg-primary text-white font-bold py-3 rounded-xl">Assign Stock & Send to Kitchen</button>
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="bg-gradient-to-br from-primary to-primary/70 text-white rounded-2xl p-5">
+              <div className="text-xs uppercase tracking-wider opacity-80 flex items-center gap-1"><Calculator className="w-3 h-3" /> Live Cost Preview</div>
+              <div className="mt-4 space-y-1 text-sm opacity-90">
+                <Row label="Raw materials" value={formatTZS(rawCost)} />
+                <Row label="Labour" value={formatTZS(labor)} />
+                <Row label="Client paid" value={formatTZS(paid)} />
+              </div>
+              <div className="mt-4 pt-4 border-t border-white/30">
+                <div className="text-xs uppercase opacity-80">Total cost</div>
+                <div className="text-4xl font-black mt-1">{formatTZS(totalCost)}</div>
+                <div className={`text-sm font-semibold mt-2 ${margin < 0 ? "text-red-100" : "opacity-90"}`}>
+                  Margin {formatTZS(margin)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
