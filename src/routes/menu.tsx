@@ -294,6 +294,6 @@ function StatusChip({ status }: { status: CustomDishRequestStatus }) {
     return <div className="w-9 h-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
   if (status === "rejected" || status === "cancelled") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
   if (status === "accepted") return <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
-  if (status === "rejected") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
+  
   return <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 grid place-items-center shrink-0"><Clock className="w-4 h-4" /></div>;
 }
