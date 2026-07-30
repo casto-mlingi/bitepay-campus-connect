@@ -903,6 +903,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
+      const dupStore = duplicateStoreReason(stores, s);
+      if (dupStore) return { ok: false, reason: dupStore };
+
       const now = Date.now();
       const storeId = uid("s");
       // The free trial applies to the first store only — additional stores start
