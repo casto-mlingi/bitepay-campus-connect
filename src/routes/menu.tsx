@@ -136,7 +136,7 @@ function ProductCard({ p, qty, onAdd, onQty }: { p: Product; qty: number; onAdd:
 }
 
 function RequestDishSection() {
-  const { customDishRequests, submitCustomDishRequest, store } = useStore();
+  const { customDishRequests, submitCustomDishRequest, confirmCustomDishQuote, declineCustomDishQuote, store } = useStore();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -289,7 +289,10 @@ function RequestDishSection() {
   );
 }
 
-function StatusChip({ status }: { status: "pending" | "accepted" | "rejected" }) {
+function StatusChip({ status }: { status: CustomDishRequestStatus }) {
+  if (status === "confirmed" || status === "in_kitchen" || status === "fulfilled")
+    return <div className="w-9 h-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
+  if (status === "rejected" || status === "cancelled") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
   if (status === "accepted") return <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center shrink-0"><Check className="w-4 h-4" /></div>;
   if (status === "rejected") return <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 grid place-items-center shrink-0"><XCircle className="w-4 h-4" /></div>;
   return <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 grid place-items-center shrink-0"><Clock className="w-4 h-4" /></div>;
