@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ArrowLeft, LogOut, Store as StoreIcon, Users, Wallet, TrendingUp, Ticket as TicketIcon, Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat, Database, RefreshCw } from "lucide-react";
 import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, type TicketStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -114,19 +114,19 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     adminAuditLog.forEach((a) => push({ id: a.id, ts: a.created_at, category: "Admin", action: a.action, detail: a.detail, store: "Platform" }));
     stores.forEach((s) => push({ id: `store-${s.id}`, ts: s.created_at, category: "Store", action: "store_created", detail: `${s.name}${s.location ? ` · ${s.location}` : ""} · ${s.subscription.plan} plan`, store: s.name }));
     allProfiles.forEach((p) => push({
-      id: `prof-${p.id}`, ts: p.created_at ?? 0, category: p.role === "staff" ? "Staff" : "Customer",
+      id: `prof-${p.id}`, ts: (p as { created_at?: number }).created_at ?? 0, category: p.role === "staff" ? "Staff" : "Customer",
       action: p.role === "staff" ? "staff_added" : "customer_registered",
       detail: `${p.full_name}${p.staff_role ? ` · ${p.staff_role}` : ""}${p.disabled ? " · disabled" : ""}`,
-      store: storeName(p.store_id),
+      store: storeName(p.store_id ?? ""),
     }));
     adminData.orders.forEach((o) => push({ id: `ord-${o.id}`, ts: o.created_at, category: "Order", action: o.is_reversal ? "order_refunded" : "order_placed", detail: `${o.items.length} item(s) · ${formatTZS(o.total_amount)} · ${o.status}`, store: storeName(o.store_id) }));
     adminData.transactions.forEach((t) => push({ id: `tx-${t.id}`, ts: t.created_at, category: "Wallet", action: t.type, detail: `${formatTZS(t.amount)} · ${t.description ?? ""}`, store: storeName(t.store_id) }));
     adminData.topUpRequests.forEach((r) => push({ id: `top-${r.id}`, ts: r.created_at, category: "Top-up", action: `topup_${r.status}`, detail: `${formatTZS(r.amount)} · ${r.customer_name}`, store: storeName(r.store_id) }));
-    adminData.purchases.forEach((p) => push({ id: `pur-${p.id}`, ts: p.created_at, category: "Procurement", action: "purchase", detail: `${p.supplier ?? "Supplier"} · ${formatTZS(p.total_cost)}`, store: storeName(p.store_id) }));
-    adminData.expenses.forEach((e) => push({ id: `exp-${e.id}`, ts: e.created_at, category: "Expense", action: e.category, detail: `${e.description ?? ""} · ${formatTZS(e.amount)}`, store: storeName(e.store_id) }));
-    adminData.wastage.forEach((w) => push({ id: `was-${w.id}`, ts: w.created_at, category: "Wastage", action: "wastage_logged", detail: `${w.reason ?? "Wastage"} · ${formatTZS(w.cost_value ?? 0)}`, store: storeName(w.store_id) }));
-    adminData.shifts.forEach((s) => push({ id: `shf-${s.id}`, ts: s.opened_at, category: "Shift", action: s.closed_at ? "shift_closed" : "shift_opened", detail: `${s.cashier_name} · opening ${formatTZS(s.opening_float ?? 0)}`, store: storeName(s.store_id) }));
-    adminData.customDishRequests.forEach((c) => push({ id: `cdr-${c.id}`, ts: c.created_at, category: "Custom dish", action: `dish_${c.status}`, detail: `${c.name} · ${c.customer_name}`, store: storeName(c.store_id) }));
+    adminData.purchases.forEach((p) => push({ id: `pur-${p.id}`, ts: p.date, category: "Procurement", action: "purchase", detail: `${p.supplier || "Supplier"} · ${p.raw_name} · ${formatTZS(p.total_cost)}`, store: storeName(p.store_id) }));
+    adminData.expenses.forEach((e) => push({ id: `exp-${e.id}`, ts: e.date, category: "Expense", action: e.category, detail: `${e.description} · ${formatTZS(e.amount)}`, store: storeName(e.store_id) }));
+    adminData.wastage.forEach((w) => push({ id: `was-${w.id}`, ts: w.created_at, category: "Wastage", action: "wastage_logged", detail: `${w.product_name} · ${w.plates} plate(s) · ${w.reason}`, store: storeName(w.store_id) }));
+    adminData.shifts.forEach((s) => push({ id: `shf-${s.id}`, ts: s.opened_at, category: "Shift", action: s.closed_at ? "shift_closed" : "shift_opened", detail: `${s.cashier_name} · opening ${formatTZS(s.opening_float)}`, store: storeName(s.store_id) }));
+    adminData.customDishRequests.forEach((c) => push({ id: `cdr-${c.id}`, ts: c.created_at, category: "Custom dish", action: `dish_${c.status}`, detail: `${c.dish_name} · ${c.customer_name}`, store: storeName(c.store_id) }));
     adminData.tickets.forEach((t) => push({ id: `tkt-${t.id}`, ts: t.created_at, category: "Support", action: `ticket_${t.status}`, detail: `${t.subject} · ${t.created_by_name}`, store: storeName(t.store_id) }));
     adminData.notifications.forEach((n) => push({ id: `ntf-${n.id}`, ts: n.created_at, category: "Notification", action: n.kind, detail: `${n.title} — ${n.body}`, store: storeName(n.store_id) }));
 
