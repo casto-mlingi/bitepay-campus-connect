@@ -68,7 +68,7 @@ function SetupWizard() {
     setError("");
     setSubmitting(true);
     const res = completeSetup({
-      store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
+      store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
       opening_bank: openingBank,
