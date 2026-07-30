@@ -42,7 +42,9 @@ export type Store = {
 
   location: string;
   contact_phone: string;
+  admin_email?: string; // billing/admin contact — must be unique across stores
   currency: string;
+
   low_balance_threshold: number;
   enable_mobile_tender: boolean;
   created_at: number;
