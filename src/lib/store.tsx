@@ -1209,7 +1209,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     findCustomer(query) {
       const q = query.trim().toLowerCase();
       if (!q) return null;
-      return profiles.find((p) => p.role === "customer" && p.store_id === currentStoreId && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
+      return scopedProfiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
     addCustomer({ full_name, phone, initial_balance = 0 }) {
       if (!currentStoreId) return null;
