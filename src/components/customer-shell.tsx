@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store as StoreIcon, ChevronDown, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { SyncPill } from "@/components/sync-pill";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
   const { currentUser, logout, availableCanteens, selectedCanteenId, setSelectedCanteen, store } = useStore();
