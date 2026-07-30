@@ -6,7 +6,7 @@ export async function ensureSnapshotTable(sql: Sql): Promise<void> {
     create table if not exists app_snapshots (
       key text primary key,
       revision bigint not null default 0,
-      payload jsonb not null,
+      payload text not null,
       updated_at timestamptz not null default now()
     )
   `;

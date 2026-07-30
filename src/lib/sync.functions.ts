@@ -12,7 +12,7 @@ import { z } from "zod";
 const PushInput = z.object({
   key: z.string().min(1).max(120),
   revision: z.number().int().nonnegative(),
-  payload: z.unknown(),
+  payload: z.string().max(20_000_000),
 });
 type PushInputT = z.infer<typeof PushInput>;
 
@@ -29,7 +29,7 @@ export const pushSnapshot = createServerFn({ method: "POST" })
 
     const [row] = await sql<{ revision: number; updated_at: Date }[]>`
       insert into app_snapshots (key, revision, payload, updated_at)
-      values (${data.key}, ${data.revision}, ${JSON.stringify(data.payload)}::jsonb, now())
+      values (${data.key}, ${data.revision}, ${data.payload}, now())
       on conflict (key) do update
         set revision = excluded.revision,
             payload = excluded.payload,
@@ -43,10 +43,10 @@ export const pushSnapshot = createServerFn({ method: "POST" })
       const [current] = await sql<{ revision: number; updated_at: Date }[]>`
         select revision, updated_at from app_snapshots where key = ${data.key}
       `;
-      return { ok: false as const, stale: true as const, revision: current?.revision ?? 0, updated_at: current?.updated_at ?? null };
+      return { ok: false as const, stale: true as const, revision: Number(current?.revision ?? 0), updated_at: current?.updated_at?.toISOString() ?? null };
     }
 
-    return { ok: true as const, stale: false as const, revision: row.revision, updated_at: row.updated_at };
+    return { ok: true as const, stale: false as const, revision: Number(row.revision), updated_at: row.updated_at.toISOString() };
   });
 
 export const pullSnapshot = createServerFn({ method: "POST" })
@@ -57,9 +57,9 @@ export const pullSnapshot = createServerFn({ method: "POST" })
     const sql = getSql();
     await ensureSnapshotTable(sql);
 
-    const [row] = await sql<{ revision: number; payload: unknown; updated_at: Date }[]>`
+    const [row] = await sql<{ revision: number; payload: string; updated_at: Date }[]>`
       select revision, payload, updated_at from app_snapshots where key = ${data.key} limit 1
     `;
     if (!row) return { ok: true as const, found: false as const };
-    return { ok: true as const, found: true as const, revision: row.revision, payload: row.payload, updated_at: row.updated_at };
+    return { ok: true as const, found: true as const, revision: Number(row.revision), payload: String(row.payload), updated_at: row.updated_at.toISOString() };
   });
