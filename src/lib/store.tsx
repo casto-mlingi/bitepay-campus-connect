@@ -334,7 +334,7 @@ type Ctx = {
   markNotificationsRead: (userId: string) => void;
   dismissNotification: (id: string) => void;
   isOnline: boolean;
-  sync: SyncState & { hydrated: boolean; pushNow: () => Promise<void>; pullNow: () => Promise<void> };
+  sync: SyncState & { hydrated: boolean; pushNow: () => Promise<void>; pullNow: () => Promise<void>; resolveConflict: (choice: "local" | "remote") => Promise<void> };
   LOW_BALANCE_THRESHOLD: number;
   store: Store | null; // current tenant's store
   stores: Store[]; // all stores (for admin & customer picker)
