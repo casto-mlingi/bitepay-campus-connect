@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
-  const { currentUser, logout, availableCanteens, selectedCanteenId, setSelectedCanteen, store } = useStore();
+  const { currentUser, logout, availableCanteens, canteenGroups, activeOrgId, selectedCanteenId, setSelectedCanteen, store } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
