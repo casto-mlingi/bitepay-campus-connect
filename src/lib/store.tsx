@@ -907,7 +907,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
-    selectedCanteenId, availableCanteens,
+    selectedCanteenId, availableCanteens, canteenGroups, activeOrgId: orgOfCurrent,
     setSelectedCanteen(storeId) {
       if (!stores.some((s) => s.id === storeId)) return;
       setSelectedCanteenId((prev) => {
