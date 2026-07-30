@@ -51,6 +51,14 @@ export type Store = {
   subscription: Subscription;
 };
 
+/** A store group ("organisation") = every canteen sharing one billing owner. */
+export const orgIdOf = (s: Store) => s.owner_user_id ?? s.id;
+/** Display name for a store group — the oldest canteen in it. */
+export function orgNameOf(stores: Store[], orgId: string): string {
+  const list = stores.filter((s) => orgIdOf(s) === orgId).sort((a, b) => a.created_at - b.created_at);
+  return list[0]?.name ?? "Store group";
+}
+
 /** Normalizers used for duplicate-account detection. */
 export const normPhone = (v: string) => (v ?? "").replace(/[^\d]/g, "").replace(/^0+/, "");
 export const normEmail = (v?: string) => (v ?? "").trim().toLowerCase();
@@ -407,6 +415,9 @@ type Ctx = {
   selectedCanteenId: string | null; // customer's currently-shopping canteen
   setSelectedCanteen: (storeId: string) => void;
   availableCanteens: Store[]; // active canteens a customer can shop from
+  /** Active canteens grouped by store group — one wallet per group. */
+  canteenGroups: { orgId: string; name: string; canteens: Store[] }[];
+  activeOrgId: string | null; // store group backing the customer's active wallet
   hasOwner: boolean;
   myStores: Store[]; // every store the signed-in staff member belongs to
   myRoleAt: (storeId: string) => StaffRole | null;
@@ -620,13 +631,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const hasOwner = profiles.some((p) => p.role === "staff" && p.staff_role === "owner" && !p.disabled);
   const LOW_BALANCE_THRESHOLD = store?.low_balance_threshold ?? 3000;
 
-  // Expose customer's wallet balance for the ACTIVE canteen (fallback to legacy field for home store).
+  // ---- Organisation (store group) helpers --------------------------------
+  // A "store group" is every canteen sharing the same billing owner. Customer
+  // wallets live at the GROUP level: one top-up spends at every canteen in it.
+  const orgIdOfId = useCallback(
+    (sid: string | null): string | null => {
+      if (!sid) return null;
+      const s = stores.find((x) => x.id === sid);
+      return s ? orgIdOf(s) : sid;
+    },
+    [stores],
+  );
+  const canteensInOrg = useCallback(
+    (orgId: string | null): Store[] => (orgId ? stores.filter((s) => orgIdOf(s) === orgId) : []),
+    [stores],
+  );
+
+  // Customer's wallet balance for the store group that owns `sid`. Legacy
+  // per-canteen balances inside the same group are merged into the total.
   const walletFor = (p: Profile, sid: string | null): number => {
     if (!sid) return 0;
-    if (p.wallets && sid in p.wallets) return p.wallets[sid];
-    if (p.store_id === sid) return p.wallet_balance; // legacy migration
-    return 0;
+    const org = orgIdOfId(sid);
+    if (!org) return 0;
+    const w = p.wallets ?? {};
+    let total = w[org] ?? 0;
+    for (const c of canteensInOrg(org)) {
+      if (c.id === org) continue;
+      if (c.id in w) total += w[c.id];
+      else if (p.store_id === c.id) total += p.wallet_balance; // legacy field
+    }
+    if (!(org in w) && p.store_id === org) total += p.wallet_balance; // legacy field
+    return total;
   };
+
   // A staff member's effective role is the one attached to the store they are
   // currently working in (falls back to the legacy single-store staff_role).
   const membershipsOf = (p: Profile): StoreMembership[] => {
@@ -657,12 +694,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
+  // Customers belong to the whole store GROUP, so every canteen in the group
+  // can serve them; staff are scoped to the individual canteen.
+  const orgOfCurrent = useMemo(() => orgIdOfId(currentStoreId), [orgIdOfId, currentStoreId]);
+  const orgCanteenIds = useMemo(() => new Set(canteensInOrg(orgOfCurrent).map((s) => s.id)), [canteensInOrg, orgOfCurrent]);
   const scopedProfiles = useMemo(
     () => currentStoreId
-      ? profiles.filter((p) => p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
+      ? profiles.filter((p) =>
+          p.role === "customer"
+            ? orgCanteenIds.has(p.store_id ?? "") || p.store_id === orgOfCurrent
+            : p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
       : [],
-    [profiles, currentStoreId],
+    [profiles, currentStoreId, orgCanteenIds, orgOfCurrent],
   );
+
+  // Active canteens grouped by store group (one shared wallet per group).
+  const canteenGroups = useMemo(() => {
+    const map = new Map<string, Store[]>();
+    for (const s of availableCanteens) {
+      const o = orgIdOf(s);
+      map.set(o, [...(map.get(o) ?? []), s]);
+    }
+    return [...map.entries()]
+      .map(([orgId, canteens]) => ({ orgId, name: orgNameOf(stores, orgId), canteens }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [availableCanteens, stores]);
+
+
 
   const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
   const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
@@ -740,19 +798,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [stores]);
 
-  // Update a customer's per-canteen wallet balance. Keeps legacy wallet_balance in sync
-  // when the target canteen is their home store, so existing UIs keep rendering.
+  // Update a customer's GROUP wallet. Legacy per-canteen balances inside the
+  // same group are merged into the group key on first write (one-time, lossless).
   const setWallet = useCallback((profileId: string, storeId: string, delta: number) => {
     setProfiles((prev) => prev.map((p) => {
       if (p.id !== profileId) return p;
+      const target = stores.find((s) => s.id === storeId);
+      const org = target ? orgIdOf(target) : storeId;
+      const siblings = stores.filter((s) => orgIdOf(s) === org).map((s) => s.id);
       const wallets = { ...(p.wallets ?? {}) };
-      const cur = wallets[storeId] ?? (p.store_id === storeId ? p.wallet_balance : 0);
+      let cur = wallets[org] ?? 0;
+      for (const cid of siblings) {
+        if (cid === org) continue;
+        if (cid in wallets) { cur += wallets[cid]; delete wallets[cid]; }
+        else if (p.store_id === cid) cur += p.wallet_balance;
+      }
+      if (!(org in wallets) && p.store_id === org) cur += p.wallet_balance;
       const nv = cur + delta;
-      wallets[storeId] = nv;
-      const legacy = p.store_id === storeId ? nv : p.wallet_balance;
-      return { ...p, wallets, wallet_balance: legacy };
+      wallets[org] = nv;
+      const inOrg = siblings.includes(p.store_id ?? "") || p.store_id === org;
+      return { ...p, wallets, wallet_balance: inOrg ? nv : p.wallet_balance };
     }));
-  }, []);
+  }, [stores]);
+
 
 
   const nextReceiptNo = () => {
@@ -777,7 +845,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const custWallet = walletFor(cust, currentStoreId);
     const cashPart = Math.max(0, Math.min(cashPortion, total));
     const walletPart = total - cashPart;
-    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance at this canteen" };
+    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance for this store group" };
     if (tender === "mobile" && cashPart > 0 && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
@@ -839,7 +907,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
-    selectedCanteenId, availableCanteens,
+    selectedCanteenId, availableCanteens, canteenGroups, activeOrgId: orgOfCurrent,
     setSelectedCanteen(storeId) {
       if (!stores.some((s) => s.id === storeId)) return;
       setSelectedCanteenId((prev) => {
@@ -1040,7 +1108,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       pushNotification({
         store_id: currentStoreId!, user_id: customerId,
         title: "Wallet topped up",
-        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance at this canteen: TZS ${(prevBal + amount).toLocaleString()}.`,
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance for this store group: TZS ${(prevBal + amount).toLocaleString()}.`,
         kind: "topup",
       });
       return { ok: true };
@@ -1061,14 +1129,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     signup(name, phone, password, store_id) {
-      if (!store_id || !stores.some((s) => s.id === store_id)) return null;
+      // `store_id` may be a canteen id or a store-group id — the wallet is keyed to the group.
+      const target = stores.find((s) => s.id === store_id);
+      const org = target ? orgIdOf(target) : (stores.some((s) => orgIdOf(s) === store_id) ? store_id : null);
+      if (!org) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [store_id]: 0 }, role: "customer", created_at: Date.now(), store_id };
+      const home = target?.id ?? stores.filter((s) => orgIdOf(s) === org).sort((a, b) => a.created_at - b.created_at)[0]?.id ?? org;
+      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [org]: 0 }, role: "customer", created_at: Date.now(), store_id: home };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
-      setSelectedCanteenId(store_id);
+      setSelectedCanteenId(home);
       return u;
     },
+
 
     logout() { setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
@@ -1157,7 +1230,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     findCustomer(query) {
       const q = query.trim().toLowerCase();
       if (!q) return null;
-      return profiles.find((p) => p.role === "customer" && p.store_id === currentStoreId && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
+      return scopedProfiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
     addCustomer({ full_name, phone, initial_balance = 0 }) {
       if (!currentStoreId) return null;
@@ -1464,7 +1537,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications]);
+  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

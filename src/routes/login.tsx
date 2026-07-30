@@ -21,7 +21,7 @@ export const Route = createFileRoute("/login")({
 type Tab = "customer" | "staff";
 
 function LoginPage() {
-  const { login, signup, hasOwner, store, stores } = useStore();
+  const { login, signup, hasOwner, store, stores, canteenGroups } = useStore();
   const loginFn = useServerFn(loginUser);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
@@ -53,7 +53,7 @@ function LoginPage() {
       navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
-      const targetStore = stores.length === 1 ? stores[0].id : signupStoreId;
+      const targetStore = canteenGroups.length === 1 ? canteenGroups[0].orgId : signupStoreId;
       if (!targetStore) return setError("Choose which store to sign up for");
       const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
@@ -110,15 +110,23 @@ function LoginPage() {
                   <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full name</Label>
                   <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="mt-1.5 h-12 rounded-xl" />
                 </div>
-                {stores.length > 1 && (
+                {canteenGroups.length > 1 && (
                   <div>
                     <Label htmlFor="store" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Choose your store</Label>
                     <select id="store" value={signupStoreId} onChange={(e) => setSignupStoreId(e.target.value)} className="mt-1.5 h-12 w-full rounded-xl border bg-background px-3 text-sm">
                       <option value="">Select a store…</option>
-                      {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.location}</option>)}
+                      {canteenGroups.map((g) => (
+                        <option key={g.orgId} value={g.orgId}>
+                          {g.name}{g.canteens.length > 1 ? ` — ${g.canteens.length} canteens` : g.canteens[0]?.location ? ` — ${g.canteens[0].location}` : ""}
+                        </option>
+                      ))}
                     </select>
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      One wallet works at every canteen in the store you pick. You can shop at other stores later — each keeps its own balance.
+                    </p>
                   </div>
                 )}
+
               </>
             )}
 

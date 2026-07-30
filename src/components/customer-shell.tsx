@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
-  const { currentUser, logout, availableCanteens, selectedCanteenId, setSelectedCanteen, store } = useStore();
+  const { currentUser, logout, availableCanteens, canteenGroups, activeOrgId, selectedCanteenId, setSelectedCanteen, store } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,26 +42,40 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
             </button>
             {open && (
               <div className="absolute left-0 right-0 mt-1 bg-surface border rounded-xl shadow-lg overflow-hidden z-50 max-h-72 overflow-y-auto">
-                {availableCanteens.length === 0 ? (
+                {canteenGroups.length === 0 ? (
                   <div className="px-3 py-3 text-xs text-muted-foreground">No canteens available yet.</div>
-                ) : availableCanteens.map((c) => {
-                  const selected = c.id === selectedCanteenId;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => { setSelectedCanteen(c.id); setOpen(false); }}
-                      className={`w-full text-left px-3 py-2.5 flex items-center gap-2 text-sm hover:bg-muted ${selected ? "bg-primary/5" : ""}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate">{c.name}</div>
-                        {c.location && <div className="text-[11px] text-muted-foreground truncate">{c.location}</div>}
-                      </div>
-                      {selected && <Check className="w-4 h-4 text-primary shrink-0" />}
-                    </button>
-                  );
-                })}
+                ) : canteenGroups.map((g) => (
+                  <div key={g.orgId}>
+                    <div className="px-3 pt-2.5 pb-1 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate">{g.name}</span>
+                      {g.orgId === activeOrgId && (
+                        <span className="text-[10px] font-semibold text-primary shrink-0">one wallet</span>
+                      )}
+                    </div>
+                    {g.canteens.map((c) => {
+                      const selected = c.id === selectedCanteenId;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => { setSelectedCanteen(c.id); setOpen(false); }}
+                          className={`w-full text-left px-3 py-2.5 flex items-center gap-2 text-sm hover:bg-muted ${selected ? "bg-primary/5" : ""}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold truncate">{c.name}</div>
+                            {c.location && <div className="text-[11px] text-muted-foreground truncate">{c.location}</div>}
+                          </div>
+                          {selected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+                <div className="px-3 py-2 border-t text-[11px] text-muted-foreground">
+                  Your wallet balance is shared across every canteen in the same group.
+                </div>
               </div>
             )}
+
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
