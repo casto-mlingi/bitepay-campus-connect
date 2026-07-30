@@ -1462,7 +1462,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     assignCustomDishStock(id, { ingredients, labor_cost = 0 }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
-      if (!can("inventory.manage")) return { ok: false, reason: "Not allowed" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Not allowed" };
       const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
       if (!req || !currentStoreId) return { ok: false, reason: "Request not found" };
       if (req.status !== "confirmed") return { ok: false, reason: "Customer has not confirmed the budget yet" };
