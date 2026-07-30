@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store as StoreIcon, ChevronDown, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { SyncPill } from "@/components/sync-pill";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
   const { currentUser, logout, availableCanteens, selectedCanteenId, setSelectedCanteen, store } = useStore();
@@ -68,6 +69,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
               <User className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium">{currentUser?.full_name}</span>
             </div>
+            <SyncPill />
             <button onClick={handleLogout} aria-label="Sign out" className="p-2 rounded-lg hover:bg-muted">
               <LogOut className="w-4 h-4" />
             </button>

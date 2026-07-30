@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { pushSnapshot, pullSnapshot } from "@/lib/sync.functions";
 
 export const SNAPSHOT_KEY = "bitepay.snapshot.v1";
+const DIRTY_KEY = `${SNAPSHOT_KEY}.dirty`;
 export const DB_PROFILE_KEY = "bitepay.active_db_profile";
 export type DbProfileId = "memory" | "postgres";
 
@@ -63,7 +64,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         suppressRef.current = true;
         revisionRef.current = res.revision;
         applyRef.current(JSON.parse(res.payload) as T);
-        localStorage.setItem(SNAPSHOT_KEY, res.payload);
+        try {
+          localStorage.setItem(SNAPSHOT_KEY, res.payload);
+          localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(res.revision));
+          localStorage.setItem(DIRTY_KEY, "0");
+        } catch { /* ignore */ }
       }
       setState((s) => ({
         ...s,
@@ -90,6 +95,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         await remotePull(true);
         return;
       }
+      try { localStorage.setItem(DIRTY_KEY, "0"); } catch { /* ignore */ }
       setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now() }));
     } catch (err) {
       setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
@@ -99,6 +105,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   // Boot: local first (instant + offline safe), then remote.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let dirty = false;
     try {
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (raw) {
@@ -106,11 +113,15 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         applyRef.current(JSON.parse(raw) as T);
       }
       revisionRef.current = Number(localStorage.getItem(`${SNAPSHOT_KEY}.rev`) ?? 0);
+      dirty = localStorage.getItem(DIRTY_KEY) === "1";
     } catch {
       /* corrupt snapshot — start fresh */
     }
     setHydrated(true);
-    void remotePull();
+    // No unpushed local edits → the database is the source of truth, so always
+    // adopt the remote snapshot (local revision counters are per-device and
+    // can drift above the server's).
+    void remotePull(!dirty);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -126,6 +137,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     try {
       localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
       localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(rev));
+      localStorage.setItem(DIRTY_KEY, "1");
     } catch {
       /* quota exceeded — remote push still carries the data */
     }
@@ -141,6 +153,28 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     if (!isOnline) setState((s) => ({ ...s, status: "offline" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, hydrated]);
+
+  // Keep dashboards live: poll the database for newer revisions while idle.
+  const pendingRef = useRef(state.pendingPush);
+  pendingRef.current = state.pendingPush;
+  useEffect(() => {
+    if (!hydrated) return;
+    const id = setInterval(() => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      if (pendingRef.current) return;
+      void remotePull(false);
+    }, 20000);
+    return () => clearInterval(id);
+  }, [hydrated, remotePull]);
+
+  // Refresh when the tab regains focus.
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    const onFocus = () => { if (!pendingRef.current) void remotePull(false); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [hydrated, remotePull]);
+
 
   return {
     ...state,
