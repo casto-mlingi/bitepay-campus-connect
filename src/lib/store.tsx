@@ -415,6 +415,9 @@ type Ctx = {
   selectedCanteenId: string | null; // customer's currently-shopping canteen
   setSelectedCanteen: (storeId: string) => void;
   availableCanteens: Store[]; // active canteens a customer can shop from
+  /** Active canteens grouped by store group — one wallet per group. */
+  canteenGroups: { orgId: string; name: string; canteens: Store[] }[];
+  activeOrgId: string | null; // store group backing the customer's active wallet
   hasOwner: boolean;
   myStores: Store[]; // every store the signed-in staff member belongs to
   myRoleAt: (storeId: string) => StaffRole | null;
