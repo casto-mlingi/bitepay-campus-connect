@@ -131,6 +131,7 @@ function HomePage() {
             { icon: <BarChart3 className="w-5 h-5" />, title: "Treasury & P&L", body: "Working capital, wallet liabilities, COGS and net profit — updated in real time." },
             { icon: <ClipboardList className="w-5 h-5" />, title: "Shifts & Z-reports", body: "Open and close shifts per cashier with a settlement journal at end of day." },
             { icon: <ShieldCheck className="w-5 h-5" />, title: "Role-based access", body: "Owner, supervisor and cashier permissions — each sees only what they should." },
+            { icon: <RefreshCw className="w-5 h-5" />, title: "Shared devices, zero prompts", body: "Many owners can sign in on one tablet. Work saves offline and merges automatically with the cloud — no version questions." },
           ].map((f) => (
             <div key={f.title} className="p-5 rounded-2xl border bg-surface hover:shadow-lg transition">
               <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center">{f.icon}</div>
