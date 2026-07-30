@@ -28,6 +28,8 @@ function SetupWizard() {
   const [storeName, setStoreName] = useState("");
   const [location, setLocation] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+
   const [currency, setCurrency] = useState("TZS");
   const [lowThreshold, setLowThreshold] = useState<number>(3000);
 
