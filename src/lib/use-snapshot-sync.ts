@@ -91,6 +91,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         await remotePull(true);
         return;
       }
+      try { localStorage.setItem(DIRTY_KEY, "0"); } catch { /* ignore */ }
       setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now() }));
     } catch (err) {
       setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
@@ -100,6 +101,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   // Boot: local first (instant + offline safe), then remote.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let dirty = false;
     try {
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (raw) {
@@ -107,11 +109,15 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         applyRef.current(JSON.parse(raw) as T);
       }
       revisionRef.current = Number(localStorage.getItem(`${SNAPSHOT_KEY}.rev`) ?? 0);
+      dirty = localStorage.getItem(DIRTY_KEY) === "1";
     } catch {
       /* corrupt snapshot — start fresh */
     }
     setHydrated(true);
-    void remotePull();
+    // No unpushed local edits → the database is the source of truth, so always
+    // adopt the remote snapshot (local revision counters are per-device and
+    // can drift above the server's).
+    void remotePull(!dirty);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -127,6 +133,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     try {
       localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
       localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(rev));
+      localStorage.setItem(DIRTY_KEY, "1");
     } catch {
       /* quota exceeded — remote push still carries the data */
     }
