@@ -49,6 +49,10 @@ function SetupWizard() {
     e.preventDefault();
     setError("");
     if (!storeName.trim() || !contactPhone.trim()) return setError("Store name and contact phone are required");
+    if (!/^\S+@\S+\.\S+$/.test(adminEmail.trim())) return setError("Enter a valid admin email");
+    const dup = duplicateStoreReason(stores, { contact_phone: contactPhone, admin_email: adminEmail });
+    if (dup) return setError(dup);
+
     setStep(2);
   };
 
