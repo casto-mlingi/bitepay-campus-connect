@@ -490,6 +490,12 @@ type Ctx = {
   customDishRequests: CustomDishRequest[];
   submitCustomDishRequest: (input: { dish_name: string; description: string; ingredients: string[]; suggested_price?: number }) => CustomDishRequest | null;
   respondCustomDishRequest: (id: string, input: { action: "accept" | "reject"; price?: number; note?: string; reason?: string }) => Ok | Fail;
+  // Customer replies to the quote — accepting debits the wallet up-front.
+  confirmCustomDishQuote: (id: string) => Ok | Fail;
+  declineCustomDishQuote: (id: string) => Ok | Fail;
+  // Owner assigns raw materials + labour, which costs the job, deducts stock and
+  // pushes a paid order onto the live board.
+  assignCustomDishStock: (id: string, input: { ingredients: BatchIngredient[]; labor_cost?: number }) => Ok | Fail;
 
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
