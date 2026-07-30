@@ -514,7 +514,7 @@ function UsersSection({ profiles, storeName }: { profiles: ReturnType<typeof use
     return profiles.filter((p) => {
       if (role !== "all" && p.role !== role) return false;
       if (!term) return true;
-      return `${p.full_name} ${p.phone ?? ""} ${p.student_id ?? ""}`.toLowerCase().includes(term);
+      return `${p.full_name} ${p.phone ?? ""}`.toLowerCase().includes(term);
     });
   }, [profiles, role, term]);
 
@@ -523,12 +523,12 @@ function UsersSection({ profiles, storeName }: { profiles: ReturnType<typeof use
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h3 className="font-bold">Users ({filtered.length.toLocaleString()} of {profiles.length.toLocaleString()})</h3>
         <Button variant="outline" className="h-9" onClick={() => downloadCsv(`bitepay-users-${new Date().toISOString().slice(0, 10)}.csv`,
-          [["name", "role", "phone", "student_id", "store", "wallet", "disabled"],
-            ...filtered.map((p) => [p.full_name, p.role, p.phone ?? "", p.student_id ?? "", storeName(p.store_id ?? ""), p.wallet_balance ?? 0, p.disabled ? "yes" : "no"])])}>
+          [["name", "role", "phone", "user_id", "store", "wallet", "disabled"],
+            ...filtered.map((p) => [p.full_name, p.role, p.phone ?? "", String(p.id), storeName(p.store_id ?? ""), p.wallet_balance ?? 0, p.disabled ? "yes" : "no"])])}>
           <Download className="w-4 h-4 mr-1.5" /> CSV
         </Button>
       </div>
-      <SearchBox value={q} onChange={setQ} placeholder="Search name, email, phone…" />
+      <SearchBox value={q} onChange={setQ} placeholder="Search name or phone…" />
       <div className="flex gap-1.5 mb-2">
         {(["all", "customer", "staff"] as const).map((r) => (
           <button key={r} onClick={() => setRole(r)}
@@ -544,7 +544,7 @@ function UsersSection({ profiles, storeName }: { profiles: ReturnType<typeof use
           <div className="border rounded-xl px-3 h-[72px] flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="font-semibold truncate">{p.full_name}</div>
-              <div className="text-xs text-muted-foreground truncate">{p.phone || p.student_id || "—"} · {storeName(p.store_id ?? "")}</div>
+              <div className="text-xs text-muted-foreground truncate">{p.phone || "—"} · {storeName(p.store_id ?? "")}</div>
               <div className="text-[11px] text-muted-foreground/80 truncate">
                 {p.role === "customer" ? `Wallet ${formatTZS(p.wallet_balance ?? 0)}` : `${p.staff_role ?? "staff"}${p.disabled ? " · disabled" : ""}`}
               </div>
