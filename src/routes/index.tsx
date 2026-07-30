@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChefHat, ArrowRight, Wallet, QrCode, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3, Sparkles, Check } from "lucide-react";
+import { ChefHat, ArrowRight, Wallet, QrCode, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3, Sparkles, Check, Smartphone, RefreshCw } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 
