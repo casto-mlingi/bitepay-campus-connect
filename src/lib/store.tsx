@@ -3,6 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 export type Role = "customer" | "staff";
 export type StaffRole = "cashier" | "supervisor" | "owner";
+/** A staff member's role in one specific store (multi-store support). */
+export type StoreMembership = { store_id: string; staff_role: StaffRole };
+
 export type Profile = {
   id: string;
   full_name: string;
