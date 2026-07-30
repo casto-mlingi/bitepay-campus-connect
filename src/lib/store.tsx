@@ -480,6 +480,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
+  const snapshot = useMemo(
+    () => ({
+      profiles, products, orders, transactions, rawMaterials, batches, wastage,
+      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
+      smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+      adminAuditLog, receiptSeq,
+    }),
+    [profiles, products, orders, transactions, rawMaterials, batches, wastage,
+     purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
+     smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+     adminAuditLog, receiptSeq],
+  );
+  type Snapshot = typeof snapshot;
+
+  const applySnapshot = useCallback((s: Snapshot) => {
+    if (!s || typeof s !== "object") return;
+    if (s.profiles) setProfiles(s.profiles);
+    if (s.products) setProducts(s.products);
+    if (s.orders) setOrders(s.orders);
+    if (s.transactions) setTransactions(s.transactions);
+    if (s.rawMaterials) setRawMaterials(s.rawMaterials);
+    if (s.batches) setBatches(s.batches);
+    if (s.wastage) setWastage(s.wastage);
+    if (s.purchases) setPurchases(s.purchases);
+    if (s.expenses) setExpenses(s.expenses);
+    if (s.treasuries) setTreasuries(s.treasuries);
+    if (s.shifts) setShifts(s.shifts);
+    setActiveShiftId(s.activeShiftId ?? null);
+    if (s.pendingSales) setPendingSales(s.pendingSales);
+    if (s.smsLogs) setSmsLogs(s.smsLogs);
+    if (s.notifications) setNotifications(s.notifications);
+    if (s.topUpRequests) setTopUpRequests(s.topUpRequests);
+    if (s.customDishRequests) setCustomDishRequests(s.customDishRequests);
+    if (s.stores) setStores(s.stores);
+    if (s.tickets) setTickets(s.tickets);
+    if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
+    if (s.receiptSeq) setReceiptSeq(s.receiptSeq);
+  }, []);
+
+  const sync = useSnapshotSync<Snapshot>({ snapshot, apply: applySnapshot, isOnline });
+
   const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
   const availableCanteens = useMemo(
     () => stores.filter((s) => s.subscription.status === "active"),
