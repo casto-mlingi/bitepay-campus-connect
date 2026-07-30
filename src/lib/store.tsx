@@ -691,12 +691,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
+  // Customers belong to the whole store GROUP, so every canteen in the group
+  // can serve them; staff are scoped to the individual canteen.
+  const orgOfCurrent = useMemo(() => orgIdOfId(currentStoreId), [orgIdOfId, currentStoreId]);
+  const orgCanteenIds = useMemo(() => new Set(canteensInOrg(orgOfCurrent).map((s) => s.id)), [canteensInOrg, orgOfCurrent]);
   const scopedProfiles = useMemo(
     () => currentStoreId
-      ? profiles.filter((p) => p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
+      ? profiles.filter((p) =>
+          p.role === "customer"
+            ? orgCanteenIds.has(p.store_id ?? "") || p.store_id === orgOfCurrent
+            : p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
       : [],
-    [profiles, currentStoreId],
+    [profiles, currentStoreId, orgCanteenIds, orgOfCurrent],
   );
+
 
   const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
   const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
