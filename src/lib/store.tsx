@@ -894,29 +894,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     updateStaff(id, patch) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
+      const target = profiles.find((p) => p.id === id && (p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId)));
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
+      const targetRole = roleAt(target, currentStoreId) ?? target.staff_role;
       if (patch.staff_role && patch.staff_role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
-      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
+      if (targetRole === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
       if (patch.phone && profiles.some((p) => p.phone === patch.phone!.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
-      setProfiles((prev) => prev.map((p) => p.id === id ? {
-        ...p, full_name: patch.full_name?.trim() || p.full_name,
-        phone: patch.phone?.trim() || p.phone, staff_role: patch.staff_role ?? p.staff_role,
-      } : p));
+      setProfiles((prev) => prev.map((p) => {
+        if (p.id !== id) return p;
+        const nextRole = patch.staff_role ?? targetRole;
+        const memberships = membershipsOf(p).map((m) => m.store_id === currentStoreId && nextRole ? { ...m, staff_role: nextRole } : m);
+        return {
+          ...p, full_name: patch.full_name?.trim() || p.full_name,
+          phone: patch.phone?.trim() || p.phone,
+          staff_role: p.store_id === currentStoreId ? (nextRole ?? p.staff_role) : p.staff_role,
+          memberships,
+        };
+      }));
       return { ok: true };
     },
     disableStaff(id, disabled) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
-      const target = profiles.find((p) => p.id === id && p.store_id === currentStoreId);
+      const target = profiles.find((p) => p.id === id && (p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId)));
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
-      if (target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
+      const targetRole = roleAt(target, currentStoreId) ?? target.staff_role;
+      if (targetRole === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can disable an owner" };
       if (target.id === currentUser?.id) return { ok: false, reason: "You cannot disable yourself" };
-      if (disabled && target.staff_role === "owner") {
-        const activeOwners = profiles.filter((p) => p.store_id === currentStoreId && p.staff_role === "owner" && !p.disabled && p.id !== id).length;
+      if (disabled && targetRole === "owner") {
+        const activeOwners = profiles.filter((p) => p.id !== id && !p.disabled && roleAt(p, currentStoreId) === "owner").length;
         if (activeOwners === 0) return { ok: false, reason: "At least one active owner is required" };
       }
       setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, disabled } : p));
       return { ok: true };
+
     },
     resetStaffCredential(id, kind, value) {
       const target = profiles.find((p) => p.id === id);
