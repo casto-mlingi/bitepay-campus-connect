@@ -774,19 +774,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [stores]);
 
-  // Update a customer's per-canteen wallet balance. Keeps legacy wallet_balance in sync
-  // when the target canteen is their home store, so existing UIs keep rendering.
+  // Update a customer's GROUP wallet. Legacy per-canteen balances inside the
+  // same group are merged into the group key on first write (one-time, lossless).
   const setWallet = useCallback((profileId: string, storeId: string, delta: number) => {
     setProfiles((prev) => prev.map((p) => {
       if (p.id !== profileId) return p;
+      const target = stores.find((s) => s.id === storeId);
+      const org = target ? orgIdOf(target) : storeId;
+      const siblings = stores.filter((s) => orgIdOf(s) === org).map((s) => s.id);
       const wallets = { ...(p.wallets ?? {}) };
-      const cur = wallets[storeId] ?? (p.store_id === storeId ? p.wallet_balance : 0);
+      let cur = wallets[org] ?? 0;
+      for (const cid of siblings) {
+        if (cid === org) continue;
+        if (cid in wallets) { cur += wallets[cid]; delete wallets[cid]; }
+        else if (p.store_id === cid) cur += p.wallet_balance;
+      }
+      if (!(org in wallets) && p.store_id === org) cur += p.wallet_balance;
       const nv = cur + delta;
-      wallets[storeId] = nv;
-      const legacy = p.store_id === storeId ? nv : p.wallet_balance;
-      return { ...p, wallets, wallet_balance: legacy };
+      wallets[org] = nv;
+      const inOrg = siblings.includes(p.store_id ?? "") || p.store_id === org;
+      return { ...p, wallets, wallet_balance: inOrg ? nv : p.wallet_balance };
     }));
-  }, []);
+  }, [stores]);
+
 
 
   const nextReceiptNo = () => {
