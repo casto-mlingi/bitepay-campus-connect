@@ -154,6 +154,28 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, hydrated]);
 
+  // Keep dashboards live: poll the database for newer revisions while idle.
+  const pendingRef = useRef(state.pendingPush);
+  pendingRef.current = state.pendingPush;
+  useEffect(() => {
+    if (!hydrated) return;
+    const id = setInterval(() => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      if (pendingRef.current) return;
+      void remotePull(false);
+    }, 20000);
+    return () => clearInterval(id);
+  }, [hydrated, remotePull]);
+
+  // Refresh when the tab regains focus.
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    const onFocus = () => { if (!pendingRef.current) void remotePull(false); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [hydrated, remotePull]);
+
+
   return {
     ...state,
     hydrated,
