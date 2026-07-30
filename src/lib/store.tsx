@@ -70,6 +70,26 @@ export type Ticket = {
 export type SuperAdmin = { username: string; password: string; full_name: string };
 export type AdminAuditLog = { id: string; action: string; detail: string; created_at: number };
 
+/** Mobile-money account subscriptions are paid into. */
+export const BILLING_LIPA = { number: "30030336", provider: "TTCL", account_name: "Computerized Africa" };
+
+export type SubscriptionPaymentStatus = "pending" | "approved" | "rejected";
+export type SubscriptionPayment = {
+  id: string;
+  store_id: string;
+  store_name: string;
+  plan: SubscriptionPlan;
+  amount: number;
+  receipt_no: string;
+  payer_name: string;
+  submitted_by_id: string;
+  submitted_by_name: string;
+  status: SubscriptionPaymentStatus;
+  created_at: number;
+  reviewed_at?: number;
+  note?: string;
+};
+
 export const PLAN_PRICE: Record<SubscriptionPlan, number> = { trial: 0, starter: 25000, pro: 60000, enterprise: 150000 };
 export const PLAN_LABEL: Record<SubscriptionPlan, string> = { trial: "Free Trial", starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
 export const PLAN_FEATURES: Record<SubscriptionPlan, string[]> = {
