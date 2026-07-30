@@ -21,7 +21,7 @@ export const Route = createFileRoute("/login")({
 type Tab = "customer" | "staff";
 
 function LoginPage() {
-  const { login, signup, hasOwner, store, stores } = useStore();
+  const { login, signup, hasOwner, store, stores, canteenGroups } = useStore();
   const loginFn = useServerFn(loginUser);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
@@ -53,7 +53,7 @@ function LoginPage() {
       navigate({ to: "/dashboard" });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
-      const targetStore = stores.length === 1 ? stores[0].id : signupStoreId;
+      const targetStore = canteenGroups.length === 1 ? canteenGroups[0].orgId : signupStoreId;
       if (!targetStore) return setError("Choose which store to sign up for");
       const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
