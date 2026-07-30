@@ -22,6 +22,9 @@ const LABELS: Record<string, string> = {
   notifications: "Notifications",
   tickets: "Support tickets",
   smsLogs: "Message logs",
+  adminAuditLog: "Admin audit log",
+  treasuries: "Treasury accounts",
+  cart: "Cart items",
 };
 
 type Row = { key: string; label: string; mine: number; theirs: number };
