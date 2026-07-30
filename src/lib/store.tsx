@@ -1421,6 +1421,87 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return { ok: true };
     },
+    confirmCustomDishQuote(id) {
+      if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      const req = customDishRequests.find((r) => r.id === id && r.customer_id === currentUser.id);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status !== "accepted") return { ok: false, reason: "This quote is no longer open" };
+      const price = req.staff_price ?? req.suggested_price ?? 0;
+      if (price <= 0) return { ok: false, reason: "No price was quoted" };
+      const bal = walletFor(currentUser, req.store_id);
+      if (bal < price) return { ok: false, reason: `Insufficient balance — top up TZS ${(price - bal).toLocaleString()} first` };
+      const now = Date.now();
+      setWallet(currentUser.id, req.store_id, -price);
+      setTransactions((prev) => [{
+        id: uid("t"), store_id: req.store_id, customer_id: currentUser.id, type: "deduction",
+        amount: price, description: `Custom dish: ${req.dish_name}`, created_at: now,
+      }, ...prev]);
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id
+        ? { ...r, status: "confirmed", paid_amount: price, confirmed_at: now } : r));
+      pushNotification({
+        store_id: req.store_id, user_id: currentUser.id, kind: "order",
+        title: "Budget confirmed ✅",
+        body: `TZS ${price.toLocaleString()} held for "${req.dish_name}". The kitchen will start once stock is assigned.`,
+      });
+      for (const staff of profiles.filter((p) => p.role === "staff" && p.store_id === req.store_id)) {
+        pushNotification({
+          store_id: req.store_id, user_id: staff.id, kind: "order",
+          title: "Menu request paid", body: `${req.customer_name} confirmed TZS ${price.toLocaleString()} for "${req.dish_name}". Assign raw materials in Inventory → Menu Requests.`,
+        });
+      }
+      return { ok: true };
+    },
+    declineCustomDishQuote(id) {
+      if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      const req = customDishRequests.find((r) => r.id === id && r.customer_id === currentUser.id);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status !== "accepted") return { ok: false, reason: "This quote is no longer open" };
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id
+        ? { ...r, status: "cancelled", reject_reason: "Budget declined by customer", resolved_at: Date.now() } : r));
+      return { ok: true };
+    },
+    assignCustomDishStock(id, { ingredients, labor_cost = 0 }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("inventory.manage")) return { ok: false, reason: "Not allowed" };
+      const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!req || !currentStoreId) return { ok: false, reason: "Request not found" };
+      if (req.status !== "confirmed") return { ok: false, reason: "Customer has not confirmed the budget yet" };
+      if (ingredients.length === 0) return { ok: false, reason: "Assign at least one raw material" };
+      let raw_cost = 0;
+      for (const ing of ingredients) {
+        const raw = rawMaterials.find((r) => r.id === ing.raw_id && r.store_id === currentStoreId);
+        if (!raw) return { ok: false, reason: "Unknown raw material" };
+        if (ing.qty <= 0) return { ok: false, reason: `Quantity for ${raw.name} must be greater than zero` };
+        if (raw.stock < ing.qty) return { ok: false, reason: `Not enough ${raw.name} in stock (${raw.stock} ${raw.unit} left)` };
+        raw_cost += raw.avg_cost * ing.qty;
+      }
+      const total_cost = Math.round(raw_cost + labor_cost);
+      const now = Date.now();
+      const price = req.paid_amount ?? req.staff_price ?? 0;
+      const orderId = nextOrderId();
+      const order: Order = {
+        id: orderId, store_id: currentStoreId, customer_id: req.customer_id, customer_name: req.customer_name,
+        items: [{ product_id: `custom-${req.id}`, name: `${req.dish_name} (custom)`, price, qty: 1 }],
+        total_amount: price, status: "new", delivery_type: "pickup", payment_status: "paid",
+        created_at: now, wallet_paid: price, cash_paid: 0,
+        cashier_id: currentUser.id, cashier_name: currentUser.full_name, shift_id: activeShift?.id,
+      };
+      setRawMaterials((prev) => prev.map((r) => {
+        const ing = ingredients.find((i) => i.raw_id === r.id);
+        return ing ? { ...r, stock: Math.max(0, r.stock - ing.qty) } : r;
+      }));
+      setOrders((prev) => [order, ...prev]);
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id ? {
+        ...r, status: "in_kitchen", cost_ingredients: ingredients, labor_cost,
+        raw_cost, total_cost, assigned_at: now, assigned_by: currentUser.full_name, order_id: orderId,
+      } : r));
+      pushNotification({
+        store_id: currentStoreId, user_id: req.customer_id, kind: "order",
+        title: "Your dish is being prepared 👨‍🍳",
+        body: `"${req.dish_name}" moved to the kitchen. Track it in your orders.`,
+      });
+      return { ok: true };
+    },
     syncOutbox() {
       let synced = 0, failed = 0;
       const rem: PendingSale[] = [];
