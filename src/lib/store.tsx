@@ -1113,14 +1113,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     signup(name, phone, password, store_id) {
-      if (!store_id || !stores.some((s) => s.id === store_id)) return null;
+      // `store_id` may be a canteen id or a store-group id — the wallet is keyed to the group.
+      const target = stores.find((s) => s.id === store_id);
+      const org = target ? orgIdOf(target) : (stores.some((s) => orgIdOf(s) === store_id) ? store_id : null);
+      if (!org) return null;
       if (profiles.some((p) => p.phone === phone)) return null;
-      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [store_id]: 0 }, role: "customer", created_at: Date.now(), store_id };
+      const home = target?.id ?? stores.filter((s) => orgIdOf(s) === org).sort((a, b) => a.created_at - b.created_at)[0]?.id ?? org;
+      const u: Profile = { id: uid("u"), full_name: name, phone, password, wallet_balance: 0, wallets: { [org]: 0 }, role: "customer", created_at: Date.now(), store_id: home };
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
-      setSelectedCanteenId(store_id);
+      setSelectedCanteenId(home);
       return u;
     },
+
 
     logout() { setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
