@@ -1,3 +1,4 @@
+import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
@@ -333,6 +334,7 @@ type Ctx = {
   markNotificationsRead: (userId: string) => void;
   dismissNotification: (id: string) => void;
   isOnline: boolean;
+  sync: SyncState & { hydrated: boolean; pushNow: () => Promise<void>; pullNow: () => Promise<void> };
   LOW_BALANCE_THRESHOLD: number;
   store: Store | null; // current tenant's store
   stores: Store[]; // all stores (for admin & customer picker)
@@ -479,6 +481,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
+
+  // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
+  const snapshot = useMemo(
+    () => ({
+      profiles, products, orders, transactions, rawMaterials, batches, wastage,
+      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
+      smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+      adminAuditLog, receiptSeq,
+    }),
+    [profiles, products, orders, transactions, rawMaterials, batches, wastage,
+     purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
+     smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+     adminAuditLog, receiptSeq],
+  );
+  type Snapshot = typeof snapshot;
+
+  const applySnapshot = useCallback((s: Snapshot) => {
+    if (!s || typeof s !== "object") return;
+    if (s.profiles) setProfiles(s.profiles);
+    if (s.products) setProducts(s.products);
+    if (s.orders) setOrders(s.orders);
+    if (s.transactions) setTransactions(s.transactions);
+    if (s.rawMaterials) setRawMaterials(s.rawMaterials);
+    if (s.batches) setBatches(s.batches);
+    if (s.wastage) setWastage(s.wastage);
+    if (s.purchases) setPurchases(s.purchases);
+    if (s.expenses) setExpenses(s.expenses);
+    if (s.treasuries) setTreasuries(s.treasuries);
+    if (s.shifts) setShifts(s.shifts);
+    setActiveShiftId(s.activeShiftId ?? null);
+    if (s.pendingSales) setPendingSales(s.pendingSales);
+    if (s.smsLogs) setSmsLogs(s.smsLogs);
+    if (s.notifications) setNotifications(s.notifications);
+    if (s.topUpRequests) setTopUpRequests(s.topUpRequests);
+    if (s.customDishRequests) setCustomDishRequests(s.customDishRequests);
+    if (s.stores) setStores(s.stores);
+    if (s.tickets) setTickets(s.tickets);
+    if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
+    if (s.receiptSeq) setReceiptSeq(s.receiptSeq);
+  }, []);
+
+  const sync = useSnapshotSync<Snapshot>({ snapshot, apply: applySnapshot, isOnline });
 
   const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
   const availableCanteens = useMemo(
@@ -683,7 +727,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
-    isOnline, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
+    isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
     selectedCanteenId, availableCanteens,
     setSelectedCanteen(storeId) {
       if (!stores.some((s) => s.id === storeId)) return;
@@ -1215,7 +1259,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId]);
+  }), [currentUser, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
