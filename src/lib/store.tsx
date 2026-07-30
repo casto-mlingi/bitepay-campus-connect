@@ -37,7 +37,9 @@ export type Subscription = {
 
 export type Store = {
   id: string;
+  owner_user_id?: string; // billing owner — groups stores under one account
   name: string;
+
   location: string;
   contact_phone: string;
   currency: string;
