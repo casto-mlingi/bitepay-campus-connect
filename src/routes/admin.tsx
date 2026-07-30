@@ -105,7 +105,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const {
     stores, allProfiles, adminData, tickets,
     addSubscriptionDays, changePlan, setSubscriptionStatus,
-    superAdmin, adminAuditLog,
+    superAdmin, adminAuditLog, subscriptionPayments, reviewSubscriptionPayment,
   } = useStore();
 
   const [section, setSection] = useState<Section>("home");
@@ -263,7 +263,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         )}
 
         {section === "payments" && (
-          <PaymentsSection payments={payments} pending={pendingTopUps} storeName={storeName} accumulated={accumulatedRevenue} />
+          <PaymentsSection payments={payments} pending={pendingTopUps} storeName={storeName}
+            accumulated={accumulatedRevenue + subscriptionPayments.filter((p) => p.status === "approved").reduce((a, b) => a + b.amount, 0)}
+            subPayments={subscriptionPayments} onReview={reviewSubscriptionPayment} />
         )}
 
         {section === "users" && <UsersSection profiles={allProfiles} storeName={storeName} />}
@@ -422,11 +424,13 @@ function QuickAction({ icon, label, onClick }: { icon: React.ReactNode; label: s
 
 type PaymentRow = { id: string; ts: number; action: string; days: number; target: string; amount: number; plan: string };
 
-function PaymentsSection({ payments, pending, storeName, accumulated }: {
+function PaymentsSection({ payments, pending, storeName, accumulated, subPayments, onReview }: {
   payments: PaymentRow[];
   pending: ReturnType<typeof useStore>["adminData"]["topUpRequests"];
   storeName: (id: string) => string;
   accumulated: number;
+  subPayments: ReturnType<typeof useStore>["subscriptionPayments"];
+  onReview: ReturnType<typeof useStore>["reviewSubscriptionPayment"];
 }) {
   const [q, setQ] = useState("");
   const term = useDeferredValue(q).trim().toLowerCase();
@@ -435,11 +439,50 @@ function PaymentsSection({ payments, pending, storeName, accumulated }: {
     [payments, term],
   );
 
+  const subPending = subPayments.filter((p) => p.status === "pending");
+  const subReviewed = subPayments.filter((p) => p.status !== "pending");
+
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
         <Stat icon={<TrendingUp className="w-4 h-4" />} label="Collected" value={formatTZS(accumulated)} />
-        <Stat icon={<Clock className="w-4 h-4" />} label="Pending approvals" value={pending.length.toLocaleString()} />
+        <Stat icon={<Clock className="w-4 h-4" />} label="Pending approvals" value={(pending.length + subPending.length).toLocaleString()} />
+      </div>
+
+      <div className="bg-white border rounded-2xl p-5">
+        <h3 className="font-bold flex items-center gap-2"><CreditCard className="w-4 h-4" /> Subscription payments awaiting verification ({subPending.length})</h3>
+        {subPending.length === 0 ? (
+          <p className="text-sm text-muted-foreground mt-3">No submitted receipts right now.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {subPending.map((p) => (
+              <div key={p.id} className="border rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{p.store_name} · {p.plan}</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    Receipt <span className="font-mono font-semibold text-foreground">{p.receipt_no}</span>
+                    {p.payer_name ? ` · ${p.payer_name}` : ""} · {new Date(p.created_at).toLocaleString()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-primary whitespace-nowrap">{formatTZS(p.amount)}</span>
+                  <Button className="h-9" onClick={() => onReview(p.id, "approve")}>Approve</Button>
+                  <Button variant="outline" className="h-9" onClick={() => onReview(p.id, "reject")}>Reject</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {subReviewed.length > 0 && (
+          <div className="mt-4 border-t pt-3 space-y-1.5">
+            {subReviewed.slice(0, 20).map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate">{p.store_name} · <span className="font-mono">{p.receipt_no}</span></span>
+                <span className={`font-semibold ${p.status === "approved" ? "text-emerald-600" : "text-red-600"}`}>{p.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white border rounded-2xl p-5">
