@@ -197,11 +197,38 @@ function RequestDishSection() {
                   <div className="font-semibold text-sm truncate">{r.dish_name}</div>
                   <div className="text-xs text-muted-foreground line-clamp-1">{r.description}</div>
                   {r.status === "accepted" && r.staff_price != null && (
-                    <div className="text-xs text-emerald-700 font-semibold mt-0.5">Quoted at {formatTZS(r.staff_price)}{r.staff_note ? ` · ${r.staff_note}` : ""}</div>
+                    <div className="mt-1.5">
+                      <div className="text-xs text-emerald-700 font-semibold">Quoted at {formatTZS(r.staff_price)}{r.staff_note ? ` · ${r.staff_note}` : ""}</div>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => {
+                            const res = confirmCustomDishQuote(r.id);
+                            setToast(res.ok ? "Budget confirmed — amount held from your wallet." : res.reason);
+                            setTimeout(() => setToast(""), 3600);
+                          }}
+                          className="flex-1 bg-primary text-white rounded-lg h-9 text-xs font-bold"
+                        >
+                          Confirm & pay {formatTZS(r.staff_price)}
+                        </button>
+                        <button
+                          onClick={() => declineCustomDishQuote(r.id)}
+                          className="px-3 rounded-lg border text-xs font-semibold"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
                   )}
-                  {r.status === "rejected" && r.reject_reason && (
+                  {r.status === "confirmed" && (
+                    <div className="text-xs text-emerald-700 font-semibold mt-0.5">Paid {formatTZS(r.paid_amount ?? 0)} · waiting for the kitchen to assign stock</div>
+                  )}
+                  {r.status === "in_kitchen" && (
+                    <div className="text-xs text-primary font-semibold mt-0.5">Being prepared now 👨‍🍳</div>
+                  )}
+                  {(r.status === "rejected" || r.status === "cancelled") && r.reject_reason && (
                     <div className="text-xs text-red-600 mt-0.5">{r.reject_reason}</div>
                   )}
+
                 </div>
               </div>
             ))}
