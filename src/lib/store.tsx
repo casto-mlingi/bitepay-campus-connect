@@ -737,6 +737,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    adminData: {
+      orders, transactions, tickets, topUpRequests, purchases, expenses,
+      wastage, shifts, customDishRequests, notifications, treasuries,
+    },
     orders: scopedOrders, transactions: scopedTx, cart,
     rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
