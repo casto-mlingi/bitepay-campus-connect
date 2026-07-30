@@ -845,7 +845,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const custWallet = walletFor(cust, currentStoreId);
     const cashPart = Math.max(0, Math.min(cashPortion, total));
     const walletPart = total - cashPart;
-    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance at this canteen" };
+    if (custWallet < walletPart) return { ok: false, reason: "Insufficient wallet balance for this store group" };
     if (tender === "mobile" && cashPart > 0 && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
@@ -1108,7 +1108,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       pushNotification({
         store_id: currentStoreId!, user_id: customerId,
         title: "Wallet topped up",
-        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance at this canteen: TZS ${(prevBal + amount).toLocaleString()}.`,
+        body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance for this store group: TZS ${(prevBal + amount).toLocaleString()}.`,
         kind: "topup",
       });
       return { ok: true };
