@@ -708,6 +708,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [profiles, currentStoreId, orgCanteenIds, orgOfCurrent],
   );
 
+  // Active canteens grouped by store group (one shared wallet per group).
+  const canteenGroups = useMemo(() => {
+    const map = new Map<string, Store[]>();
+    for (const s of availableCanteens) {
+      const o = orgIdOf(s);
+      map.set(o, [...(map.get(o) ?? []), s]);
+    }
+    return [...map.entries()]
+      .map(([orgId, canteens]) => ({ orgId, name: orgNameOf(stores, orgId), canteens }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [availableCanteens, stores]);
+
+
 
   const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
   const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
