@@ -45,6 +45,17 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Staff Console</div>
               </div>
             </Link>
+            {myStores.length > 1 && (
+              <select
+                aria-label="Switch store"
+                value={currentStoreId ?? ""}
+                onChange={(e) => switchStore(e.target.value)}
+                className="hidden lg:block h-9 max-w-[180px] rounded-lg border bg-background px-2 text-sm font-medium"
+              >
+                {myStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+
             <nav className="hidden md:flex items-center gap-1">
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
