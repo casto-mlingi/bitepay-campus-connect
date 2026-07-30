@@ -578,16 +578,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (p.store_id === sid) return p.wallet_balance; // legacy migration
     return 0;
   };
+  // A staff member's effective role is the one attached to the store they are
+  // currently working in (falls back to the legacy single-store staff_role).
+  const membershipsOf = (p: Profile): StoreMembership[] => {
+    const list = p.memberships ?? [];
+    if (list.length) return list;
+    return p.role === "staff" && p.store_id
+      ? [{ store_id: p.store_id, staff_role: p.staff_role ?? "cashier" }]
+      : [];
+  };
+  const roleAt = (p: Profile, sid: string | null): StaffRole | null => {
+    if (!sid || p.role !== "staff") return null;
+    return membershipsOf(p).find((m) => m.store_id === sid)?.staff_role ?? null;
+  };
+
   const currentUser: Profile | null = rawUser
     ? rawUser.role === "customer"
       ? { ...rawUser, wallet_balance: walletFor(rawUser, activeStoreId) }
-      : rawUser
+      : { ...rawUser, staff_role: roleAt(rawUser, activeStoreId) ?? rawUser.staff_role }
     : null;
+
+  const myStores = useMemo(() => {
+    if (!rawUser || rawUser.role !== "staff") return [];
+    const ids = new Set(membershipsOf(rawUser).map((m) => m.store_id));
+    return stores.filter((s) => ids.has(s.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawUser, stores]);
 
 
   // Filtered per-tenant views
   const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
-  const scopedProfiles = useMemo(() => currentStoreId ? profiles.filter((p) => p.store_id === currentStoreId) : [], [profiles, currentStoreId]);
+  const scopedProfiles = useMemo(
+    () => currentStoreId
+      ? profiles.filter((p) => p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId))
+      : [],
+    [profiles, currentStoreId],
+  );
+
   const scopedOrders = useMemo(() => currentStoreId ? orders.filter((o) => o.store_id === currentStoreId) : [], [orders, currentStoreId]);
   const scopedTx = useMemo(() => currentStoreId ? transactions.filter((t) => t.store_id === currentStoreId) : [], [transactions, currentStoreId]);
   const scopedRaw = useMemo(() => currentStoreId ? rawMaterials.filter((r) => r.store_id === currentStoreId) : [], [rawMaterials, currentStoreId]);
