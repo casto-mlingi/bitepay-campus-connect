@@ -51,7 +51,6 @@ export type Store = {
   subscription: Subscription;
 };
 
-/** Normalizers used for duplicate-account detection. */
 /** A store group ("organisation") = every canteen sharing one billing owner. */
 export const orgIdOf = (s: Store) => s.owner_user_id ?? s.id;
 /** Display name for a store group — the oldest canteen in it. */
