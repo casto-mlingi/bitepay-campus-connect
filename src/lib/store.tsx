@@ -1202,7 +1202,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
-      setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: flow[o.status] } : o));
+      let becameCompleted = false;
+      setOrders((prev) => prev.map((o) => {
+        if (o.id !== id) return o;
+        const next = flow[o.status];
+        if (next === "completed" && o.status !== "completed") becameCompleted = true;
+        return { ...o, status: next };
+      }));
+      if (becameCompleted) {
+        setCustomDishRequests((prev) => prev.map((r) => r.order_id === id && r.status === "in_kitchen"
+          ? { ...r, status: "fulfilled", resolved_at: Date.now() } : r));
+      }
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!currentStoreId) return;
