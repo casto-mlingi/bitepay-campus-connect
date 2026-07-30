@@ -153,14 +153,16 @@ function LoginPage() {
           )}
 
           <div className="mt-6 pt-5 border-t space-y-2">
-            {!hasOwner && (
-              <Button
-                onClick={() => navigate({ to: "/setup" })}
-                className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-              >
-                <StoreIcon className="w-4 h-4 mr-2" /> Create your store (first time)
-              </Button>
-            )}
+            <Button
+              onClick={() => navigate({ to: "/setup" })}
+              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            >
+              <StoreIcon className="w-4 h-4 mr-2" /> {hasOwner ? "Create a new store account" : "Create your store (first time)"}
+            </Button>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Any owner can open a new canteen on this device — data stays separate per store.
+            </p>
+
             <div className="grid grid-cols-2 gap-2">
               <Link to="/admin" className="flex items-center justify-center gap-1.5 h-10 rounded-xl border text-xs font-semibold hover:bg-muted">
                 <ShieldCheck className="w-3.5 h-3.5" /> Admin console
