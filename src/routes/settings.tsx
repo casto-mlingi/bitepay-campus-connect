@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Save, Store as StoreIcon, Sparkles, ArrowUpRight, Clock } from "lucide-react";
-import { useStore, PLAN_LABEL, PLAN_PRICE, PLAN_FEATURES, type SubscriptionPlan } from "@/lib/store";
+import { Settings as SettingsIcon, Save, Store as StoreIcon, Sparkles, ArrowUpRight, Clock, Smartphone, X, CheckCircle2 } from "lucide-react";
+import { useStore, PLAN_LABEL, PLAN_PRICE, PLAN_FEATURES, BILLING_LIPA, formatTZS, type SubscriptionPlan } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,11 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { currentUser, store, can, updateStore, subscriptionDaysLeft, changePlan } = useStore();
+  const { currentUser, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showPlans, setShowPlans] = useState(false);
+  const [payPlan, setPayPlan] = useState<SubscriptionPlan | null>(null);
 
 
   useEffect(() => {
@@ -57,11 +58,10 @@ function SettingsPage() {
   const expiresOn = sub ? new Date(sub.expires_at).toLocaleDateString() : "";
 
   const pickPlan = (p: SubscriptionPlan) => {
-    changePlan(p);
-    setShowPlans(false);
-    setToast(`Switched to ${PLAN_LABEL[p]} plan`);
-    setTimeout(() => setToast(""), 1800);
+    setPayPlan(p);
   };
+
+  const pendingPayment = subscriptionPayments.find((x) => x.store_id === store?.id && x.status === "pending");
 
   return (
     <StaffShell>
@@ -103,6 +103,11 @@ function SettingsPage() {
               ))}
             </div>
           )}
+          {pendingPayment && (
+            <div className="mt-4 flex items-center gap-2 text-sm bg-white/15 rounded-xl px-3 py-2">
+              <Clock className="w-4 h-4" /> Payment for {PLAN_LABEL[pendingPayment.plan]} (receipt {pendingPayment.receipt_no}) is awaiting admin approval.
+            </div>
+          )}
         </div>
       )}
 
@@ -125,6 +130,21 @@ function SettingsPage() {
         <Button type="submit" className="w-full h-11 rounded-xl"><Save className="w-4 h-4 mr-2" /> Save settings</Button>
       </form>
 
+      {payPlan && (
+        <PaymentDialog
+          plan={payPlan}
+          onClose={() => setPayPlan(null)}
+          onSubmit={(receipt, payer) => {
+            const r = submitSubscriptionPayment({ plan: payPlan, receipt_no: receipt, payer_name: payer });
+            if (!r.ok) { setToast(r.reason); setTimeout(() => setToast(""), 2600); return; }
+            setPayPlan(null);
+            setShowPlans(false);
+            setToast("Payment submitted — awaiting admin approval");
+            setTimeout(() => setToast(""), 2600);
+          }}
+        />
+      )}
+
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background text-sm px-4 py-2 rounded-lg shadow-lg">{toast}</div>}
     </StaffShell>
   );
@@ -136,6 +156,52 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div>
       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</Label>
       <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function PaymentDialog({ plan, onClose, onSubmit }: { plan: SubscriptionPlan; onClose: () => void; onSubmit: (receipt: string, payer: string) => void }) {
+  const [receipt, setReceipt] = useState("");
+  const [payer, setPayer] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-background w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold">Pay for {PLAN_LABEL[plan]}</h3>
+            <p className="text-sm text-muted-foreground">Amount due: <span className="font-semibold text-foreground">{PLAN_PRICE[plan] === 0 ? "Free" : formatTZS(PLAN_PRICE[plan])}</span> / month</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="mt-4 rounded-2xl border bg-surface p-4">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Smartphone className="w-4 h-4 text-primary" /> How to pay</div>
+          <ol className="mt-3 space-y-2 text-sm">
+            <li>1. Dial your mobile-money menu and choose <b>Lipa kwa Simu</b>.</li>
+            <li>2. Select network <b>{BILLING_LIPA.provider}</b>.</li>
+            <li>3. Enter Lipa number <b className="text-primary text-base">{BILLING_LIPA.number}</b>.</li>
+            <li>4. Confirm the name shows <b>{BILLING_LIPA.account_name}</b>.</li>
+            <li>5. Enter {PLAN_PRICE[plan] === 0 ? "the amount" : formatTZS(PLAN_PRICE[plan])} and complete with your PIN.</li>
+            <li>6. Copy the receipt number from the confirmation SMS and paste it below.</li>
+          </ol>
+        </div>
+
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => { e.preventDefault(); onSubmit(receipt, payer); }}
+        >
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payment receipt number</Label>
+            <Input value={receipt} onChange={(e) => setReceipt(e.target.value)} placeholder="e.g. CJ12AB34XY" required className="mt-1.5" />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Name used to pay (optional)</Label>
+            <Input value={payer} onChange={(e) => setPayer(e.target.value)} placeholder="Payer name" className="mt-1.5" />
+          </div>
+          <Button type="submit" className="w-full h-11 rounded-xl"><CheckCircle2 className="w-4 h-4 mr-2" /> Submit payment</Button>
+          <p className="text-xs text-muted-foreground text-center">Your plan activates once an admin verifies the receipt.</p>
+        </form>
+      </div>
     </div>
   );
 }
