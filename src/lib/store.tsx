@@ -51,6 +51,28 @@ export type Store = {
   subscription: Subscription;
 };
 
+/** Normalizers used for duplicate-account detection. */
+export const normPhone = (v: string) => (v ?? "").replace(/[^\d]/g, "").replace(/^0+/, "");
+export const normEmail = (v?: string) => (v ?? "").trim().toLowerCase();
+
+/** Returns a human error when a store with the same phone or admin email already exists. */
+export function duplicateStoreReason(
+  stores: Store[],
+  input: { name?: string; contact_phone?: string; admin_email?: string },
+  ignoreStoreId?: string,
+): string | null {
+  const phone = normPhone(input.contact_phone ?? "");
+  const email = normEmail(input.admin_email);
+  const others = stores.filter((s) => s.id !== ignoreStoreId);
+  if (phone && others.some((s) => normPhone(s.contact_phone) === phone)) {
+    return `A store account already exists with the phone ${input.contact_phone}. Sign in to that account instead, or use a different contact phone.`;
+  }
+  if (email && others.some((s) => normEmail(s.admin_email) === email)) {
+    return `A store account already exists with the admin email ${email}. Sign in to that account instead, or use a different admin email.`;
+  }
+  return null;
+}
+
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 export type TicketReply = { id: string; from: "store" | "admin"; author_name: string; body: string; created_at: number };
