@@ -5,6 +5,7 @@ import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, typ
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { activeDbProfile, DB_PROFILE_KEY, type DbProfileId } from "@/lib/use-snapshot-sync";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -395,6 +396,7 @@ function DatabaseTab() {
   const [active, setActive] = useState<DbProfileId>(() => {
     return activeDbProfile();
   });
+  const { sync } = useStore();
   const [health, setHealth] = useState<{ ok?: boolean; latency_ms?: number; version?: string; table_count?: number; error?: string; loading: boolean; checked_at?: number }>({ loading: false });
 
   useEffect(() => {
@@ -443,6 +445,24 @@ function DatabaseTab() {
             );
           })}
         </div>
+      </div>
+
+      <div className="bg-white border rounded-2xl p-6">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="font-bold">Synchronisation</h3>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${sync.status === "synced" ? "bg-emerald-100 text-emerald-700" : sync.status === "error" ? "bg-red-100 text-red-700" : sync.status === "offline" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{sync.status}</span>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 text-sm">
+          <Kv k="Revision" v={String(sync.revision)} />
+          <Kv k="Queued changes" v={sync.pendingPush ? "Yes — will upload" : "None"} />
+          <Kv k="Last synced" v={sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleTimeString() : "—"} />
+        </div>
+        {sync.error && <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 text-xs break-all">{sync.error}</div>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={() => void sync.pushNow()} className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold">Push to database</button>
+          <button onClick={() => void sync.pullNow()} className="h-9 px-3 rounded-lg border text-sm font-semibold hover:bg-muted">Pull from database</button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">Changes are saved on this device instantly and uploaded to Postgres automatically whenever there is a connection.</p>
       </div>
 
       <div className="bg-white border rounded-2xl p-6">
