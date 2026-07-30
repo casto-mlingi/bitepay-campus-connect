@@ -457,12 +457,22 @@ function DatabaseTab() {
           <Kv k="Queued changes" v={sync.pendingPush ? "Yes — will upload" : "None"} />
           <Kv k="Last synced" v={sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleTimeString() : "—"} />
         </div>
+        {sync.conflict && (
+          <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs">
+            <div className="font-bold">Conflict detected — awaiting your decision</div>
+            <div className="mt-0.5">This device is at revision {sync.conflict.localRevision}, the database at {sync.conflict.remoteRevision}. Syncing is paused until you choose a version in the review dialog.</div>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => void sync.resolveConflict("local")} className="h-8 px-3 rounded-lg bg-primary text-white font-semibold">Keep this device</button>
+              <button onClick={() => void sync.resolveConflict("remote")} className="h-8 px-3 rounded-lg border border-amber-400 font-semibold hover:bg-amber-100">Keep database</button>
+            </div>
+          </div>
+        )}
         {sync.error && <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 text-xs break-all">{sync.error}</div>}
         <div className="flex gap-2 mt-4">
-          <button onClick={() => void sync.pushNow()} className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold">Push to database</button>
+          <button onClick={() => void sync.pushNow()} disabled={!!sync.conflict} className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-50">Push to database</button>
           <button onClick={() => void sync.pullNow()} className="h-9 px-3 rounded-lg border text-sm font-semibold hover:bg-muted">Pull from database</button>
         </div>
-        <p className="text-xs text-muted-foreground mt-3">Changes are saved on this device instantly and uploaded to Postgres automatically whenever there is a connection.</p>
+        <p className="text-xs text-muted-foreground mt-3">Changes are saved on this device instantly and uploaded to Postgres automatically whenever there is a connection. If the database changed at the same time, sync stops and asks you which snapshot to keep instead of silently overwriting either side.</p>
       </div>
 
       <div className="bg-white border rounded-2xl p-6">
