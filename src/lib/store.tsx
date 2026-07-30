@@ -16,7 +16,9 @@ export type Profile = {
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
-  store_id?: string; // home canteen (customer signup) / tenant (staff)
+  store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
+  memberships?: StoreMembership[]; // staff only — every store this person belongs to
+
 };
 
 
