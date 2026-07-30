@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChefHat, Store as StoreIcon, User, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff, Wallet, Info, Loader2 } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useStore, duplicateStoreReason } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/setup")({
 });
 
 function SetupWizard() {
-  const { hasOwner, completeSetup } = useStore();
+  const { hasOwner, completeSetup, stores } = useStore();
   const registerFn = useServerFn(registerOwnerAndStore);
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -28,6 +28,8 @@ function SetupWizard() {
   const [storeName, setStoreName] = useState("");
   const [location, setLocation] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+
   const [currency, setCurrency] = useState("TZS");
   const [lowThreshold, setLowThreshold] = useState<number>(3000);
 
@@ -47,6 +49,10 @@ function SetupWizard() {
     e.preventDefault();
     setError("");
     if (!storeName.trim() || !contactPhone.trim()) return setError("Store name and contact phone are required");
+    if (!/^\S+@\S+\.\S+$/.test(adminEmail.trim())) return setError("Enter a valid admin email");
+    const dup = duplicateStoreReason(stores, { contact_phone: contactPhone, admin_email: adminEmail });
+    if (dup) return setError(dup);
+
     setStep(2);
   };
 
@@ -62,7 +68,7 @@ function SetupWizard() {
     setError("");
     setSubmitting(true);
     const res = completeSetup({
-      store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
+      store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
       opening_bank: openingBank,
@@ -122,6 +128,10 @@ function SetupWizard() {
               <FormRow label="Contact phone" required>
                 <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0712 000 000" className="h-11 rounded-xl" />
               </FormRow>
+              <FormRow label="Admin email" required>
+                <Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="owner@canteen.co.tz" className="h-11 rounded-xl" />
+              </FormRow>
+
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Currency">
                   <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="TZS" className="h-11 rounded-xl" />

@@ -42,12 +42,36 @@ export type Store = {
 
   location: string;
   contact_phone: string;
+  admin_email?: string; // billing/admin contact — must be unique across stores
   currency: string;
+
   low_balance_threshold: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
 };
+
+/** Normalizers used for duplicate-account detection. */
+export const normPhone = (v: string) => (v ?? "").replace(/[^\d]/g, "").replace(/^0+/, "");
+export const normEmail = (v?: string) => (v ?? "").trim().toLowerCase();
+
+/** Returns a human error when a store with the same phone or admin email already exists. */
+export function duplicateStoreReason(
+  stores: Store[],
+  input: { name?: string; contact_phone?: string; admin_email?: string },
+  ignoreStoreId?: string,
+): string | null {
+  const phone = normPhone(input.contact_phone ?? "");
+  const email = normEmail(input.admin_email);
+  const others = stores.filter((s) => s.id !== ignoreStoreId);
+  if (phone && others.some((s) => normPhone(s.contact_phone) === phone)) {
+    return `A store account already exists with the phone ${input.contact_phone}. Sign in to that account instead, or use a different contact phone.`;
+  }
+  if (email && others.some((s) => normEmail(s.admin_email) === email)) {
+    return `A store account already exists with the admin email ${email}. Sign in to that account instead, or use a different admin email.`;
+  }
+  return null;
+}
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
@@ -834,7 +858,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
-      if (profiles.some((p) => p.phone === owner.phone.trim())) return { ok: false, reason: "That phone is already in use" };
+      if (profiles.some((p) => normPhone(p.phone) === normPhone(owner.phone))) return { ok: false, reason: "That owner phone is already registered. Sign in instead." };
+      const dup = duplicateStoreReason(stores, s);
+      if (dup) return { ok: false, reason: dup };
+
       const now = Date.now();
       const trialDays = 14;
       const storeId = uid("s");
@@ -876,6 +903,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
+      const dupStore = duplicateStoreReason(stores, s);
+      if (dupStore) return { ok: false, reason: dupStore };
+
       const now = Date.now();
       const storeId = uid("s");
       // The free trial applies to the first store only — additional stores start
