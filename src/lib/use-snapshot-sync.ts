@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { pushSnapshot, pullSnapshot } from "@/lib/sync.functions";
 
 export const SNAPSHOT_KEY = "bitepay.snapshot.v1";
+const DIRTY_KEY = `${SNAPSHOT_KEY}.dirty`;
 export const DB_PROFILE_KEY = "bitepay.active_db_profile";
 export type DbProfileId = "memory" | "postgres";
 
