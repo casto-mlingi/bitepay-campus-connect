@@ -142,8 +142,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       /* quota exceeded — remote push still carries the data */
     }
     setState((s) => ({ ...s, revision: rev, pendingPush: true }));
+    // Near-immediate upload: the 250ms window only coalesces the burst of
+    // state updates a single user action produces, so every data injection
+    // lands in Postgres right away and appears on other dashboards.
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => { void remotePush(); }, 1200);
+    timerRef.current = setTimeout(() => { void remotePush(); }, 250);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [snapshot, hydrated, remotePush]);
 
@@ -154,26 +157,37 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, hydrated]);
 
-  // Keep dashboards live: poll the database for newer revisions while idle.
+  // Keep dashboards live: poll the database for newer revisions, and retry
+  // any queued upload that failed earlier.
   const pendingRef = useRef(state.pendingPush);
   pendingRef.current = state.pendingPush;
   useEffect(() => {
     if (!hydrated) return;
     const id = setInterval(() => {
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      if (pendingRef.current) return;
+      if (pendingRef.current) { void remotePush(); return; }
       void remotePull(false);
-    }, 20000);
+    }, 5000);
     return () => clearInterval(id);
-  }, [hydrated, remotePull]);
+  }, [hydrated, remotePull, remotePush]);
 
-  // Refresh when the tab regains focus.
+  // Refresh when the tab regains focus / becomes visible; flush before it hides.
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
-    const onFocus = () => { if (!pendingRef.current) void remotePull(false); };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [hydrated, remotePull]);
+    const refresh = () => { if (pendingRef.current) void remotePush(); else void remotePull(false); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+      else if (pendingRef.current) void remotePush();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onVisibility);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onVisibility);
+    };
+  }, [hydrated, remotePull, remotePush]);
 
 
   return {
