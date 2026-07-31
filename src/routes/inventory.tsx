@@ -403,21 +403,82 @@ function BatchesPanel() {
           <ul className="space-y-2">
             {batches.map((b) => {
               const prod = products.find((p) => p.id === b.product_id);
+              const editing = editId === b.id;
               return (
-                <li key={b.id} className="flex items-center justify-between p-2 rounded-lg bg-background border">
-                  <div>
-                    <div className="text-sm font-semibold">{prod?.emoji} {prod?.name}</div>
-                    <div className="text-xs text-muted-foreground">{b.id} · {b.plates_remaining}/{b.plates} plates</div>
+                <li key={b.id} className="p-2 rounded-lg bg-background border">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">{prod?.emoji} {prod?.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">{b.id} · {b.plates_remaining}/{b.plates} plates</div>
+                    </div>
+                    <div className="text-right shrink-0 flex items-center gap-2">
+                      <div>
+                        <div className="text-sm font-bold">{formatTZS(b.unit_cost)}</div>
+                        <div className="text-[10px] text-muted-foreground">per plate</div>
+                      </div>
+                      <button
+                        type="button"
+                        title="Edit batch"
+                        aria-label="Edit batch"
+                        onClick={() => {
+                          setEditErr("");
+                          if (editing) { setEditId(null); return; }
+                          setEditId(b.id);
+                          setForm({ plates: b.plates, remaining: b.plates_remaining, labor: b.labor_cost });
+                        }}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold">{formatTZS(b.unit_cost)}</div>
-                    <div className="text-[10px] text-muted-foreground">per plate</div>
-                  </div>
+
+                  {editing && (
+                    <div className="mt-3 border-t pt-3 grid grid-cols-3 gap-2">
+                      <label className="text-[11px] text-muted-foreground">
+                        Plates made
+                        <input type="number" min={1} step="any" inputMode="decimal" value={form.plates}
+                          onChange={(e) => setForm({ ...form, plates: Number(e.target.value) })}
+                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                      </label>
+                      <label className="text-[11px] text-muted-foreground">
+                        Plates left
+                        <input type="number" min={0} step="any" inputMode="decimal" value={form.remaining}
+                          onChange={(e) => setForm({ ...form, remaining: Number(e.target.value) })}
+                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                      </label>
+                      <label className="text-[11px] text-muted-foreground">
+                        Labour/gas
+                        <input type="number" min={0} step="any" inputMode="decimal" value={form.labor}
+                          onChange={(e) => setForm({ ...form, labor: Number(e.target.value) })}
+                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                      </label>
+                      {editErr && <div className="col-span-3 text-[11px] text-destructive font-medium">{editErr}</div>}
+                      <div className="col-span-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = updateBatch(b.id, { plates: form.plates, plates_remaining: form.remaining, labor_cost: form.labor });
+                            if (!res.ok) { setEditErr(res.reason ?? "Could not save"); return; }
+                            setEditId(null);
+                          }}
+                          className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+                        >
+                          Save
+                        </button>
+                        <button type="button" onClick={() => setEditId(null)} className="h-9 px-4 rounded-lg border text-sm font-semibold">Cancel</button>
+                      </div>
+                      <div className="col-span-3 text-[10px] text-muted-foreground">
+                        Plates left is what customers see as “x left” on the menu and POS.
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
         </div>
+
       </div>
     </div>
   );
