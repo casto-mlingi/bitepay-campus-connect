@@ -6,9 +6,26 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
   const [error, setError] = useState<string>("");
   const stoppedRef = useRef(false);
 
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+
   useEffect(() => {
     let scanner: any;
     let cancelled = false;
+
+    // html5-qrcode throws synchronously when the scanner isn't running,
+    // so stop() must be wrapped in try/catch, not just .catch().
+    const safeStop = async (s: any) => {
+      if (!s) return;
+      try {
+        if (typeof s.getState === "function" && s.getState() !== 2 && s.getState() !== 3) return;
+        await s.stop();
+        s.clear();
+      } catch {
+        /* already stopped */
+      }
+    };
+
     (async () => {
       try {
         const mod: any = await import("html5-qrcode");
@@ -20,24 +37,23 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
           (decoded: string) => {
             if (stoppedRef.current) return;
             stoppedRef.current = true;
-            onScan(decoded);
-            scanner.stop().then(() => scanner.clear()).catch(() => {});
+            onScanRef.current(decoded);
+            void safeStop(scanner);
           },
           () => {},
         );
-        if (cancelled) {
-          await scanner.stop().catch(() => {});
-        }
+        if (cancelled) await safeStop(scanner);
       } catch (e: any) {
         setError(e?.message ?? "Camera unavailable. Grant camera permission or use manual search.");
       }
     })();
+
     return () => {
       cancelled = true;
       stoppedRef.current = true;
-      if (scanner) scanner.stop().then(() => scanner.clear()).catch(() => {});
+      void safeStop(scanner);
     };
-  }, [onScan]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={onClose}>
