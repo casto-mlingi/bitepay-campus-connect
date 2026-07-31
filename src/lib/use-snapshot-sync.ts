@@ -66,6 +66,19 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressRef = useRef(false);
   const busyRef = useRef(false);
+  // Transient network/database hiccups shouldn't paint the UI red — only show
+  // the error state once several consecutive attempts have failed.
+  const failRef = useRef(0);
+  const noteFailure = useCallback((err: unknown, pendingPush: boolean) => {
+    failRef.current += 1;
+    const message = err instanceof Error ? err.message : String(err);
+    if (failRef.current < 3) {
+      setState((s) => ({ ...s, status: "idle", pendingPush: pendingPush || s.pendingPush, error: null }));
+      return;
+    }
+    setState((s) => ({ ...s, status: "error", pendingPush: pendingPush || s.pendingPush, error: message }));
+  }, []);
+  const noteSuccess = useCallback(() => { failRef.current = 0; }, []);
 
   const markClean = useCallback((rev: number) => {
     revisionRef.current = rev;
@@ -107,14 +120,14 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         return;
       }
     } catch (err) {
-      setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
+      noteFailure(err, true);
       return;
     }
     // Someone published again mid-merge — the next tick will merge that too.
     revisionRef.current = revision;
     dirtyRef.current = true;
     setState((s) => ({ ...s, status: "pushing", pendingPush: true, revision }));
-  }, [key, markClean]);
+  }, [key, markClean, noteFailure]);
 
   const remotePull = useCallback(async (force = false) => {
     if (activeDbProfile() !== "postgres") return;
@@ -130,6 +143,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         }
         adopt(res.payload, res.revision);
       }
+      noteSuccess();
       setState((s) => ({
         ...s,
         status: "synced",
@@ -138,11 +152,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         lastSyncedAt: Date.now(),
       }));
     } catch (err) {
-      setState((s) => ({ ...s, status: "error", error: err instanceof Error ? err.message : String(err) }));
+      noteFailure(err, false);
     } finally {
       busyRef.current = false;
     }
-  }, [key, adopt, mergeAndPublish]);
+  }, [key, adopt, mergeAndPublish, noteFailure, noteSuccess]);
 
   const remotePush = useCallback(async () => {
     if (activeDbProfile() !== "postgres") return;
@@ -164,13 +178,14 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         return;
       }
       markClean(res.revision ?? revision);
-      setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now() }));
+      noteSuccess();
+      setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
     } catch (err) {
-      setState((s) => ({ ...s, status: "error", pendingPush: true, error: err instanceof Error ? err.message : String(err) }));
+      noteFailure(err, true);
     } finally {
       busyRef.current = false;
     }
-  }, [key, markClean, mergeAndPublish]);
+  }, [key, markClean, mergeAndPublish, noteFailure, noteSuccess]);
 
   /** Retained for API compatibility: merging happens automatically. */
   const resolveConflict = useCallback(async (_choice: "local" | "remote") => {
