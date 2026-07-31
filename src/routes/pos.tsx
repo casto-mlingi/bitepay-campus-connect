@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
+import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
@@ -19,12 +20,14 @@ type Tender = "cash" | "mobile";
 
 function POS() {
   const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
-    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole } = useStore();
+    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
   const [customer, setCustomer] = useState<Profile | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [pinCustomer, setPinCustomer] = useState<Profile | null>(null); // awaiting wallet-PIN unlock
+  const [walletUnlocked, setWalletUnlocked] = useState<string[]>([]); // customer ids unlocked this session
   const [lines, setLines] = useState<Line[]>([]);
   const [category, setCategory] = useState<string>("All");
   const [topupAmt, setTopupAmt] = useState<number>(10000);
@@ -67,7 +70,11 @@ function POS() {
   };
   const setLineQty = (id: string, qty: number) => setLines((prev) => qty <= 0 ? prev.filter((l) => l.product.id !== id) : prev.map((l) => l.product.id === id ? { ...l, qty } : l));
 
-  const pickCustomer = (c: Profile) => { setCustomer(c); setQuery(""); };
+  const pickCustomer = (c: Profile) => {
+    setQuery("");
+    if (c.wallet_pin && !walletUnlocked.includes(c.id)) { setPinCustomer(c); return; }
+    setCustomer(c);
+  };
 
   const onScan = (text: string) => {
     setShowScanner(false);
