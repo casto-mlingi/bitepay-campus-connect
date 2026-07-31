@@ -55,6 +55,19 @@ function Customers() {
     setPinPrompt({ title, onSubmit });
   };
 
+  // Only supervisors/owners may reveal a customer's wallet QR, and only after
+  // re-entering their staff PIN. Cashiers never see the QR.
+  const canViewQR = (currentUser?.staff_role ?? "cashier") !== "cashier";
+  const openQR = (c: Profile) => {
+    if (!canViewQR) { showToast("Only a supervisor or owner can view a customer's QR"); return; }
+    requestPin("Enter your staff PIN to view the customer QR", (pin) => {
+      if (pin !== currentUser?.staff_pin) { showToast("Incorrect staff PIN"); return; }
+      setPinPrompt(null);
+      setShowQR(c);
+    });
+  };
+
+
   const doTopUp = () => {
     if (!selected || topupAmt <= 0) return;
     if (topupTender === "mobile" && !topupRef.trim()) { showToast("Enter mobile payment reference"); return; }
@@ -171,9 +184,11 @@ function Customers() {
                       <td className="px-4 py-2.5 hidden md:table-cell font-mono text-xs text-muted-foreground">{c.id}</td>
                       <td className="px-4 py-2.5 text-right font-bold">{formatTZS(c.wallet_balance)}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); setShowQR(c); }} className="p-1.5 rounded-md hover:bg-muted" title="Show QR / barcode">
-                          <QrCode className="w-4 h-4" />
-                        </button>
+                        {canViewQR && (
+                          <button onClick={(e) => { e.stopPropagation(); openQR(c); }} className="p-1.5 rounded-md hover:bg-muted" title="Show QR / barcode (PIN required)">
+                            <QrCode className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -199,7 +214,9 @@ function Customers() {
                   <div className="font-bold truncate">{selected.full_name}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" />{selected.phone}</div>
                 </div>
-                <button onClick={() => setShowQR(selected)} className="p-2 rounded-lg bg-muted hover:bg-muted/70" title="Print ID card"><QrCode className="w-4 h-4" /></button>
+                {canViewQR && (
+                  <button onClick={() => openQR(selected)} className="p-2 rounded-lg bg-muted hover:bg-muted/70" title="Print ID card (PIN required)"><QrCode className="w-4 h-4" /></button>
+                )}
               </div>
 
               <div className="mt-4 rounded-xl bg-gradient-to-br from-success to-emerald-600 text-white p-4">

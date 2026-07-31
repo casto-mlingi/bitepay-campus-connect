@@ -486,6 +486,7 @@ type Ctx = {
 
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
+  updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number }) => Ok | Fail;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
@@ -1378,6 +1379,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
       setBatches((prev) => [batch, ...prev]);
       return batch;
+    },
+    updateBatch(batch_id, patch) {
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can edit batches" };
+      const b = batches.find((x) => x.id === batch_id);
+      if (!b) return { ok: false, reason: "Batch not found" };
+      const plates = patch.plates != null ? Math.max(1, Math.round(patch.plates)) : b.plates;
+      const labor_cost = patch.labor_cost != null ? Math.max(0, patch.labor_cost) : b.labor_cost;
+      const remaining = Math.min(
+        plates,
+        Math.max(0, Math.round(patch.plates_remaining ?? b.plates_remaining)),
+      );
+      const unit_cost = Math.round((b.raw_cost + labor_cost) / plates);
+      setBatches((prev) => prev.map((x) => x.id === batch_id
+        ? { ...x, plates, plates_remaining: remaining, labor_cost, unit_cost }
+        : x));
+      return { ok: true };
     },
     logWastage(batch_id, plates, reason) {
       const b = batches.find((x) => x.id === batch_id);

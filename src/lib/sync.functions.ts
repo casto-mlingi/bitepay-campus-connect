@@ -23,11 +23,11 @@ export const pushSnapshot = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown): PushInputT => PushInput.parse(raw))
   .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db.server");
-    const { ensureSnapshotTable } = await import("@/lib/sync.server");
+    const { ensureSnapshotTable, withRetry } = await import("@/lib/sync.server");
     const sql = getSql();
     await ensureSnapshotTable(sql);
 
-    const [row] = await sql<{ revision: number; updated_at: Date }[]>`
+    const [row] = await withRetry(() => sql<{ revision: number; updated_at: Date }[]>`
       insert into app_snapshots (key, revision, payload, updated_at)
       values (${data.key}, ${data.revision}, ${data.payload}, now())
       on conflict (key) do update
@@ -36,7 +36,7 @@ export const pushSnapshot = createServerFn({ method: "POST" })
             updated_at = now()
         where app_snapshots.revision <= excluded.revision
       returning revision, updated_at
-    `;
+    `);
 
     if (!row) {
       // A newer revision already exists on the server — tell the client to pull.
@@ -53,13 +53,13 @@ export const pullSnapshot = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown): PullInputT => PullInput.parse(raw))
   .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db.server");
-    const { ensureSnapshotTable } = await import("@/lib/sync.server");
+    const { ensureSnapshotTable, withRetry } = await import("@/lib/sync.server");
     const sql = getSql();
     await ensureSnapshotTable(sql);
 
-    const [row] = await sql<{ revision: number; payload: string; updated_at: Date }[]>`
+    const [row] = await withRetry(() => sql<{ revision: number; payload: string; updated_at: Date }[]>`
       select revision, payload, updated_at from app_snapshots where key = ${data.key} limit 1
-    `;
+    `);
     if (!row) return { ok: true as const, found: false as const };
     return { ok: true as const, found: true as const, revision: Number(row.revision), payload: String(row.payload), updated_at: row.updated_at.toISOString() };
   });
