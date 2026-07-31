@@ -16,6 +16,7 @@ export type Profile = {
   role: Role;
   staff_role?: StaffRole;
   staff_pin?: string;
+  wallet_pin?: string; // customer-set PIN guarding wallet records & QR display
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
@@ -46,6 +47,8 @@ export type Store = {
   currency: string;
 
   low_balance_threshold: number;
+  /** Extra charge added at customer checkout, in percent. 0 = charge full amount only. */
+  service_rate?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -468,6 +471,10 @@ type Ctx = {
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
   rejectTopUpRequest: (id: string, reason: string) => void;
   setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
+  /** Customer-set wallet PIN (guards wallet records + QR display + POS wallet charge). */
+  setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
+  verifyWalletPin: (customerId: string, pin: string) => boolean;
+  serviceRate: number;
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
