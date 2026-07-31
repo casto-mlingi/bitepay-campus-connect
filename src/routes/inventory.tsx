@@ -595,16 +595,39 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /* ────────────── Menu Requests (custom dishes) ────────────── */
 function MenuRequestsPanel() {
-  const { customDishRequests } = useStore();
+  const { customDishRequests, orders, can } = useStore();
+  const [newOpen, setNewOpen] = useState(false);
   const awaiting = customDishRequests.filter((r) => r.status === "accepted");
   const confirmed = customDishRequests.filter((r) => r.status === "confirmed");
   const processing = customDishRequests.filter((r) => r.status === "in_kitchen" || r.status === "fulfilled");
+  const unpaid = customDishRequests.filter((r) => r.payment_mode === "on_delivery" && !r.settled_at);
 
   return (
     <div className="space-y-6">
-      <div className="bg-surface border rounded-2xl p-4 text-sm text-muted-foreground">
-        Funnel: <span className="font-semibold text-foreground">Quote sent</span> → <span className="font-semibold text-foreground">Budget confirmed (wallet debited)</span> → <span className="font-semibold text-foreground">Stock assigned</span> → live order board.
+      <div className="bg-surface border rounded-2xl p-4 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+        <div>
+          Funnel: <span className="font-semibold text-foreground">Quote sent</span> → <span className="font-semibold text-foreground">Budget confirmed (wallet debited)</span> → <span className="font-semibold text-foreground">Stock assigned</span> → live order board.
+        </div>
+        {can("inventory.edit") && (
+          <button onClick={() => setNewOpen(true)} className="shrink-0 inline-flex items-center gap-1.5 bg-primary text-white text-sm font-bold px-3 py-2 rounded-xl">
+            <Plus className="w-4 h-4" /> New request
+          </button>
+        )}
       </div>
+
+      {newOpen && <StaffRequestModal onClose={() => setNewOpen(false)} />}
+
+      {unpaid.length > 0 && (
+        <section>
+          <h2 className="font-bold mb-2">Pay on delivery — awaiting payment ({unpaid.length})</h2>
+          <div className="space-y-2">
+            {unpaid.map((r) => {
+              const order = orders.find((o) => o.id === r.order_id);
+              return <CollectPaymentCard key={r.id} req={r} paid={order?.payment_status === "paid"} />;
+            })}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="font-bold mb-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary" /> Ready to cost ({confirmed.length})</h2>
@@ -612,6 +635,7 @@ function MenuRequestsPanel() {
           ? <div className="bg-surface border rounded-2xl p-8 text-center text-sm text-muted-foreground">No confirmed menu requests yet. They appear here the moment a client accepts your quote and their wallet is charged.</div>
           : <div className="space-y-3">{confirmed.map((r) => <RequestCostCard key={r.id} req={r} />)}</div>}
       </section>
+
 
       {awaiting.length > 0 && (
         <section>
