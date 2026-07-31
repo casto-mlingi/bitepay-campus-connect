@@ -112,7 +112,7 @@ function RawMaterialsPanel() {
           </label>
           <label className="text-sm">
             <div className="text-muted-foreground mb-1">Stock</div>
-            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
+            <input type="number" step="any" inputMode="decimal" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
           </label>
           <label className="text-sm">
             <div className="text-muted-foreground mb-1">Cost / Unit (TZS)</div>
@@ -120,7 +120,7 @@ function RawMaterialsPanel() {
           </label>
           <label className="col-span-2 text-sm">
             <div className="text-muted-foreground mb-1">Low Stock Threshold</div>
-            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
+            <input type="number" step="any" inputMode="decimal" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
           </label>
           <button className="col-span-2 md:col-span-1 bg-foreground text-background rounded-lg font-semibold text-sm py-2 self-end">Save</button>
         </form>
