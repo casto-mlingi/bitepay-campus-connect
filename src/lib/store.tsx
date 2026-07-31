@@ -207,6 +207,12 @@ export type CustomDishRequest = {
   assigned_at?: number;
   assigned_by?: string;
   order_id?: string;
+  // Who raised it, and how it will be paid.
+  created_by?: "customer" | "staff";
+  payment_mode?: "wallet" | "on_delivery";
+  settled_at?: number;
+  settled_tender?: "cash" | "mobile";
+  settled_reference?: string;
 };
 
 
@@ -505,6 +511,24 @@ type Ctx = {
   // Owner assigns raw materials + labour, which costs the job, deducts stock and
   // pushes a paid order onto the live board.
   assignCustomDishStock: (id: string, input: { ingredients: BatchIngredient[]; labor_cost?: number }) => Ok | Fail;
+  // Supervisor/owner raises a menu request on behalf of a client (wallet member or
+  // pay-on-delivery walk-in), assigns raw materials and posts it straight to the board.
+  staffCreateMenuRequest: (input: {
+    payment_mode: "wallet" | "on_delivery";
+    customer_id?: string;
+    customer_name?: string;
+    customer_phone?: string;
+    dish_name: string;
+    description?: string;
+    price: number;
+    ingredients: BatchIngredient[];
+    labor_cost?: number;
+    delivery_type?: DeliveryType;
+  }) => Ok | Fail;
+  // Collect payment for a pay-on-delivery order when the food is handed over.
+  settleOnDeliveryOrder: (orderId: string, input: { tender: "cash" | "mobile"; reference?: string }) => Ok | Fail;
+
+
 
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
@@ -1652,6 +1676,101 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         title: "Your dish is being prepared 👨‍🍳",
         body: `"${req.dish_name}" moved to the kitchen. Track it in your orders.`,
       });
+      return { ok: true };
+    },
+    staffCreateMenuRequest({ payment_mode, customer_id, customer_name, customer_phone, dish_name, description = "", price, ingredients, labor_cost = 0, delivery_type = "pickup" }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Supervisors and owners only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!dish_name.trim()) return { ok: false, reason: "Dish name is required" };
+      if (!(price > 0)) return { ok: false, reason: "Enter the agreed price" };
+      if (ingredients.length === 0) return { ok: false, reason: "Assign at least one raw material" };
+
+      let cust: Profile | null = null;
+      if (payment_mode === "wallet") {
+        cust = profiles.find((p) => p.id === customer_id && p.role === "customer") ?? null;
+        if (!cust) return { ok: false, reason: "Select a wallet client" };
+        const bal = walletFor(cust, currentStoreId);
+        if (bal < price) return { ok: false, reason: `Insufficient wallet balance — short by ${formatTZS(price - bal)}` };
+      } else {
+        if (!customer_name?.trim()) return { ok: false, reason: "Client name is required" };
+        if (!customer_phone?.trim()) return { ok: false, reason: "Client phone is required" };
+      }
+
+      let raw_cost = 0;
+      for (const ing of ingredients) {
+        const raw = rawMaterials.find((r) => r.id === ing.raw_id && r.store_id === currentStoreId);
+        if (!raw) return { ok: false, reason: "Unknown raw material" };
+        if (ing.qty <= 0) return { ok: false, reason: `Quantity for ${raw.name} must be greater than zero` };
+        if (raw.stock < ing.qty) return { ok: false, reason: `Not enough ${raw.name} in stock (${raw.stock} ${raw.unit} left)` };
+        raw_cost += raw.avg_cost * ing.qty;
+      }
+      const total_cost = Math.round(raw_cost + labor_cost);
+      const now = Date.now();
+      const name = cust?.full_name ?? customer_name!.trim();
+      const phone = cust?.phone ?? customer_phone!.trim();
+      const orderId = nextOrderId();
+      const reqId = uid("cd");
+
+      const order: Order = {
+        id: orderId, store_id: currentStoreId, customer_id: cust?.id ?? "walkin", customer_name: name,
+        items: [{ product_id: `custom-${reqId}`, name: `${dish_name.trim()} (custom)`, price, qty: 1 }],
+        total_amount: price, status: "new", delivery_type,
+        payment_status: payment_mode === "wallet" ? "paid" : "unpaid",
+        created_at: now, wallet_paid: payment_mode === "wallet" ? price : 0, cash_paid: 0,
+        cashier_id: currentUser.id, cashier_name: currentUser.full_name, shift_id: activeShift?.id,
+      };
+
+      if (payment_mode === "wallet" && cust) {
+        setWallet(cust.id, currentStoreId, -price);
+        setTransactions((prev) => [{
+          id: uid("t"), store_id: currentStoreId, customer_id: cust!.id, order_id: orderId, type: "deduction",
+          amount: price, description: `Custom dish: ${dish_name.trim()}`, created_at: now,
+        }, ...prev]);
+      }
+      setRawMaterials((prev) => prev.map((r) => {
+        const ing = ingredients.find((i) => i.raw_id === r.id);
+        return ing ? { ...r, stock: Math.max(0, r.stock - ing.qty) } : r;
+      }));
+      setOrders((prev) => [order, ...prev]);
+      setCustomDishRequests((prev) => [{
+        id: reqId, store_id: currentStoreId, customer_id: cust?.id ?? "walkin",
+        customer_name: name, customer_phone: phone,
+        dish_name: dish_name.trim(), description: description.trim(), ingredients: [],
+        status: "in_kitchen", staff_price: price,
+        paid_amount: payment_mode === "wallet" ? price : 0,
+        confirmed_at: payment_mode === "wallet" ? now : undefined,
+        created_at: now, created_by: "staff", payment_mode,
+        cost_ingredients: ingredients, labor_cost, raw_cost, total_cost,
+        assigned_at: now, assigned_by: currentUser.full_name, order_id: orderId,
+      } as CustomDishRequest, ...prev]);
+
+      if (cust) {
+        pushNotification({
+          store_id: currentStoreId, user_id: cust.id, kind: "order",
+          title: "Custom dish ordered 👨‍🍳",
+          body: `${formatTZS(price)} charged for "${dish_name.trim()}". The kitchen has started.`,
+        });
+        pushNudgeIfLow({ ...cust, wallet_balance: walletFor(cust, currentStoreId) - price, store_id: currentStoreId });
+      }
+      return { ok: true };
+    },
+    settleOnDeliveryOrder(orderId, { tender, reference }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const order = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
+      if (!order) return { ok: false, reason: "Order not found" };
+      if (order.payment_status === "paid") return { ok: false, reason: "Already paid" };
+      if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
+      const now = Date.now();
+      setOrders((prev) => prev.map((o) => o.id === orderId
+        ? { ...o, payment_status: "paid", cash_paid: order.total_amount, tender, reference: tender === "mobile" ? reference : undefined }
+        : o));
+      if (tender === "mobile") adjustBank((b) => b + order.total_amount);
+      else adjustCash((c) => c + order.total_amount);
+      setCustomDishRequests((prev) => prev.map((r) => r.order_id === orderId
+        ? { ...r, paid_amount: order.total_amount, settled_at: now, settled_tender: tender, settled_reference: reference }
+        : r));
       return { ok: true };
     },
     syncOutbox() {
