@@ -511,6 +511,24 @@ type Ctx = {
   // Owner assigns raw materials + labour, which costs the job, deducts stock and
   // pushes a paid order onto the live board.
   assignCustomDishStock: (id: string, input: { ingredients: BatchIngredient[]; labor_cost?: number }) => Ok | Fail;
+  // Supervisor/owner raises a menu request on behalf of a client (wallet member or
+  // pay-on-delivery walk-in), assigns raw materials and posts it straight to the board.
+  staffCreateMenuRequest: (input: {
+    payment_mode: "wallet" | "on_delivery";
+    customer_id?: string;
+    customer_name?: string;
+    customer_phone?: string;
+    dish_name: string;
+    description?: string;
+    price: number;
+    ingredients: BatchIngredient[];
+    labor_cost?: number;
+    delivery_type?: DeliveryType;
+  }) => Ok | Fail;
+  // Collect payment for a pay-on-delivery order when the food is handed over.
+  settleOnDeliveryOrder: (orderId: string, input: { tender: "cash" | "mobile"; reference?: string }) => Ok | Fail;
+
+
 
   syncOutbox: () => { synced: number; failed: number };
   sendReceiptMessage: (order: Order, channel: SmsChannel) => SmsLog | null;
