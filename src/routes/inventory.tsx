@@ -295,11 +295,14 @@ function MenuPanel() {
 
 /* ────────────── Cooking Batches ────────────── */
 function BatchesPanel() {
-  const { rawMaterials, products, batches, createBatch } = useStore();
+  const { rawMaterials, products, batches, createBatch, updateBatch } = useStore();
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editErr, setEditErr] = useState("");
+  const [form, setForm] = useState({ plates: 0, remaining: 0, labor: 0 });
 
   useEffect(() => {
     if (!productId && products[0]) setProductId(products[0].id);
