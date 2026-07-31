@@ -852,6 +852,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 
 
+  /** Deduct sold plates from cooking batches (FIFO by creation date). */
+  const consumePlates = useCallback((items: OrderItem[], sid: string) => {
+    setBatches((prev) => {
+      let next = prev;
+      for (const it of items) {
+        let remaining = it.qty;
+        next = next
+          .map((b) => b)
+          .sort((a, b) => a.created_at - b.created_at)
+          .map((b) => {
+            if (remaining <= 0) return b;
+            if (b.store_id !== sid || b.product_id !== it.product_id || b.plates_remaining <= 0) return b;
+            const take = Math.min(b.plates_remaining, remaining);
+            remaining -= take;
+            return { ...b, plates_remaining: b.plates_remaining - take };
+          });
+      }
+      return next;
+    });
+  }, []);
+
   const nextReceiptNo = () => {
     const day = todayKey();
     let no = "";
@@ -887,6 +908,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
+    consumePlates(items, currentStoreId);
     setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
@@ -901,7 +923,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates]);
 
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
@@ -920,10 +942,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
+    consumePlates(items, currentStoreId);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash]);
+  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
