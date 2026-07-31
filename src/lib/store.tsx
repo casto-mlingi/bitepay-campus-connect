@@ -1132,6 +1132,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     rejectTopUpRequest(id, reason) {
       setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
     },
+    serviceRate: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.service_rate ?? 5),
+    setWalletPin(currentPin, newPin) {
+      if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "Wallet PIN must be 4–6 digits" };
+      if (currentUser.wallet_pin && currentUser.wallet_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, wallet_pin: newPin } : p));
+      return { ok: true };
+    },
+    verifyWalletPin(customerId, pin) {
+      const c = profiles.find((p) => p.id === customerId);
+      if (!c) return false;
+      if (!c.wallet_pin) return true; // not set yet — no gate
+      return c.wallet_pin === pin;
+    },
     setStaffPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
@@ -1211,7 +1225,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!currentUser || currentUser.role !== "customer") return null;
       const sid = activeStoreId;
       if (!sid) return null;
-      const total = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
+      const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
+      const rate = stores.find((st) => st.id === sid)?.service_rate ?? 5;
+      const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
+      const total = subtotal + extra;
       const bal = walletFor(rawUser!, sid);
       if (total <= 0 || bal < total) return null;
       const id = nextOrderId();
@@ -1222,6 +1239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         created_at: Date.now(),
       };
       setOrders((prev) => [order, ...prev]);
+      consumePlates(order.items, sid);
       setWallet(currentUser.id, sid, -total);
       setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
@@ -1242,6 +1260,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (becameCompleted) {
         setCustomDishRequests((prev) => prev.map((r) => r.order_id === id && r.status === "in_kitchen"
           ? { ...r, status: "fulfilled", resolved_at: Date.now() } : r));
+      }
+      // Notify the customer at every step — delivery orders get courier wording.
+      const target = orders.find((o) => o.id === id);
+      if (target && target.customer_id !== "walkin") {
+        const next = flow[target.status];
+        const isDelivery = target.delivery_type === "delivery";
+        const copy: Partial<Record<OrderStatus, { title: string; body: string }>> = {
+          "in-progress": { title: "Order accepted 👨‍🍳", body: `${target.receipt_no ?? target.id} is being prepared in the kitchen.` },
+          "ready": isDelivery
+            ? { title: "Out for delivery 🛵", body: `${target.receipt_no ?? target.id} has left the kitchen and is on its way to you.` }
+            : { title: "Ready for pickup 🍽️", body: `${target.receipt_no ?? target.id} is ready at the counter.` },
+          "completed": isDelivery
+            ? { title: "Delivered ✅", body: `${target.receipt_no ?? target.id} was delivered. Enjoy your meal!` }
+            : { title: "Order completed ✅", body: `${target.receipt_no ?? target.id} was handed over. Enjoy your meal!` },
+        };
+        const c = copy[next];
+        if (c && next !== target.status) {
+          pushNotification({ store_id: target.store_id, user_id: target.customer_id, kind: "order", title: c.title, body: c.body });
+        }
       }
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
