@@ -486,7 +486,8 @@ type Ctx = {
 
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
-  updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number }) => Ok | Fail;
+  updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number; ingredients?: BatchIngredient[] }) => Ok | Fail;
+  deleteBatch: (batch_id: string) => Ok | Fail;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
