@@ -17,6 +17,7 @@ const PushInput = z.object({
 type PushInputT = z.infer<typeof PushInput>;
 
 const PullInput = z.object({ key: z.string().min(1).max(120) });
+type PullInputT = z.infer<typeof PullInput>;
 
 export const pushSnapshot = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown): PushInputT => PushInput.parse(raw))

@@ -35,5 +35,4 @@ export async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<
   }
   throw last;
 }
-type PullInputT = z.infer<typeof PullInput>;
 
