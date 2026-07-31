@@ -171,9 +171,11 @@ function Customers() {
                       <td className="px-4 py-2.5 hidden md:table-cell font-mono text-xs text-muted-foreground">{c.id}</td>
                       <td className="px-4 py-2.5 text-right font-bold">{formatTZS(c.wallet_balance)}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); setShowQR(c); }} className="p-1.5 rounded-md hover:bg-muted" title="Show QR / barcode">
-                          <QrCode className="w-4 h-4" />
-                        </button>
+                        {canViewQR && (
+                          <button onClick={(e) => { e.stopPropagation(); openQR(c); }} className="p-1.5 rounded-md hover:bg-muted" title="Show QR / barcode (PIN required)">
+                            <QrCode className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
