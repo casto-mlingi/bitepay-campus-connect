@@ -150,7 +150,10 @@ export const loginUser = createServerFn({ method: "POST" })
     `;
     const u = rows[0];
     if (!u || u.is_disabled || !verifyPassword(data.password, u.password_hash)) {
-      throw new Error("Invalid phone or password");
+      // Return a soft failure instead of throwing: the client mirrors local
+      // sign-in to the DB and a missing/mismatched row must not surface as a
+      // runtime error overlay.
+      return { ok: false as const, error: "Invalid phone or password" };
     }
 
     await sql`update profiles set last_signin_at = now() where id = ${u.id}`;
