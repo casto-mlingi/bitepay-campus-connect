@@ -33,7 +33,15 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
         scanner = new Html5Qrcode(containerId);
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: 240 },
+          {
+            fps: 10,
+            aspectRatio: 1,
+            // Always a square box: side = 70% of the smaller viewfinder edge.
+            qrbox: (w: number, h: number) => {
+              const side = Math.max(160, Math.floor(Math.min(w, h) * 0.7));
+              return { width: side, height: side };
+            },
+          },
           (decoded: string) => {
             if (stoppedRef.current) return;
             stoppedRef.current = true;
