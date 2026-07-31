@@ -784,3 +784,170 @@ function RequestCostCard({ req }: { req: CustomDishRequest }) {
     </div>
   );
 }
+
+/* ────────────── Staff-raised menu request ────────────── */
+function StaffRequestModal({ onClose }: { onClose: () => void }) {
+  const { profiles, rawMaterials, staffCreateMenuRequest } = useStore();
+  const customers = profiles.filter((p) => p.role === "customer");
+  const [mode, setMode] = useState<"wallet" | "on_delivery">("wallet");
+  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dish, setDish] = useState("");
+  const [notes, setNotes] = useState("");
+  const [price, setPrice] = useState(0);
+  const [delivery, setDelivery] = useState<"pickup" | "delivery">("pickup");
+  const [ings, setIngs] = useState<BatchIngredient[]>([]);
+  const [labor, setLabor] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const rawCost = useMemo(() => ings.reduce((s, i) => {
+    const r = rawMaterials.find((x) => x.id === i.raw_id);
+    return s + (r ? r.avg_cost * i.qty : 0);
+  }, 0), [ings, rawMaterials]);
+  const totalCost = Math.round(rawCost + labor);
+  const selected = customers.find((c) => c.id === customerId);
+
+  const addIng = () => {
+    if (rawMaterials.length === 0) return;
+    const avail = rawMaterials.find((r) => !ings.some((i) => i.raw_id === r.id)) ?? rawMaterials[0];
+    setIngs([...ings, { raw_id: avail.id, qty: 1 }]);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = staffCreateMenuRequest({
+      payment_mode: mode,
+      customer_id: mode === "wallet" ? customerId : undefined,
+      customer_name: mode === "wallet" ? undefined : name,
+      customer_phone: mode === "wallet" ? undefined : phone,
+      dish_name: dish, description: notes, price,
+      ingredients: ings, labor_cost: labor, delivery_type: delivery,
+    });
+    if (!res.ok) { setError(res.reason); return; }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/60 grid place-items-center p-4 overflow-y-auto" onClick={onClose}>
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="bg-background rounded-3xl w-full max-w-lg p-6 my-8 space-y-4">
+        <div>
+          <h3 className="font-bold text-lg">New menu request</h3>
+          <p className="text-xs text-muted-foreground">Raise a custom dish for a client, assign stock and post it straight to the kitchen board.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {(["wallet", "on_delivery"] as const).map((m) => (
+            <button key={m} type="button" onClick={() => setMode(m)}
+              className={`px-3 py-2.5 rounded-xl text-sm font-semibold border ${mode === m ? "border-primary bg-primary/10 text-primary" : "bg-surface"}`}>
+              {m === "wallet" ? "Wallet client" : "Pay on delivery"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "wallet" ? (
+          <label className="block text-sm">
+            <div className="text-muted-foreground mb-1">Wallet client</div>
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full px-3 py-2 rounded-lg border bg-background">
+              {customers.length === 0 && <option value="">No registered wallet clients</option>}
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.full_name} · {c.phone} · {formatTZS(c.wallet_balance)}</option>)}
+            </select>
+            {selected && <div className="text-xs text-muted-foreground mt-1">Balance {formatTZS(selected.wallet_balance)} — charged immediately.</div>}
+          </label>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Client name" className="px-3 py-2 rounded-lg border bg-background text-sm" />
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" inputMode="tel" className="px-3 py-2 rounded-lg border bg-background text-sm" />
+            <div className="col-span-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Unpaid order — collect cash or mobile money on hand-over from the “Pay on delivery” list.
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <input value={dish} onChange={(e) => setDish(e.target.value)} placeholder="Dish name" className="px-3 py-2 rounded-lg border bg-background text-sm" />
+          <input type="number" min={0} value={price || ""} onChange={(e) => setPrice(Number(e.target.value) || 0)} placeholder="Agreed price (TZS)" className="px-3 py-2 rounded-lg border bg-background text-sm" />
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes / preparation details" rows={2} className="col-span-2 px-3 py-2 rounded-lg border bg-background text-sm" />
+          <select value={delivery} onChange={(e) => setDelivery(e.target.value as "pickup" | "delivery")} className="col-span-2 px-3 py-2 rounded-lg border bg-background text-sm">
+            <option value="pickup">Pickup at counter</option>
+            <option value="delivery">Delivery</option>
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Raw materials</div>
+            <button type="button" onClick={addIng} className="text-xs font-semibold text-primary flex items-center gap-1"><Plus className="w-3 h-3" /> Add</button>
+          </div>
+          {ings.length === 0 && <div className="text-xs text-muted-foreground border border-dashed rounded-lg py-4 text-center">No raw materials selected</div>}
+          {ings.map((ing, i) => {
+            const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+            return (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <select value={ing.raw_id} onChange={(e) => setIngs(ings.map((x, idx) => idx === i ? { ...x, raw_id: e.target.value } : x))} className="col-span-6 px-2 py-2 rounded-lg border bg-background text-sm">
+                  {rawMaterials.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.stock.toFixed(1)} {r.unit})</option>)}
+                </select>
+                <input type="number" min={0} step="any" inputMode="decimal" value={ing.qty} onChange={(e) => setIngs(ings.map((x, idx) => idx === i ? { ...x, qty: Number(e.target.value) } : x))} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
+                <div className="col-span-2 text-xs text-muted-foreground">{raw ? formatTZS(raw.avg_cost * ing.qty) : ""}</div>
+                <button type="button" onClick={() => setIngs(ings.filter((_, idx) => idx !== i))} className="col-span-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            );
+          })}
+          <label className="block text-sm">
+            <div className="text-muted-foreground mb-1">Labour / gas cost (TZS)</div>
+            <input type="number" min={0} value={labor} onChange={(e) => setLabor(Number(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border bg-background" />
+          </label>
+        </div>
+
+        <div className="bg-muted rounded-xl p-3 text-sm flex items-center justify-between">
+          <span className="text-muted-foreground flex items-center gap-1"><Calculator className="w-3.5 h-3.5" /> Cost {formatTZS(totalCost)}</span>
+          <span className={`font-bold ${price - totalCost < 0 ? "text-red-600" : "text-emerald-600"}`}>Margin {formatTZS(price - totalCost)}</span>
+        </div>
+
+        {error && <div className="text-sm text-red-600">{error}</div>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 border font-semibold py-3 rounded-xl">Cancel</button>
+          <button className="flex-1 bg-primary text-white font-bold py-3 rounded-xl">Post to kitchen</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CollectPaymentCard({ req, paid }: { req: CustomDishRequest; paid: boolean }) {
+  const { settleOnDeliveryOrder } = useStore();
+  const [tender, setTender] = useState<"cash" | "mobile">("cash");
+  const [reference, setReference] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const collect = () => {
+    const res = settleOnDeliveryOrder(req.order_id ?? "", { tender, reference });
+    if (!res.ok) { setError(res.reason); return; }
+    setError(null);
+  };
+
+  return (
+    <div className="bg-surface border rounded-2xl p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-semibold">{req.dish_name} <span className="text-xs font-normal text-muted-foreground">· {req.customer_name} · {req.customer_phone}</span></div>
+          <div className="text-xs text-muted-foreground mt-0.5">Order {req.order_id} · cost {formatTZS(req.total_cost ?? 0)} · due {formatTZS(req.staff_price ?? 0)}</div>
+        </div>
+        <span className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">{paid ? "Paid" : "Unpaid"}</span>
+      </div>
+      {!paid && (
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={tender} onChange={(e) => setTender(e.target.value as "cash" | "mobile")} className="px-3 py-2 rounded-lg border bg-background text-sm">
+            <option value="cash">Cash</option>
+            <option value="mobile">Mobile money</option>
+          </select>
+          {tender === "mobile" && (
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Reference" className="px-3 py-2 rounded-lg border bg-background text-sm" />
+          )}
+          <button onClick={collect} className="bg-primary text-white text-sm font-bold px-4 py-2 rounded-lg">Collect payment</button>
+        </div>
+      )}
+      {error && <div className="text-sm text-red-600">{error}</div>}
+    </div>
+  );
+}
