@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User } from "lucide-react";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil } from "lucide-react";
 import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
