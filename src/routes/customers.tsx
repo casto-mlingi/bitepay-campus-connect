@@ -214,7 +214,9 @@ function Customers() {
                   <div className="font-bold truncate">{selected.full_name}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" />{selected.phone}</div>
                 </div>
-                <button onClick={() => setShowQR(selected)} className="p-2 rounded-lg bg-muted hover:bg-muted/70" title="Print ID card"><QrCode className="w-4 h-4" /></button>
+                {canViewQR && (
+                  <button onClick={() => openQR(selected)} className="p-2 rounded-lg bg-muted hover:bg-muted/70" title="Print ID card (PIN required)"><QrCode className="w-4 h-4" /></button>
+                )}
               </div>
 
               <div className="mt-4 rounded-xl bg-gradient-to-br from-success to-emerald-600 text-white p-4">
