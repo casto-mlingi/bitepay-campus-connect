@@ -1391,10 +1391,64 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         plates,
         Math.max(0, Math.round(patch.plates_remaining ?? b.plates_remaining)),
       );
-      const unit_cost = Math.round((b.raw_cost + labor_cost) / plates);
+
+      let ingredients = b.ingredients;
+      let raw_cost = b.raw_cost;
+      if (patch.ingredients) {
+        const next = patch.ingredients.filter((i) => i.raw_id && i.qty > 0);
+        // Compute stock deltas: give back old qty, take new qty.
+        const delta = new Map<string, number>();
+        for (const i of b.ingredients) delta.set(i.raw_id, (delta.get(i.raw_id) ?? 0) + i.qty);
+        for (const i of next) delta.set(i.raw_id, (delta.get(i.raw_id) ?? 0) - i.qty);
+        for (const [raw_id, d] of delta) {
+          const raw = rawMaterials.find((r) => r.id === raw_id);
+          if (!raw) return { ok: false, reason: "Raw material not found" };
+          if (raw.stock + d < 0) return { ok: false, reason: `Not enough ${raw.name} in stock` };
+        }
+        setRawMaterials((prev) => prev.map((r) => delta.has(r.id)
+          ? { ...r, stock: Math.max(0, r.stock + (delta.get(r.id) ?? 0)) }
+          : r));
+        ingredients = next;
+        raw_cost = next.reduce((s, i) => {
+          const raw = rawMaterials.find((r) => r.id === i.raw_id);
+          return s + (raw ? raw.avg_cost * i.qty : 0);
+        }, 0);
+      }
+
+      const unit_cost = Math.round((raw_cost + labor_cost) / plates);
       setBatches((prev) => prev.map((x) => x.id === batch_id
-        ? { ...x, plates, plates_remaining: remaining, labor_cost, unit_cost }
+        ? { ...x, plates, plates_remaining: remaining, labor_cost, ingredients, raw_cost, unit_cost }
         : x));
+      return { ok: true };
+    },
+    deleteBatch(batch_id) {
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can delete batches" };
+      const b = batches.find((x) => x.id === batch_id);
+      if (!b || !currentStoreId) return { ok: false, reason: "Batch not found" };
+      const sold = Math.max(0, b.plates - b.plates_remaining);
+      const ratio = b.plates > 0 ? b.plates_remaining / b.plates : 1;
+
+      // Return the un-sold share of raw materials back to inventory.
+      if (ratio > 0) {
+        setRawMaterials((prev) => prev.map((r) => {
+          const ing = b.ingredients.find((i) => i.raw_id === r.id);
+          return ing ? { ...r, stock: r.stock + ing.qty * ratio } : r;
+        }));
+      }
+
+      // If plates were already sold, the leftovers are dumped — log as wastage.
+      if (sold > 0 && b.plates_remaining > 0) {
+        const prod = products.find((p) => p.id === b.product_id);
+        setWastage((prev) => [{
+          id: uid("w"), store_id: currentStoreId, batch_id,
+          product_name: prod?.name ?? b.product_id,
+          plates: b.plates_remaining,
+          reason: "Batch deleted after sales — leftover plates dumped",
+          created_at: Date.now(),
+        }, ...prev]);
+      }
+
+      setBatches((prev) => prev.filter((x) => x.id !== batch_id));
       return { ok: true };
     },
     logWastage(batch_id, plates, reason) {
