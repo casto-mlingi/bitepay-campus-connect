@@ -855,21 +855,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /** Deduct sold plates from cooking batches (FIFO by creation date). */
   const consumePlates = useCallback((items: OrderItem[], sid: string) => {
     setBatches((prev) => {
-      let next = prev;
+      const taken: Record<string, number> = {};
       for (const it of items) {
         let remaining = it.qty;
-        next = next
-          .map((b) => b)
-          .sort((a, b) => a.created_at - b.created_at)
-          .map((b) => {
-            if (remaining <= 0) return b;
-            if (b.store_id !== sid || b.product_id !== it.product_id || b.plates_remaining <= 0) return b;
-            const take = Math.min(b.plates_remaining, remaining);
-            remaining -= take;
-            return { ...b, plates_remaining: b.plates_remaining - take };
-          });
+        const order = prev
+          .map((b, idx) => ({ b, idx }))
+          .filter(({ b }) => b.store_id === sid && b.product_id === it.product_id && b.plates_remaining > 0)
+          .sort((a, z) => a.b.created_at - z.b.created_at);
+        for (const { b, idx } of order) {
+          if (remaining <= 0) break;
+          const free = b.plates_remaining - (taken[idx] ?? 0);
+          if (free <= 0) continue;
+          const take = Math.min(free, remaining);
+          taken[idx] = (taken[idx] ?? 0) + take;
+          remaining -= take;
+        }
       }
-      return next;
+      if (Object.keys(taken).length === 0) return prev;
+      return prev.map((b, idx) => taken[idx] ? { ...b, plates_remaining: Math.max(0, b.plates_remaining - taken[idx]) } : b);
     });
   }, []);
 
