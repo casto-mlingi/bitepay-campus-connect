@@ -407,6 +407,12 @@ function BatchesPanel() {
             {batches.map((b) => {
               const prod = products.find((p) => p.id === b.product_id);
               const editing = editId === b.id;
+              const sold = Math.max(0, b.plates - b.plates_remaining);
+              const editRawCost = form.ings.reduce((s, i) => {
+                const r = rawMaterials.find((x) => x.id === i.raw_id);
+                return s + (r ? r.avg_cost * i.qty : 0);
+              }, 0);
+              const editUnit = form.plates > 0 ? Math.round((editRawCost + form.labor) / form.plates) : 0;
               return (
                 <li key={b.id} className="p-2 rounded-lg bg-background border">
                   <div className="flex items-center justify-between gap-2">
@@ -414,8 +420,8 @@ function BatchesPanel() {
                       <div className="text-sm font-semibold truncate">{prod?.emoji} {prod?.name}</div>
                       <div className="text-xs text-muted-foreground truncate">{b.id} · {b.plates_remaining}/{b.plates} plates</div>
                     </div>
-                    <div className="text-right shrink-0 flex items-center gap-2">
-                      <div>
+                    <div className="text-right shrink-0 flex items-center gap-1">
+                      <div className="mr-1">
                         <div className="text-sm font-bold">{formatTZS(b.unit_cost)}</div>
                         <div className="text-[10px] text-muted-foreground">per plate</div>
                       </div>
@@ -425,43 +431,132 @@ function BatchesPanel() {
                         aria-label="Edit batch"
                         onClick={() => {
                           setEditErr("");
+                          setDelId(null);
                           if (editing) { setEditId(null); return; }
                           setEditId(b.id);
-                          setForm({ plates: b.plates, remaining: b.plates_remaining, labor: b.labor_cost });
+                          setForm({ plates: b.plates, remaining: b.plates_remaining, labor: b.labor_cost, ings: b.ingredients.map((i) => ({ ...i })) });
                         }}
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+                      <button
+                        type="button"
+                        title="Delete batch"
+                        aria-label="Delete batch"
+                        onClick={() => { setEditId(null); setEditErr(""); setDelId(delId === b.id ? null : b.id); }}
+                        className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
-                  {editing && (
-                    <div className="mt-3 border-t pt-3 grid grid-cols-3 gap-2">
-                      <label className="text-[11px] text-muted-foreground">
-                        Plates made
-                        <input type="number" min={1} step="any" inputMode="decimal" value={form.plates}
-                          onChange={(e) => setForm({ ...form, plates: Number(e.target.value) })}
-                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
-                      </label>
-                      <label className="text-[11px] text-muted-foreground">
-                        Plates left
-                        <input type="number" min={0} step="any" inputMode="decimal" value={form.remaining}
-                          onChange={(e) => setForm({ ...form, remaining: Number(e.target.value) })}
-                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
-                      </label>
-                      <label className="text-[11px] text-muted-foreground">
-                        Labour/gas
-                        <input type="number" min={0} step="any" inputMode="decimal" value={form.labor}
-                          onChange={(e) => setForm({ ...form, labor: Number(e.target.value) })}
-                          className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
-                      </label>
-                      {editErr && <div className="col-span-3 text-[11px] text-destructive font-medium">{editErr}</div>}
-                      <div className="col-span-3 flex gap-2">
+                  {delId === b.id && (
+                    <div className="mt-3 border-t pt-3 space-y-2">
+                      <div className="text-[11px] text-muted-foreground">
+                        {sold > 0
+                          ? `${sold} plate(s) already sold. Deleting returns only the unused share of raw materials and dumps the remaining ${b.plates_remaining} plate(s) as wastage.`
+                          : "Nothing sold yet — all raw materials go back to inventory and the dish leaves POS and orders."}
+                      </div>
+                      {editErr && <div className="text-[11px] text-destructive font-medium">{editErr}</div>}
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => {
-                            const res = updateBatch(b.id, { plates: form.plates, plates_remaining: form.remaining, labor_cost: form.labor });
+                            const res = deleteBatch(b.id);
+                            if (!res.ok) { setEditErr(res.reason ?? "Could not delete"); return; }
+                            setDelId(null);
+                          }}
+                          className="h-9 px-4 rounded-lg bg-destructive text-destructive-foreground text-sm font-semibold"
+                        >
+                          Delete batch
+                        </button>
+                        <button type="button" onClick={() => setDelId(null)} className="h-9 px-4 rounded-lg border text-sm font-semibold">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {editing && (
+                    <div className="mt-3 border-t pt-3 space-y-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        <label className="text-[11px] text-muted-foreground">
+                          Plates made
+                          <input type="number" min={1} step="any" inputMode="decimal" value={form.plates}
+                            onChange={(e) => setForm({ ...form, plates: Number(e.target.value) })}
+                            className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                        </label>
+                        <label className="text-[11px] text-muted-foreground">
+                          Plates left
+                          <input type="number" min={0} step="any" inputMode="decimal" value={form.remaining}
+                            onChange={(e) => setForm({ ...form, remaining: Number(e.target.value) })}
+                            className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                        </label>
+                        <label className="text-[11px] text-muted-foreground">
+                          Labour/gas
+                          <input type="number" min={0} step="any" inputMode="decimal" value={form.labor}
+                            onChange={(e) => setForm({ ...form, labor: Number(e.target.value) })}
+                            className="mt-1 w-full h-9 rounded-lg border px-2 text-sm text-foreground" />
+                        </label>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-[11px] font-semibold">Raw materials used</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const avail = rawMaterials.find((r) => !form.ings.some((i) => i.raw_id === r.id)) ?? rawMaterials[0];
+                              if (!avail) return;
+                              setForm({ ...form, ings: [...form.ings, { raw_id: avail.id, qty: 1 }] });
+                            }}
+                            className="text-[11px] font-semibold text-primary flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> Add
+                          </button>
+                        </div>
+                        {form.ings.length === 0 && <div className="text-[11px] text-muted-foreground border border-dashed rounded-lg py-3 text-center">No raw materials</div>}
+                        <div className="space-y-2">
+                          {form.ings.map((ing, i) => {
+                            const raw = rawMaterials.find((r) => r.id === ing.raw_id);
+                            return (
+                              <div key={i} className="grid grid-cols-12 gap-1 items-center">
+                                <select
+                                  value={ing.raw_id}
+                                  onChange={(e) => setForm({ ...form, ings: form.ings.map((x, idx) => idx === i ? { ...x, raw_id: e.target.value } : x) })}
+                                  className="col-span-6 h-9 px-2 rounded-lg border bg-background text-xs"
+                                >
+                                  {rawMaterials.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.stock.toFixed(2)} {r.unit})</option>)}
+                                </select>
+                                <input
+                                  type="number" min={0} step="any" inputMode="decimal" value={ing.qty}
+                                  onChange={(e) => setForm({ ...form, ings: form.ings.map((x, idx) => idx === i ? { ...x, qty: Number(e.target.value) } : x) })}
+                                  className="col-span-3 h-9 px-2 rounded-lg border bg-background text-xs"
+                                />
+                                <div className="col-span-2 text-[10px] text-muted-foreground truncate">{raw ? formatTZS(raw.avg_cost * ing.qty) : ""}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => setForm({ ...form, ings: form.ings.filter((_, idx) => idx !== i) })}
+                                  className="col-span-1 text-muted-foreground hover:text-red-500"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-muted-foreground">
+                        New cost: <span className="font-semibold text-foreground">{formatTZS(editUnit)}</span> / plate
+                      </div>
+
+                      {editErr && <div className="text-[11px] text-destructive font-medium">{editErr}</div>}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = updateBatch(b.id, { plates: form.plates, plates_remaining: form.remaining, labor_cost: form.labor, ingredients: form.ings });
                             if (!res.ok) { setEditErr(res.reason ?? "Could not save"); return; }
                             setEditId(null);
                           }}
@@ -471,8 +566,8 @@ function BatchesPanel() {
                         </button>
                         <button type="button" onClick={() => setEditId(null)} className="h-9 px-4 rounded-lg border text-sm font-semibold">Cancel</button>
                       </div>
-                      <div className="col-span-3 text-[10px] text-muted-foreground">
-                        Plates left is what customers see as “x left” on the menu and POS.
+                      <div className="text-[10px] text-muted-foreground">
+                        Changing raw materials returns or deducts stock automatically. Plates left is what customers see as “x left”.
                       </div>
                     </div>
                   )}
@@ -481,6 +576,7 @@ function BatchesPanel() {
             })}
           </ul>
         </div>
+
 
       </div>
     </div>
