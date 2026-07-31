@@ -11,7 +11,7 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, cart, setQty, placeOrder } = useStore();
+  const { currentUser, cart, setQty, placeOrder, serviceRate } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);
@@ -20,7 +20,7 @@ function CartPage() {
   if (!currentUser) return null;
 
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
-  const tax = Math.round(subtotal * 0.05);
+  const tax = Math.max(0, Math.round(subtotal * (serviceRate / 100)));
   const total = subtotal + tax;
   const canPay = currentUser.wallet_balance >= total && cart.length > 0;
 
@@ -84,7 +84,7 @@ function CartPage() {
           <div className="mt-6 bg-surface border rounded-3xl p-5">
             <h3 className="font-bold mb-3">Order Summary</h3>
             <Row label="Subtotal" value={formatTZS(subtotal)} />
-            <Row label="Service (5%)" value={formatTZS(tax)} />
+            {tax > 0 && <Row label={`Extra charge (${serviceRate}%)`} value={formatTZS(tax)} />}
             <div className="my-3 border-t border-dashed" />
             <Row label="Total" value={formatTZS(total)} strong />
           </div>

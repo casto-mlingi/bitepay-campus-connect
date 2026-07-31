@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
+import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
@@ -19,12 +20,14 @@ type Tender = "cash" | "mobile";
 
 function POS() {
   const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
-    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole } = useStore();
+    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
   const [customer, setCustomer] = useState<Profile | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [pinCustomer, setPinCustomer] = useState<Profile | null>(null); // awaiting wallet-PIN unlock
+  const [walletUnlocked, setWalletUnlocked] = useState<string[]>([]); // customer ids unlocked this session
   const [lines, setLines] = useState<Line[]>([]);
   const [category, setCategory] = useState<string>("All");
   const [topupAmt, setTopupAmt] = useState<number>(10000);
@@ -67,7 +70,11 @@ function POS() {
   };
   const setLineQty = (id: string, qty: number) => setLines((prev) => qty <= 0 ? prev.filter((l) => l.product.id !== id) : prev.map((l) => l.product.id === id ? { ...l, qty } : l));
 
-  const pickCustomer = (c: Profile) => { setCustomer(c); setQuery(""); };
+  const pickCustomer = (c: Profile) => {
+    setQuery("");
+    if (c.wallet_pin && !walletUnlocked.includes(c.id)) { setPinCustomer(c); return; }
+    setCustomer(c);
+  };
 
   const onScan = (text: string) => {
     setShowScanner(false);
@@ -455,6 +462,22 @@ function POS() {
       </div>
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={onScan} />}
+
+      {pinCustomer && (
+        <WalletPinDialog
+          title={`${pinCustomer.full_name}'s wallet PIN`}
+          subtitle="This wallet is PIN protected. Ask the customer to enter their PIN to authorise charging it."
+          onCancel={() => { setPinCustomer(null); showToast("Wallet locked — PIN required"); }}
+          onVerify={(pin) => {
+            if (!verifyWalletPin(pinCustomer.id, pin)) return "Incorrect PIN";
+            setWalletUnlocked((prev) => [...prev, pinCustomer.id]);
+            setCustomer(pinCustomer);
+            setPinCustomer(null);
+            showToast(`Wallet unlocked — ${pinCustomer.full_name}`);
+            return true;
+          }}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">

@@ -36,11 +36,13 @@ function SettingsPage() {
   const [currency, setCurrency] = useState(store?.currency ?? "TZS");
   const [low, setLow] = useState<number>(store?.low_balance_threshold ?? 3000);
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
+  const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
 
   useEffect(() => {
     if (!store) return;
     setName(store.name); setLocation(store.location); setContact(store.contact_phone);
     setCurrency(store.currency); setLow(store.low_balance_threshold); setMobile(store.enable_mobile_tender);
+    setServiceRate(store.service_rate ?? 5);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -48,7 +50,7 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile });
+    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -119,6 +121,16 @@ function SettingsPage() {
         <div className="grid grid-cols-2 gap-3">
           <Row label="Currency"><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></Row>
           <Row label="Low-balance nudge"><Input type="number" value={low} onChange={(e) => setLow(Number(e.target.value) || 0)} /></Row>
+        </div>
+        <div className="p-3 rounded-lg border">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-sm">Extra charge (%)</div>
+              <div className="text-xs text-muted-foreground">Added on top of the customer's basket at checkout. Set <b>0</b> to charge the full item amount only.</div>
+            </div>
+            <Input type="number" min={0} max={100} step="0.01" value={serviceRate}
+              onChange={(e) => setServiceRate(Number(e.target.value) || 0)} className="w-24 text-right" />
+          </div>
         </div>
         <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
           <div>

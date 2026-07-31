@@ -16,6 +16,7 @@ export type Profile = {
   role: Role;
   staff_role?: StaffRole;
   staff_pin?: string;
+  wallet_pin?: string; // customer-set PIN guarding wallet records & QR display
   disabled?: boolean;
   last_login?: number;
   created_at?: number;
@@ -46,6 +47,8 @@ export type Store = {
   currency: string;
 
   low_balance_threshold: number;
+  /** Extra charge added at customer checkout, in percent. 0 = charge full amount only. */
+  service_rate?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -468,6 +471,10 @@ type Ctx = {
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
   rejectTopUpRequest: (id: string, reason: string) => void;
   setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
+  /** Customer-set wallet PIN (guards wallet records + QR display + POS wallet charge). */
+  setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
+  verifyWalletPin: (customerId: string, pin: string) => boolean;
+  serviceRate: number;
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
@@ -845,6 +852,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 
 
+  /** Deduct sold plates from cooking batches (FIFO by creation date). */
+  const consumePlates = useCallback((items: OrderItem[], sid: string) => {
+    setBatches((prev) => {
+      const taken: Record<string, number> = {};
+      for (const it of items) {
+        let remaining = it.qty;
+        const order = prev
+          .map((b, idx) => ({ b, idx }))
+          .filter(({ b }) => b.store_id === sid && b.product_id === it.product_id && b.plates_remaining > 0)
+          .sort((a, z) => a.b.created_at - z.b.created_at);
+        for (const { b, idx } of order) {
+          if (remaining <= 0) break;
+          const free = b.plates_remaining - (taken[idx] ?? 0);
+          if (free <= 0) continue;
+          const take = Math.min(free, remaining);
+          taken[idx] = (taken[idx] ?? 0) + take;
+          remaining -= take;
+        }
+      }
+      if (Object.keys(taken).length === 0) return prev;
+      return prev.map((b, idx) => taken[idx] ? { ...b, plates_remaining: Math.max(0, b.plates_remaining - taken[idx]) } : b);
+    });
+  }, []);
+
   const nextReceiptNo = () => {
     const day = todayKey();
     let no = "";
@@ -880,6 +911,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
+    consumePlates(items, currentStoreId);
     setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
@@ -894,7 +926,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates]);
 
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
@@ -913,10 +945,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
     };
     setOrders((prev) => [order, ...prev]);
+    consumePlates(items, currentStoreId);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash]);
+  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
@@ -1102,6 +1135,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     rejectTopUpRequest(id, reason) {
       setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
     },
+    serviceRate: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.service_rate ?? 5),
+    setWalletPin(currentPin, newPin) {
+      if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "Wallet PIN must be 4–6 digits" };
+      if (currentUser.wallet_pin && currentUser.wallet_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, wallet_pin: newPin } : p));
+      return { ok: true };
+    },
+    verifyWalletPin(customerId, pin) {
+      const c = profiles.find((p) => p.id === customerId);
+      if (!c) return false;
+      if (!c.wallet_pin) return true; // not set yet — no gate
+      return c.wallet_pin === pin;
+    },
     setStaffPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
@@ -1181,7 +1228,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!currentUser || currentUser.role !== "customer") return null;
       const sid = activeStoreId;
       if (!sid) return null;
-      const total = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
+      const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
+      const rate = stores.find((st) => st.id === sid)?.service_rate ?? 5;
+      const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
+      const total = subtotal + extra;
       const bal = walletFor(rawUser!, sid);
       if (total <= 0 || bal < total) return null;
       const id = nextOrderId();
@@ -1192,6 +1242,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         created_at: Date.now(),
       };
       setOrders((prev) => [order, ...prev]);
+      consumePlates(order.items, sid);
       setWallet(currentUser.id, sid, -total);
       setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
@@ -1212,6 +1263,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (becameCompleted) {
         setCustomDishRequests((prev) => prev.map((r) => r.order_id === id && r.status === "in_kitchen"
           ? { ...r, status: "fulfilled", resolved_at: Date.now() } : r));
+      }
+      // Notify the customer at every step — delivery orders get courier wording.
+      const target = orders.find((o) => o.id === id);
+      if (target && target.customer_id !== "walkin") {
+        const next = flow[target.status];
+        const isDelivery = target.delivery_type === "delivery";
+        const copy: Partial<Record<OrderStatus, { title: string; body: string }>> = {
+          "in-progress": { title: "Order accepted 👨‍🍳", body: `${target.receipt_no ?? target.id} is being prepared in the kitchen.` },
+          "ready": isDelivery
+            ? { title: "Out for delivery 🛵", body: `${target.receipt_no ?? target.id} has left the kitchen and is on its way to you.` }
+            : { title: "Ready for pickup 🍽️", body: `${target.receipt_no ?? target.id} is ready at the counter.` },
+          "completed": isDelivery
+            ? { title: "Delivered ✅", body: `${target.receipt_no ?? target.id} was delivered. Enjoy your meal!` }
+            : { title: "Order completed ✅", body: `${target.receipt_no ?? target.id} was handed over. Enjoy your meal!` },
+        };
+        const c = copy[next];
+        if (c && next !== target.status) {
+          pushNotification({ store_id: target.store_id, user_id: target.customer_id, kind: "order", title: c.title, body: c.body });
+        }
       }
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {

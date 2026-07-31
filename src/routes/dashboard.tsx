@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Wallet, ShoppingBag, ClipboardList, ArrowUpCircle, ArrowRight, Clock, CheckCircle2, ChefHat, Bell, Download, Printer, QrCode, AlertTriangle, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { WalletPinDialog } from "@/components/wallet-pin-dialog";
+import { Lock, ShieldCheck } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { downloadReceipt, printReceipt } from "@/lib/receipt";
 import { CustomerShell } from "@/components/customer-shell";
@@ -12,10 +14,15 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function Dashboard() {
-  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification } = useStore();
+  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification, verifyWalletPin, setWalletPin } = useStore();
   const navigate = useNavigate();
   const [showId, setShowId] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+  const [askPin, setAskPin] = useState(false);
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [pinCurrent, setPinCurrent] = useState("");
+  const [pinNew, setPinNew] = useState("");
+  const [pinMsg, setPinMsg] = useState("");
   const [popup, setPopup] = useState<null | { title: string; body: string; kind: string }>(null);
 
   useEffect(() => {
@@ -43,6 +50,8 @@ function Dashboard() {
   const myNotifs = notifications.filter((n) => n.user_id === currentUser.id);
   const unreadCount = unreadNotifications(currentUser.id).length;
 
+  const openId = () => { if (currentUser?.wallet_pin) setAskPin(true); else setShowId(true); };
+
   return (
     <CustomerShell active="home">
       <div className="flex items-center justify-between">
@@ -51,7 +60,7 @@ function Dashboard() {
           <h1 className="text-2xl font-bold">{currentUser.full_name.split(" ")[0]} 👋</h1>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowId(true)} aria-label="My QR ID" className="w-10 h-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-md shadow-orange-500/30">
+          <button onClick={() => openId()} aria-label="My QR ID" className="w-10 h-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-md shadow-orange-500/30">
             <QrCode className="w-4 h-4" />
           </button>
           <button
@@ -102,14 +111,17 @@ function Dashboard() {
         </div>
       </div>
 
-      <button onClick={() => setShowId(true)} className="mt-4 w-full rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-4 flex items-center gap-4 text-left hover:bg-primary/10 transition">
-        <div className="w-14 h-14 rounded-xl bg-white grid place-items-center shrink-0">
+      <button onClick={() => openId()} className="mt-4 w-full rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-4 flex items-center gap-4 text-left hover:bg-primary/10 transition">
+        <div className="w-14 h-14 rounded-xl bg-white grid place-items-center shrink-0 relative overflow-hidden">
           <QRCodeSVG value={currentUser.id} size={48} level="M" />
+          {currentUser.wallet_pin && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-[3px] grid place-items-center text-primary"><Lock className="w-5 h-5" /></div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-xs font-bold text-primary uppercase tracking-wider">Your BitePay ID</div>
           <div className="font-bold truncate">{currentUser.full_name}</div>
-          <div className="text-xs text-muted-foreground">Show at POS to pay from wallet</div>
+          <div className="text-xs text-muted-foreground">{currentUser.wallet_pin ? "PIN protected — tap to unlock" : "Show at POS to pay from wallet"}</div>
         </div>
         <ArrowRight className="w-4 h-4 text-primary shrink-0" />
       </button>
@@ -119,6 +131,17 @@ function Dashboard() {
         <QuickAction to="/history" icon={<ClipboardList className="w-5 h-5" />} label="History" tint="bg-slate-900/5 text-foreground" />
         <QuickAction to="/topup" icon={<ArrowUpCircle className="w-5 h-5" />} label="Top-Up" tint="bg-emerald-500/10 text-emerald-600" />
       </div>
+
+      <button onClick={() => { setShowPinSetup(true); setPinMsg(""); }} className="mt-4 w-full rounded-2xl border bg-surface p-4 flex items-center gap-3 text-left hover:bg-muted/50 transition">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center shrink-0"><ShieldCheck className="w-5 h-5" /></div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm">Wallet PIN</div>
+          <div className="text-xs text-muted-foreground">
+            {currentUser.wallet_pin ? "Your wallet records, QR code and POS payments are PIN protected." : "Set a PIN to lock your wallet records, QR code and POS payments."}
+          </div>
+        </div>
+        <span className="text-xs font-bold text-primary shrink-0">{currentUser.wallet_pin ? "Change" : "Set up"}</span>
+      </button>
 
       <section className="mt-8">
         <div className="flex items-center justify-between mb-3">
@@ -199,6 +222,49 @@ function Dashboard() {
             <div className="mt-2 inline-block font-mono text-xs bg-muted px-2 py-1 rounded">{currentUser.id}</div>
             <p className="mt-4 text-xs text-muted-foreground">Show this to the cashier — they'll scan to charge your wallet. No printed card needed.</p>
           </div>
+        </div>
+      )}
+
+      {askPin && (
+        <WalletPinDialog
+          title="Unlock your QR"
+          subtitle="Enter your wallet PIN to display your payment QR."
+          onCancel={() => setAskPin(false)}
+          onVerify={(pin) => {
+            if (!verifyWalletPin(currentUser.id, pin)) return "Incorrect PIN";
+            setAskPin(false); setShowId(true); return true;
+          }}
+        />
+      )}
+
+      {showPinSetup && (
+        <div className="fixed inset-0 z-[70] bg-black/60 grid place-items-center p-4" onClick={() => setShowPinSetup(false)}>
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const r = setWalletPin(currentUser.wallet_pin ? pinCurrent : null, pinNew);
+              if (!r.ok) { setPinMsg(r.reason); return; }
+              setPinMsg(""); setPinCurrent(""); setPinNew(""); setShowPinSetup(false);
+            }}
+            className="bg-background rounded-3xl w-full max-w-xs p-6"
+          >
+            <h3 className="font-bold text-lg">{currentUser.wallet_pin ? "Change wallet PIN" : "Set wallet PIN"}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">4–6 digits. Required to open your wallet records, show your QR and approve wallet payments at the counter.</p>
+            {currentUser.wallet_pin && (
+              <input type="password" inputMode="numeric" maxLength={6} value={pinCurrent} placeholder="Current PIN"
+                onChange={(e) => setPinCurrent(e.target.value.replace(/\D/g, ""))}
+                className="mt-4 w-full h-11 px-3 rounded-xl border bg-background text-center tracking-[0.4em] font-bold" />
+            )}
+            <input type="password" inputMode="numeric" maxLength={6} value={pinNew} placeholder="New PIN"
+              onChange={(e) => setPinNew(e.target.value.replace(/\D/g, ""))}
+              className="mt-3 w-full h-11 px-3 rounded-xl border bg-background text-center tracking-[0.4em] font-bold" />
+            {pinMsg && <div className="mt-2 text-xs text-destructive font-medium">{pinMsg}</div>}
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setShowPinSetup(false)} className="flex-1 h-11 rounded-xl border font-semibold text-sm">Cancel</button>
+              <button type="submit" className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm">Save PIN</button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, Lock } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
+import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/history")({
   component: HistoryPage,
@@ -10,10 +11,38 @@ export const Route = createFileRoute("/history")({
 });
 
 function HistoryPage() {
-  const { currentUser, transactions } = useStore();
+  const { currentUser, transactions, verifyWalletPin } = useStore();
   const navigate = useNavigate();
+  const [unlocked, setUnlocked] = useState(false);
+  const [asking, setAsking] = useState(false);
   useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
   if (!currentUser) return null;
+
+  const locked = Boolean(currentUser.wallet_pin) && !unlocked;
+  if (locked) {
+    return (
+      <CustomerShell active="history">
+        <h1 className="text-2xl font-bold">Transaction History</h1>
+        <p className="text-muted-foreground text-sm">Protected by your wallet PIN</p>
+        <div className="mt-8 rounded-3xl border border-dashed p-10 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary grid place-items-center mx-auto"><Lock className="w-6 h-6" /></div>
+          <p className="mt-4 text-sm text-muted-foreground">Enter your wallet PIN to view your top-ups and deductions.</p>
+          <button onClick={() => setAsking(true)} className="mt-4 h-11 px-6 rounded-xl bg-primary text-primary-foreground font-semibold text-sm">Unlock records</button>
+        </div>
+        {asking && (
+          <WalletPinDialog
+            title="Unlock wallet records"
+            subtitle="Enter your 4–6 digit wallet PIN."
+            onCancel={() => setAsking(false)}
+            onVerify={(pin) => {
+              if (!verifyWalletPin(currentUser.id, pin)) return "Incorrect PIN";
+              setAsking(false); setUnlocked(true); return true;
+            }}
+          />
+        )}
+      </CustomerShell>
+    );
+  }
 
   const mine = transactions.filter((t) => t.customer_id === currentUser.id);
 
