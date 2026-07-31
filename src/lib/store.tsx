@@ -207,6 +207,12 @@ export type CustomDishRequest = {
   assigned_at?: number;
   assigned_by?: string;
   order_id?: string;
+  // Who raised it, and how it will be paid.
+  created_by?: "customer" | "staff";
+  payment_mode?: "wallet" | "on_delivery";
+  settled_at?: number;
+  settled_tender?: "cash" | "mobile";
+  settled_reference?: string;
 };
 
 
