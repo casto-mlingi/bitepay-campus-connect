@@ -55,6 +55,19 @@ function Customers() {
     setPinPrompt({ title, onSubmit });
   };
 
+  // Only supervisors/owners may reveal a customer's wallet QR, and only after
+  // re-entering their staff PIN. Cashiers never see the QR.
+  const canViewQR = (currentUser?.staff_role ?? "cashier") !== "cashier";
+  const openQR = (c: Profile) => {
+    if (!canViewQR) { showToast("Only a supervisor or owner can view a customer's QR"); return; }
+    requestPin("Enter your staff PIN to view the customer QR", (pin) => {
+      if (pin !== currentUser?.staff_pin) { showToast("Incorrect staff PIN"); return; }
+      setPinPrompt(null);
+      setShowQR(c);
+    });
+  };
+
+
   const doTopUp = () => {
     if (!selected || topupAmt <= 0) return;
     if (topupTender === "mobile" && !topupRef.trim()) { showToast("Enter mobile payment reference"); return; }
