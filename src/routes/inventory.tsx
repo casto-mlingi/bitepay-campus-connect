@@ -369,7 +369,7 @@ function BatchesPanel() {
                   <select value={ing.raw_id} onChange={(e) => updateIng(i, { raw_id: e.target.value })} className="col-span-6 px-2 py-2 rounded-lg border bg-background text-sm">
                     {rawMaterials.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.stock.toFixed(1)} {r.unit})</option>)}
                   </select>
-                  <input type="number" min={0} step={0.1} value={ing.qty} onChange={(e) => updateIng(i, { qty: Number(e.target.value) })} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
+                  <input type="number" min={0} step="any" inputMode="decimal" value={ing.qty} onChange={(e) => updateIng(i, { qty: Number(e.target.value) })} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
                   <div className="col-span-2 text-xs text-muted-foreground">{raw ? formatTZS(raw.avg_cost * ing.qty) : ""}</div>
                   <button type="button" onClick={() => removeIng(i)} className="col-span-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
@@ -563,7 +563,7 @@ function RequestCostCard({ req }: { req: CustomDishRequest }) {
                   <select value={ing.raw_id} onChange={(e) => updateIng(i, { raw_id: e.target.value })} className="col-span-6 px-2 py-2 rounded-lg border bg-background text-sm">
                     {rawMaterials.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.stock.toFixed(1)} {r.unit})</option>)}
                   </select>
-                  <input type="number" min={0} step={0.1} value={ing.qty} onChange={(e) => updateIng(i, { qty: Number(e.target.value) })} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
+                  <input type="number" min={0} step="any" inputMode="decimal" value={ing.qty} onChange={(e) => updateIng(i, { qty: Number(e.target.value) })} className="col-span-3 px-2 py-2 rounded-lg border bg-background text-sm" />
                   <div className="col-span-2 text-xs text-muted-foreground">{raw ? formatTZS(raw.avg_cost * ing.qty) : ""}</div>
                   <button type="button" onClick={() => removeIng(i)} className="col-span-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
