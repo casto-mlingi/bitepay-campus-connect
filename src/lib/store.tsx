@@ -22,8 +22,13 @@ export type Profile = {
   created_at?: number;
   store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
   memberships?: StoreMembership[]; // staff only — every store this person belongs to
-
+  /** Password set by staff at registration — the customer must replace it on first sign-in. */
+  default_password?: string;
+  must_change_password?: boolean;
 };
+
+/** Default first-time password for a customer created at the counter. */
+export const defaultPasswordFor = (phone: string) => (phone.replace(/\D/g, "").slice(-4) || "0000");
 
 
 export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
@@ -49,6 +54,10 @@ export type Store = {
   low_balance_threshold: number;
   /** Extra charge added at customer checkout, in percent. 0 = charge full amount only. */
   service_rate?: number;
+  /** Staff menu requests at or above this amount need owner approval. 0 = off. */
+  approval_threshold?: number;
+  /** Days a pay-later (debtor) balance may stay open before it is flagged overdue. */
+  credit_terms_days?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -174,11 +183,62 @@ export type TopUpRequest = {
   reject_reason?: string;
 };
 
+/** ---- Pay later (debtor) --------------------------------------------------
+ * A customer whose wallet cannot cover an order can ask to pay later. Once a
+ * supervisor/owner approves, the wallet is allowed to go NEGATIVE up to the
+ * approved amount — that negative balance is the debt, shown in red, and it is
+ * flagged overdue after the store's credit terms elapse.
+ */
+export type PayLaterStatus = "pending" | "approved" | "rejected" | "settled";
+export type PayLaterRequest = {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  amount: number;
+  reason?: string;
+  status: PayLaterStatus;
+  created_at: number;
+  due_at?: number;
+  resolved_at?: number;
+  resolved_by?: string;
+  reject_reason?: string;
+  settled_at?: number;
+};
+
+/** Immutable audit line for every menu-request event. */
+export type MenuRequestAudit = {
+  id: string;
+  store_id: string;
+  request_id: string;
+  order_id?: string;
+  actor_id: string;
+  actor_name: string;
+  action:
+    | "created" | "quoted" | "confirmed" | "approval_required" | "approved" | "rejected"
+    | "stock_reserved" | "stock_returned" | "posted_to_board" | "payment" | "closed_out" | "cancelled" | "fulfilled";
+  detail: string;
+  created_at: number;
+};
+
+/** One money hand-over against an order (supports partial settlement). */
+export type OrderPayment = {
+  id: string;
+  amount: number;
+  tender: "cash" | "mobile";
+  reference?: string;
+  receipt_no: string;
+  created_at: number;
+  by_name: string;
+};
+
 // Funnel: pending → accepted (staff quotes a price) → confirmed (customer accepts
 // the quote, wallet is debited) → in_kitchen (owner assigned raw materials, order
 // pushed to the live board) → fulfilled. rejected/cancelled are terminal.
 export type CustomDishRequestStatus =
-  | "pending" | "accepted" | "rejected" | "confirmed" | "in_kitchen" | "fulfilled" | "cancelled";
+  | "pending" | "accepted" | "rejected" | "confirmed" | "awaiting_approval"
+  | "in_kitchen" | "fulfilled" | "cancelled";
 export type CustomDishRequest = {
   id: string;
   store_id: string;
@@ -213,6 +273,13 @@ export type CustomDishRequest = {
   settled_at?: number;
   settled_tender?: "cash" | "mobile";
   settled_reference?: string;
+  // Approval workflow (staff-raised requests above the store threshold)
+  requires_approval?: boolean;
+  approved_by?: string;
+  approved_at?: number;
+  // Inventory reservation — raw materials held for production, returned on cancel.
+  stock_reserved?: boolean;
+  cancelled_reason?: string;
 };
 
 
@@ -253,6 +320,11 @@ export type Order = {
   reversed?: boolean;
   reversal_of?: string;
   is_reversal?: boolean;
+  /** Partial settlement of pay-on-delivery orders. */
+  amount_paid?: number;
+  payments?: OrderPayment[];
+  closed_out?: boolean;
+  closeout_reason?: string;
   cashier_id?: string;
   cashier_name?: string;
   shift_id?: string;
@@ -485,7 +557,7 @@ type Ctx = {
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
-  addCustomer: (input: { full_name: string; phone: string; initial_balance?: number }) => Profile | null;
+  addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
   updateRawStock: (id: string, delta: number) => void;
   addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
@@ -527,6 +599,40 @@ type Ctx = {
   }) => Ok | Fail;
   // Collect payment for a pay-on-delivery order when the food is handed over.
   settleOnDeliveryOrder: (orderId: string, input: { tender: "cash" | "mobile"; reference?: string }) => Ok | Fail;
+  /** Record a full OR partial hand-over payment; returns the payment receipt. */
+  recordOrderPayment: (orderId: string, input: { amount: number; tender: "cash" | "mobile"; reference?: string }) =>
+    | { ok: true; payment: OrderPayment; outstanding: number }
+    | Fail;
+  /** Owner-only: write off the remaining balance and close the order. */
+  closeOutOrder: (orderId: string, reason: string) => Ok | Fail;
+  /** Orders still owing money (pay-on-delivery, partially settled included). */
+  receivables: (Order & { outstanding: number })[];
+
+  // ---- Menu request governance ----
+  menuAudits: MenuRequestAudit[];
+  auditsFor: (requestId: string) => MenuRequestAudit[];
+  approvalThreshold: number;
+  approveMenuRequest: (id: string, action: "approve" | "reject", reason?: string) => Ok | Fail;
+  /** Cancel before delivery: returns reserved stock and refunds any wallet charge. */
+  cancelMenuRequest: (id: string, reason: string) => Ok | Fail;
+
+  // ---- Pay later / debtors ----
+  payLaterRequests: PayLaterRequest[];
+  creditLimitOf: (customerId: string, storeId?: string) => number;
+  debtorBalance: (customerId: string, storeId?: string) => number;
+  isOverdue: (customerId: string, storeId?: string) => boolean;
+  submitPayLaterRequest: (input: { amount: number; reason?: string }) => Ok | Fail;
+  reviewPayLaterRequest: (id: string, action: "approve" | "reject", input?: { pin?: string; reason?: string; days?: number }) => Ok | Fail;
+
+  // ---- Customer credentials ----
+  changeOwnPassword: (newPassword: string) => Ok | Fail;
+  resetCustomerPassword: (customerId: string, pin: string) => { ok: true; password: string } | Fail;
+
+  // ---- Public storefront (no sign-in required) ----
+  storefront: { storeId: string | null; store: Store | null; products: Product[] };
+  cartTotal: number;
+
+
 
 
 
@@ -610,6 +716,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [customDishRequests, setCustomDishRequests] = useState<CustomDishRequest[]>([]);
+  const [payLaterRequests, setPayLaterRequests] = useState<PayLaterRequest[]>([]);
+  const [menuAudits, setMenuAudits] = useState<MenuRequestAudit[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
@@ -632,12 +740,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       profiles, products, orders, transactions, rawMaterials, batches, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
-      smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
-     smsLogs, notifications, topUpRequests, customDishRequests, stores, tickets,
+     smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -661,6 +769,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.notifications) setNotifications(s.notifications);
     if (s.topUpRequests) setTopUpRequests(s.topUpRequests);
     if (s.customDishRequests) setCustomDishRequests(s.customDishRequests);
+    if (s.payLaterRequests) setPayLaterRequests(s.payLaterRequests);
+    if (s.menuAudits) setMenuAudits(s.menuAudits);
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
     if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
@@ -901,6 +1011,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return prev.map((b, idx) => taken[idx] ? { ...b, plates_remaining: Math.max(0, b.plates_remaining - taken[idx]) } : b);
     });
   }, []);
+
+  // ---- Pay-later / debtor helpers ---------------------------------------
+  const scopedPayLater = useMemo(
+    () => rawUser?.role === "customer"
+      ? payLaterRequests.filter((r) => r.customer_id === rawUser.id)
+      : (currentStoreId ? payLaterRequests.filter((r) => r.store_id === currentStoreId) : []),
+    [payLaterRequests, currentStoreId, rawUser],
+  );
+  const scopedAudits = useMemo(
+    () => currentStoreId ? menuAudits.filter((a) => a.store_id === currentStoreId) : [],
+    [menuAudits, currentStoreId],
+  );
+
+  /** Approved, unsettled pay-later lines = how far the wallet may go negative. */
+  const creditLimitOf = useCallback((customerId: string, storeId?: string) => {
+    const sid = storeId ?? currentStoreId;
+    const org = orgIdOfId(sid);
+    return payLaterRequests
+      .filter((r) => r.customer_id === customerId && r.status === "approved" && orgIdOfId(r.store_id) === org)
+      .reduce((s, r) => s + r.amount, 0);
+  }, [payLaterRequests, currentStoreId, orgIdOfId]);
+
+  const debtorBalance = useCallback((customerId: string, storeId?: string) => {
+    const sid = storeId ?? currentStoreId;
+    const p = profiles.find((x) => x.id === customerId);
+    if (!p || !sid) return 0;
+    const bal = walletFor(p, sid);
+    return bal < 0 ? -bal : 0;
+  }, [profiles, currentStoreId, stores]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isOverdue = useCallback((customerId: string, storeId?: string) => {
+    const sid = storeId ?? currentStoreId;
+    const org = orgIdOfId(sid);
+    if (debtorBalance(customerId, sid ?? undefined) <= 0) return false;
+    return payLaterRequests.some((r) =>
+      r.customer_id === customerId && r.status === "approved" &&
+      orgIdOfId(r.store_id) === org && (r.due_at ?? Infinity) < Date.now());
+  }, [payLaterRequests, currentStoreId, orgIdOfId, debtorBalance]);
+
+  const logAudit = useCallback((entry: Omit<MenuRequestAudit, "id" | "created_at">) => {
+    setMenuAudits((prev) => [{ ...entry, id: uid("ma"), created_at: Date.now() }, ...prev]);
+  }, []);
+
+  // ---- Public storefront (visible before sign-in) ------------------------
+  const storefrontStore = useMemo(() => {
+    if (store) return store;
+    if (selectedCanteenId) return stores.find((s) => s.id === selectedCanteenId) ?? null;
+    return availableCanteens[0] ?? stores[0] ?? null;
+  }, [store, stores, selectedCanteenId, availableCanteens]);
+  const storefrontProducts = useMemo(
+    () => storefrontStore ? products.filter((p) => p.store_id === storefrontStore.id) : [],
+    [products, storefrontStore],
+  );
+  const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.product.price * c.qty, 0), [cart]);
+
 
   const nextReceiptNo = () => {
     const day = todayKey();
@@ -1259,7 +1424,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
       const total = subtotal + extra;
       const bal = walletFor(rawUser!, sid);
-      if (total <= 0 || bal < total) return null;
+      const limit = creditLimitOf(currentUser.id, sid);
+      if (total <= 0 || bal + limit < total) return null;
       const id = nextOrderId();
       const order: Order = {
         id, store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
@@ -1360,13 +1526,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!q) return null;
       return scopedProfiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
     },
-    addCustomer({ full_name, phone, initial_balance = 0 }) {
+    addCustomer({ full_name, phone, initial_balance = 0, default_password }) {
       if (!currentStoreId) return null;
       const name = full_name.trim();
       const ph = phone.trim();
       if (!name || !ph) return null;
       if (profiles.some((p) => p.phone === ph)) return null;
-      const u: Profile = { id: uid("u"), full_name: name, phone: ph, password: ph.slice(-4) || "0000", wallet_balance: initial_balance, role: "customer", created_at: Date.now(), store_id: currentStoreId };
+      const pw = (default_password ?? "").trim() || defaultPasswordFor(ph);
+      const u: Profile = {
+        id: uid("u"), full_name: name, phone: ph, password: pw,
+        default_password: pw, must_change_password: true,
+        wallet_balance: initial_balance, role: "customer", created_at: Date.now(), store_id: currentStoreId,
+      };
       setProfiles((prev) => [...prev, u]);
       if (initial_balance > 0) {
         setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
@@ -1756,23 +1927,269 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     settleOnDeliveryOrder(orderId, { tender, reference }) {
+      const order = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
+      if (!order) return { ok: false, reason: "Order not found" };
+      const outstanding = Math.max(0, order.total_amount - (order.amount_paid ?? 0));
+      const res = value.recordOrderPayment(orderId, { amount: outstanding, tender, reference });
+      return res.ok ? { ok: true } : res;
+    },
+    recordOrderPayment(orderId, { amount, tender, reference }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
       if (!currentStoreId) return { ok: false, reason: "No store context" };
       const order = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
       if (!order) return { ok: false, reason: "Order not found" };
-      if (order.payment_status === "paid") return { ok: false, reason: "Already paid" };
+      if (order.closed_out) return { ok: false, reason: "This order was closed out" };
+      if (order.payment_status === "paid") return { ok: false, reason: "Already settled in full" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
-      const now = Date.now();
+      const already = order.amount_paid ?? 0;
+      const outstandingBefore = Math.max(0, order.total_amount - already);
+      const pay = Math.round(Math.min(Math.max(0, amount), outstandingBefore));
+      if (pay <= 0) return { ok: false, reason: "Enter an amount to collect" };
+      const receipt_no = nextReceiptNo();
+      const payment: OrderPayment = {
+        id: uid("pay"), amount: pay, tender, reference: reference?.trim() || undefined,
+        receipt_no, created_at: Date.now(), by_name: currentUser.full_name,
+      };
+      const paidTotal = already + pay;
+      const outstanding = Math.max(0, order.total_amount - paidTotal);
+      setOrders((prev) => prev.map((o) => o.id === orderId ? {
+        ...o, amount_paid: paidTotal, payments: [...(o.payments ?? []), payment],
+        payment_status: outstanding === 0 ? "paid" : "unpaid",
+        cash_paid: paidTotal, tender, reference: payment.reference ?? o.reference,
+      } : o));
+      if (tender === "mobile") adjustBank((b) => b + pay);
+      else adjustCash((c) => c + pay);
+      const req = customDishRequests.find((r) => r.order_id === orderId);
+      if (req) {
+        setCustomDishRequests((prev) => prev.map((r) => r.order_id === orderId ? {
+          ...r, paid_amount: paidTotal,
+          settled_at: outstanding === 0 ? Date.now() : r.settled_at,
+          settled_tender: tender, settled_reference: payment.reference,
+        } : r));
+        logAudit({
+          store_id: currentStoreId, request_id: req.id, order_id: orderId,
+          actor_id: currentUser.id, actor_name: currentUser.full_name, action: "payment",
+          detail: `${formatTZS(pay)} collected by ${tender === "mobile" ? "mobile money" : "cash"}${payment.reference ? ` · ref ${payment.reference}` : ""} · receipt ${receipt_no} · outstanding ${formatTZS(outstanding)}`,
+        });
+      }
+      return { ok: true, payment, outstanding };
+    },
+    closeOutOrder(orderId, reason) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("finance.edit")) return { ok: false, reason: "Only a supervisor or owner can close out an order" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const order = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
+      if (!order) return { ok: false, reason: "Order not found" };
+      if (order.payment_status === "paid" || order.closed_out) return { ok: false, reason: "Nothing outstanding" };
+      if (!reason.trim()) return { ok: false, reason: "Give a reason for the write-off" };
+      const outstanding = Math.max(0, order.total_amount - (order.amount_paid ?? 0));
       setOrders((prev) => prev.map((o) => o.id === orderId
-        ? { ...o, payment_status: "paid", cash_paid: order.total_amount, tender, reference: tender === "mobile" ? reference : undefined }
-        : o));
-      if (tender === "mobile") adjustBank((b) => b + order.total_amount);
-      else adjustCash((c) => c + order.total_amount);
-      setCustomDishRequests((prev) => prev.map((r) => r.order_id === orderId
-        ? { ...r, paid_amount: order.total_amount, settled_at: now, settled_tender: tender, settled_reference: reference }
-        : r));
+        ? { ...o, closed_out: true, closeout_reason: reason.trim(), payment_status: "paid" } : o));
+      if (outstanding > 0) {
+        setExpenses((prev) => [{
+          id: `EX-${Date.now()}`, store_id: currentStoreId, date: Date.now(), category: "Other",
+          amount: outstanding, description: `Bad debt written off · ${order.customer_name} · ${reason.trim()}`,
+          payment_method: "cash",
+        }, ...prev]);
+      }
+      const req = customDishRequests.find((r) => r.order_id === orderId);
+      if (req) logAudit({
+        store_id: currentStoreId, request_id: req.id, order_id: orderId,
+        actor_id: currentUser.id, actor_name: currentUser.full_name, action: "closed_out",
+        detail: `${formatTZS(outstanding)} written off — ${reason.trim()}`,
+      });
       return { ok: true };
     },
+    receivables: scopedOrders
+      .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
+      .map((o) => ({ ...o, outstanding: Math.max(0, o.total_amount - (o.amount_paid ?? 0)) })),
+
+    menuAudits: scopedAudits,
+    auditsFor: (requestId) => scopedAudits.filter((a) => a.request_id === requestId).sort((a, b) => b.created_at - a.created_at),
+    approvalThreshold: store?.approval_threshold ?? 0,
+    approveMenuRequest(id, action, reason) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("team.manage_all")) return { ok: false, reason: "Only the owner can approve this request" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status !== "awaiting_approval") return { ok: false, reason: "This request is not awaiting approval" };
+      const now = Date.now();
+      const price = req.staff_price ?? 0;
+
+      if (action === "reject") {
+        // Give the reserved raw materials back.
+        if (req.stock_reserved && req.cost_ingredients) {
+          setRawMaterials((prev) => prev.map((r) => {
+            const ing = req.cost_ingredients!.find((i) => i.raw_id === r.id);
+            return ing ? { ...r, stock: r.stock + ing.qty } : r;
+          }));
+        }
+        setCustomDishRequests((prev) => prev.map((r) => r.id === id ? {
+          ...r, status: "cancelled", stock_reserved: false,
+          cancelled_reason: reason?.trim() || "Rejected by owner", resolved_at: now,
+        } : r));
+        logAudit({ store_id: currentStoreId, request_id: id, actor_id: currentUser.id, actor_name: currentUser.full_name, action: "rejected", detail: `Rejected — ${reason?.trim() || "no reason given"}; reserved stock returned` });
+        return { ok: true };
+      }
+
+      // Approve: charge the wallet (if applicable) and post to the live board.
+      let cust: Profile | null = null;
+      if (req.payment_mode === "wallet") {
+        cust = profiles.find((p) => p.id === req.customer_id) ?? null;
+        if (!cust) return { ok: false, reason: "Wallet client not found" };
+        const bal = walletFor(cust, currentStoreId);
+        const limit = creditLimitOf(cust.id, currentStoreId);
+        if (bal + limit < price) return { ok: false, reason: `Insufficient wallet balance — short by ${formatTZS(price - bal)}` };
+        setWallet(cust.id, currentStoreId, -price);
+        setTransactions((prev) => [{
+          id: uid("t"), store_id: currentStoreId, customer_id: cust!.id, order_id: req.order_id,
+          type: "deduction", amount: price, description: `Custom dish: ${req.dish_name}`, created_at: now,
+        }, ...prev]);
+      }
+      const orderId = nextOrderId();
+      const order: Order = {
+        id: orderId, store_id: currentStoreId, customer_id: cust?.id ?? "walkin", customer_name: req.customer_name,
+        items: [{ product_id: `custom-${req.id}`, name: `${req.dish_name} (custom)`, price, qty: 1 }],
+        total_amount: price, status: "new", delivery_type: "pickup",
+        payment_status: req.payment_mode === "wallet" ? "paid" : "unpaid",
+        amount_paid: req.payment_mode === "wallet" ? price : 0,
+        created_at: now, wallet_paid: req.payment_mode === "wallet" ? price : 0, cash_paid: 0,
+        cashier_id: currentUser.id, cashier_name: currentUser.full_name, shift_id: activeShift?.id,
+      };
+      setOrders((prev) => [order, ...prev]);
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id ? {
+        ...r, status: "in_kitchen", approved_by: currentUser.full_name, approved_at: now,
+        paid_amount: req.payment_mode === "wallet" ? price : 0,
+        confirmed_at: req.payment_mode === "wallet" ? now : r.confirmed_at, order_id: orderId,
+      } : r));
+      logAudit({ store_id: currentStoreId, request_id: id, order_id: orderId, actor_id: currentUser.id, actor_name: currentUser.full_name, action: "approved", detail: `Approved at ${formatTZS(price)} and posted to the order board` });
+      return { ok: true };
+    },
+    cancelMenuRequest(id, reason) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Supervisors and owners only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!reason.trim()) return { ok: false, reason: "Give a cancellation reason" };
+      const req = customDishRequests.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!req) return { ok: false, reason: "Request not found" };
+      if (req.status === "fulfilled" || req.status === "cancelled") return { ok: false, reason: "Too late — this request is already closed" };
+      const order = req.order_id ? orders.find((o) => o.id === req.order_id) : undefined;
+      if (order?.status === "completed") return { ok: false, reason: "The order was already delivered" };
+      const now = Date.now();
+
+      // 1. Return reserved raw materials to inventory.
+      if (req.stock_reserved && req.cost_ingredients?.length) {
+        setRawMaterials((prev) => prev.map((r) => {
+          const ing = req.cost_ingredients!.find((i) => i.raw_id === r.id);
+          return ing ? { ...r, stock: r.stock + ing.qty } : r;
+        }));
+        logAudit({ store_id: currentStoreId, request_id: id, order_id: req.order_id, actor_id: currentUser.id, actor_name: currentUser.full_name, action: "stock_returned", detail: `${req.cost_ingredients.length} raw material line(s) returned to inventory` });
+      }
+      // 2. Refund whatever the wallet was charged.
+      const refund = req.payment_mode === "wallet" ? (req.paid_amount ?? 0) : 0;
+      if (refund > 0 && req.customer_id !== "walkin") {
+        setWallet(req.customer_id, currentStoreId, refund);
+        setTransactions((prev) => [{
+          id: uid("t"), store_id: currentStoreId, customer_id: req.customer_id, order_id: req.order_id,
+          type: "topup", amount: refund, description: `Refund — cancelled dish "${req.dish_name}"`, created_at: now,
+        }, ...prev]);
+      }
+      // 3. Reverse any cash already collected on a pay-on-delivery order.
+      const collected = order?.amount_paid ?? 0;
+      if (collected > 0) {
+        if (order?.tender === "mobile") adjustBank((b) => b - collected);
+        else adjustCash((c) => c - collected);
+      }
+      // 4. Pull the order off the board.
+      if (req.order_id) setOrders((prev) => prev.filter((o) => o.id !== req.order_id));
+      setCustomDishRequests((prev) => prev.map((r) => r.id === id ? {
+        ...r, status: "cancelled", stock_reserved: false, cancelled_reason: reason.trim(),
+        resolved_at: now, resolved_by: currentUser.full_name,
+      } : r));
+      logAudit({ store_id: currentStoreId, request_id: id, order_id: req.order_id, actor_id: currentUser.id, actor_name: currentUser.full_name, action: "cancelled", detail: `Cancelled — ${reason.trim()}${refund > 0 ? ` · ${formatTZS(refund)} refunded to wallet` : ""}${collected > 0 ? ` · ${formatTZS(collected)} cash returned` : ""}` });
+      if (req.customer_id !== "walkin") {
+        pushNotification({ store_id: currentStoreId, user_id: req.customer_id, kind: "order", title: "Order cancelled", body: `"${req.dish_name}" was cancelled — ${reason.trim()}.${refund > 0 ? ` ${formatTZS(refund)} is back in your wallet.` : ""}` });
+      }
+      return { ok: true };
+    },
+
+    payLaterRequests: scopedPayLater,
+    creditLimitOf,
+    debtorBalance,
+    isOverdue,
+    submitPayLaterRequest({ amount, reason }) {
+      if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      const sid = activeStoreId;
+      if (!sid) return { ok: false, reason: "Choose a canteen first" };
+      if (!(amount > 0)) return { ok: false, reason: "Enter the amount you need" };
+      if (payLaterRequests.some((r) => r.customer_id === currentUser.id && r.status === "pending")) {
+        return { ok: false, reason: "You already have a pay-later request waiting for approval" };
+      }
+      const req: PayLaterRequest = {
+        id: uid("pl"), store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
+        customer_phone: currentUser.phone, amount: Math.round(amount), reason: reason?.trim(),
+        status: "pending", created_at: Date.now(),
+      };
+      setPayLaterRequests((prev) => [req, ...prev]);
+      for (const staff of profiles.filter((p) => p.role === "staff" && p.store_id === sid)) {
+        pushNotification({ store_id: sid, user_id: staff.id, kind: "info", title: "Pay-later request", body: `${currentUser.full_name} asked to pay later for ${formatTZS(req.amount)}. Review it in Customers → Pay later.` });
+      }
+      return { ok: true };
+    },
+    reviewPayLaterRequest(id, action, input) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
+      if (currentUser.staff_pin && input?.pin && currentUser.staff_pin !== input.pin) return { ok: false, reason: "Incorrect PIN" };
+      const req = payLaterRequests.find((r) => r.id === id);
+      if (!req || req.status !== "pending") return { ok: false, reason: "Request not found" };
+      const now = Date.now();
+      const days = input?.days ?? store?.credit_terms_days ?? 7;
+      setPayLaterRequests((prev) => prev.map((r) => r.id === id ? {
+        ...r,
+        status: action === "approve" ? "approved" : "rejected",
+        due_at: action === "approve" ? now + days * 86400000 : undefined,
+        reject_reason: action === "reject" ? (input?.reason ?? "Declined") : undefined,
+        resolved_at: now, resolved_by: currentUser.full_name,
+      } : r));
+      pushNotification({
+        store_id: req.store_id, user_id: req.customer_id, kind: "info",
+        title: action === "approve" ? "Pay later approved ✅" : "Pay later declined",
+        body: action === "approve"
+          ? `You can spend up to ${formatTZS(req.amount)} on credit. Settle it within ${days} days to avoid an overdue flag.`
+          : `Your pay-later request was declined — ${input?.reason ?? "please top up instead"}.`,
+      });
+      return { ok: true };
+    },
+
+    changeOwnPassword(newPassword) {
+      if (!currentUser) return { ok: false, reason: "Not signed in" };
+      if (newPassword.length < 4) return { ok: false, reason: "Password must be at least 4 characters" };
+      if (currentUser.default_password && newPassword === currentUser.default_password) {
+        return { ok: false, reason: "Choose a password different from the one you were given" };
+      }
+      setProfiles((prev) => prev.map((p) => p.id === currentUser.id
+        ? { ...p, password: newPassword, must_change_password: false } : p));
+      return { ok: true };
+    },
+    resetCustomerPassword(customerId, pin) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
+      if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
+      if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
+      const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
+      if (!cust) return { ok: false, reason: "Customer not found" };
+      const pw = cust.default_password || defaultPasswordFor(cust.phone);
+      setProfiles((prev) => prev.map((p) => p.id === customerId
+        ? { ...p, password: pw, default_password: pw, must_change_password: true } : p));
+      pushNotification({
+        store_id: currentStoreId ?? cust.store_id ?? "", user_id: customerId, kind: "info",
+        title: "Password reset", body: `${currentUser.full_name} reset your password to the default. You'll be asked to set a new one at your next sign-in.`,
+      });
+      return { ok: true, password: pw };
+    },
+    storefront: { storeId: storefrontStore?.id ?? null, store: storefrontStore, products: storefrontProducts },
+    cartTotal,
     syncOutbox() {
       let synced = 0, failed = 0;
       const rem: PendingSale[] = [];
