@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ChefHat, ArrowRight, Eye, EyeOff, Store as StoreIcon, User, ShieldCheck, LifeBuoy, ArrowLeft } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useStore, formatTZS } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/login")({
 type Tab = "customer" | "staff";
 
 function LoginPage() {
-  const { login, signup, hasOwner, store, stores, canteenGroups } = useStore();
+  const { login, signup, hasOwner, store, stores, canteenGroups, cart, cartTotal, changeOwnPassword } = useStore();
   const loginFn = useServerFn(loginUser);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
@@ -32,6 +32,16 @@ function LoginPage() {
   const [signupStoreId, setSignupStoreId] = useState<string>("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  // First sign-in: the counter-issued password must be replaced before continuing.
+  const [mustChange, setMustChange] = useState<{ id: string; name: string } | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [newPw2, setNewPw2] = useState("");
+
+  /** Where a signed-in customer lands: cart → top-up if short, else dashboard. */
+  const customerLanding = (walletBalance: number) => {
+    if (cart.length === 0) return "/dashboard" as const;
+    return walletBalance < cartTotal ? ("/topup" as const) : ("/cart" as const);
+  };
 
 
   const submit = async (e: React.FormEvent) => {
@@ -50,17 +60,56 @@ function LoginPage() {
       if (!u) return setError("Invalid phone or password");
       if (u.role !== "customer") return setError("This account is a staff account. Use the Staff tab.");
       try { await loginFn({ data: { phone, password } }); } catch (err) { console.warn("[login] db mirror failed", err); }
-      navigate({ to: "/dashboard" });
+      if (u.must_change_password) { setMustChange({ id: u.id, name: u.full_name }); return; }
+      navigate({ to: customerLanding(u.wallet_balance) });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
       const targetStore = canteenGroups.length === 1 ? canteenGroups[0].orgId : signupStoreId;
       if (!targetStore) return setError("Choose which store to sign up for");
       const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
-      navigate({ to: "/dashboard" });
+      navigate({ to: customerLanding(u.wallet_balance) });
     }
   };
 
+
+  if (mustChange) {
+    return (
+      <div className="min-h-screen bg-background grid place-items-center px-5">
+        <div className="w-full max-w-md bg-surface border rounded-3xl p-7 shadow-xl shadow-black/5">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary grid place-items-center">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <h1 className="mt-4 text-xl font-bold">Set your own password</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Hi {mustChange.name} — your account still uses the password the counter gave you. Choose a new one to continue.
+          </p>
+          <form
+            className="mt-5 space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError("");
+              if (newPw !== newPw2) return setError("The two passwords don't match");
+              const res = changeOwnPassword(newPw);
+              if (!res.ok) return setError(res.reason);
+              navigate({ to: cart.length > 0 ? "/cart" : "/dashboard" });
+            }}
+          >
+            <div>
+              <Label htmlFor="np" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">New password</Label>
+              <Input id="np" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="mt-1.5 h-12 rounded-xl" />
+            </div>
+            <div>
+              <Label htmlFor="np2" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Confirm password</Label>
+              <Input id="np2" type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} className="mt-1.5 h-12 rounded-xl" />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full h-12 rounded-xl font-semibold">Save & continue</Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -96,6 +145,12 @@ function LoginPage() {
             </button>
           </div>
 
+          {cart.length > 0 && tab === "customer" && (
+            <div className="mb-4 rounded-xl bg-primary/10 text-primary p-3 text-sm">
+              <p className="font-semibold">{cart.reduce((n, c) => n + c.qty, 0)} item(s) waiting · {formatTZS(cartTotal)}</p>
+              <p className="text-xs">Sign in or create a wallet and we'll take you straight to checkout.</p>
+            </div>
+          )}
           <h2 className="text-xl font-bold">
             {tab === "staff" ? "Staff sign in" : mode === "login" ? "Welcome back 👋" : "Create your wallet"}
           </h2>

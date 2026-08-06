@@ -11,10 +11,11 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, cart, setQty, placeOrder, serviceRate } = useStore();
+  const { currentUser, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);
+  const [payLaterMsg, setPayLaterMsg] = useState("");
 
   useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
   if (!currentUser) return null;
@@ -22,7 +23,10 @@ function CartPage() {
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
   const tax = Math.max(0, Math.round(subtotal * (serviceRate / 100)));
   const total = subtotal + tax;
-  const canPay = currentUser.wallet_balance >= total && cart.length > 0;
+  const credit = creditLimitOf(currentUser.id);
+  const shortfall = Math.max(0, total - currentUser.wallet_balance);
+  const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0;
+  const pendingPayLater = payLaterRequests.some((r) => r.status === "pending");
 
   if (placed) {
     return (
@@ -110,7 +114,9 @@ function CartPage() {
             <h3 className="font-bold mb-3">Payment</h3>
             <div className="flex items-center justify-between text-sm mb-1">
               <span className="text-muted-foreground flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Wallet Balance</span>
-              <span className="font-semibold text-success">{formatTZS(currentUser.wallet_balance)}</span>
+              <span className={`font-semibold ${currentUser.wallet_balance < 0 ? "text-destructive" : "text-success"}`}>
+                {currentUser.wallet_balance < 0 ? `- ${formatTZS(-currentUser.wallet_balance)}` : formatTZS(currentUser.wallet_balance)}
+              </span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Order Total</span>
@@ -122,7 +128,21 @@ function CartPage() {
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                 <div className="text-sm">
                   <div className="font-semibold">Low Balance</div>
-                  <div>You need {formatTZS(total - currentUser.wallet_balance)} more. <Link to="/topup" className="underline font-medium">Top-up now</Link>.</div>
+                  <div>You need {formatTZS(shortfall)} more. <Link to="/topup" className="underline font-medium">Top-up now</Link>.</div>
+                  {pendingPayLater ? (
+                    <div className="mt-2 text-xs font-medium">Your pay-later request is waiting for staff approval.</div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const res = submitPayLaterRequest({ amount: shortfall, reason: `Order of ${formatTZS(total)}` });
+                        setPayLaterMsg(res.ok ? "Pay-later request sent — staff will review it shortly." : res.reason);
+                      }}
+                      className="mt-2 underline font-semibold"
+                    >
+                      Or request to pay later
+                    </button>
+                  )}
+                  {payLaterMsg && <div className="mt-1 text-xs">{payLaterMsg}</div>}
                 </div>
               </div>
             )}
