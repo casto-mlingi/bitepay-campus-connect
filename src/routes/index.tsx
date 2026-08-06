@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChefHat, ArrowRight, Wallet, QrCode, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3, Sparkles, Check, Smartphone, RefreshCw } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useStore, formatTZS } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { ListFilter, useListFilter } from "@/components/list-filter";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -15,7 +16,12 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const { store, hasOwner } = useStore();
+  const { store, hasOwner, storefront, cart, addToCart, setQty, cartTotal, currentUser } = useStore();
+  const { filter, setFilter, match } = useListFilter();
+  const menu = storefront.products.filter((p) =>
+    p.available !== false && match({ text: `${p.name} ${p.category ?? ""}` }));
+  const qtyOf = (id: string) => cart.find((c) => c.product.id === id)?.qty ?? 0;
+  const checkoutHref = currentUser?.role === "customer" ? "/cart" : "/login";
 
   return (
     <div className="min-h-screen bg-background">
@@ -118,6 +124,55 @@ function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Storefront — order before you sign in */}
+      {storefront.products.length > 0 && (
+        <section id="menu" className="max-w-6xl mx-auto px-5 py-14">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-3xl font-extrabold tracking-tight">Today at {storefront.store?.name ?? "our canteen"}</h2>
+              <p className="text-muted-foreground mt-1">Add what you want now — sign in only when you're ready to pay.</p>
+            </div>
+            <ListFilter filter={filter} onChange={setFilter} showPeriod={false} placeholder="Search the menu…" />
+          </div>
+
+          {menu.length === 0 ? (
+            <p className="mt-8 text-sm text-muted-foreground">Nothing matches that search.</p>
+          ) : (
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {menu.map((p) => {
+                const q = qtyOf(p.id);
+                return (
+                  <article key={p.id} className="rounded-2xl border bg-surface overflow-hidden flex flex-col">
+                    <div className="aspect-square bg-muted">
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className={`w-full h-full bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl`}>{p.emoji}</div>
+                      )}
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col">
+                      <h3 className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</h3>
+                      <p className="text-primary font-bold mt-1">{formatTZS(p.price)}</p>
+                      <div className="mt-auto pt-3">
+                        {q === 0 ? (
+                          <Button onClick={() => addToCart(p)} className="w-full h-9 rounded-xl text-sm font-semibold">Add</Button>
+                        ) : (
+                          <div className="flex items-center justify-between bg-muted rounded-xl h-9 px-1">
+                            <button aria-label="Remove one" onClick={() => setQty(p.id, q - 1)} className="w-8 h-8 grid place-items-center font-bold">−</button>
+                            <span className="font-bold text-sm">{q}</span>
+                            <button aria-label="Add one" onClick={() => setQty(p.id, q + 1)} className="w-8 h-8 grid place-items-center rounded-lg bg-primary text-white font-bold">+</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Features */}
       <section id="features" className="max-w-6xl mx-auto px-5 py-16">
@@ -222,6 +277,23 @@ function HomePage() {
         </div>
       </section>
 
+
+      {/* Sticky checkout bar */}
+      {cart.length > 0 && (
+        <div className="sticky bottom-0 z-40 border-t bg-surface/95 backdrop-blur">
+          <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <p className="font-bold">{cart.reduce((n, c) => n + c.qty, 0)} item(s) · {formatTZS(cartTotal)}</p>
+              <p className="text-xs text-muted-foreground">
+                {currentUser?.role === "customer" ? "Pay from your wallet at checkout." : "You'll sign in or create a wallet next."}
+              </p>
+            </div>
+            <Link to={checkoutHref}>
+              <Button className="h-11 px-6 rounded-xl font-semibold">Ready to pay <ArrowRight className="ml-2 w-4 h-4" /></Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t bg-surface">
