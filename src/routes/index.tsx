@@ -19,7 +19,7 @@ function HomePage() {
   const { store, hasOwner, storefront, cart, addToCart, setQty, cartTotal, currentUser } = useStore();
   const { filter, setFilter, match } = useListFilter();
   const menu = storefront.products.filter((p) =>
-    p.available !== false && match({ text: `${p.name} ${p.category ?? ""}` }));
+    match({ text: `${p.name} ${p.category ?? ""}` }));
   const qtyOf = (id: string) => cart.find((c) => c.product.id === id)?.qty ?? 0;
   const checkoutHref = currentUser?.role === "customer" ? "/cart" : "/login";
 
