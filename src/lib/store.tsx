@@ -2,7 +2,7 @@ import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
-export type StaffRole = "cashier" | "supervisor" | "owner";
+export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
 /** A staff member's role in one specific store (multi-store support). */
 export type StoreMembership = { store_id: string; staff_role: StaffRole };
 
@@ -18,6 +18,8 @@ export type Profile = {
   staff_pin?: string;
   wallet_pin?: string; // customer-set PIN guarding wallet records & QR display
   disabled?: boolean;
+  /** Optional per-staff commission override (percent of sales they handled). */
+  commission_rate?: number;
   last_login?: number;
   created_at?: number;
   store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
@@ -58,6 +60,8 @@ export type Store = {
   approval_threshold?: number;
   /** Days a pay-later (debtor) balance may stay open before it is flagged overdue. */
   credit_terms_days?: number;
+  /** Default staff commission, in percent of the sales value they handled. */
+  commission_rate?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -153,6 +157,7 @@ export type Permission =
   | "settings.manage";
 
 const PERMISSIONS: Record<StaffRole, Permission[]> = {
+  waiter: ["pos.sell", "shift.manage", "customers.view"],
   cashier: ["pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view"],
   supervisor: [
     "pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup",
@@ -608,6 +613,22 @@ type Ctx = {
   /** Orders still owing money (pay-on-delivery, partially settled included). */
   receivables: (Order & { outstanding: number })[];
 
+  // ---- Staff activity & commission ----
+  /** Effective commission percentage for a staff member (override → store default). */
+  commissionRateFor: (staffId: string) => number;
+  /** Activity + commission summary for one staff member over an optional period. */
+  staffPerformance: (staffId: string, range?: { from?: number; to?: number }) => {
+    orders: number;
+    customersServed: number;
+    sales: number;
+    cashCollected: number;
+    walletCollected: number;
+    commissionRate: number;
+    commission: number;
+    shifts: number;
+    feed: { id: string; at: number; title: string; detail: string; amount?: number }[];
+  };
+
   // ---- Menu request governance ----
   menuAudits: MenuRequestAudit[];
   auditsFor: (requestId: string) => MenuRequestAudit[];
@@ -690,7 +711,7 @@ const todayKey = () => {
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
 const LOYALTY_RATE = 0.01;
-const roleRank: Record<StaffRole, number> = { cashier: 1, supervisor: 2, owner: 3 };
+const roleRank: Record<StaffRole, number> = { waiter: 1, cashier: 1, supervisor: 2, owner: 3 };
 const uid = (prefix: string) => `${prefix}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -1999,6 +2020,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         detail: `${formatTZS(outstanding)} written off — ${reason.trim()}`,
       });
       return { ok: true };
+    },
+    commissionRateFor(staffId) {
+      const p = profiles.find((x) => x.id === staffId);
+      const rate = p?.commission_rate ?? store?.commission_rate ?? 0;
+      return Math.max(0, Math.min(100, rate));
+    },
+    staffPerformance(staffId, range) {
+      const from = range?.from ?? 0;
+      const to = range?.to ?? Number.MAX_SAFE_INTEGER;
+      const inRange = (t: number) => t >= from && t <= to;
+      const mine = scopedOrders.filter((o) => o.cashier_id === staffId && !o.is_reversal && !o.reversed && inRange(o.created_at));
+      const sales = mine.reduce((s2, o) => s2 + o.total_amount, 0);
+      const cashCollected = mine.reduce((s2, o) => s2 + (o.cash_paid ?? 0), 0);
+      const walletCollected = mine.reduce((s2, o) => s2 + (o.wallet_paid ?? 0), 0);
+      const customersServed = new Set(mine.map((o) => o.customer_id)).size;
+      const p = profiles.find((x) => x.id === staffId);
+      const commissionRate = Math.max(0, Math.min(100, p?.commission_rate ?? store?.commission_rate ?? 0));
+      const myShifts = scopedShifts.filter((sh) => sh.cashier_id === staffId && inRange(sh.opened_at));
+      const feed = [
+        ...mine.map((o) => ({
+          id: `o-${o.id}`, at: o.created_at,
+          title: o.customer_id === "walkin" ? "Walk-in sale" : `Served ${o.customer_name}`,
+          detail: `${o.items.reduce((n, i) => n + i.qty, 0)} item(s) · ${o.receipt_no ?? o.id}`,
+          amount: o.total_amount,
+        })),
+        ...menuAudits.filter((a) => a.actor_id === staffId && inRange(a.created_at)).map((a) => ({
+          id: `a-${a.id}`, at: a.created_at, title: `Menu request ${a.action.replace(/_/g, " ")}`, detail: a.detail,
+        })),
+        ...myShifts.map((sh) => ({
+          id: `s-${sh.id}`, at: sh.opened_at, title: sh.closed_at ? "Shift closed" : "Shift opened",
+          detail: new Date(sh.opened_at).toLocaleString(),
+        })),
+        ...scopedRequests.filter((r) => r.resolved_by === staffId && r.resolved_at && inRange(r.resolved_at)).map((r) => ({
+          id: `t-${r.id}`, at: r.resolved_at!, title: `Top-up ${r.status}`, detail: `${r.customer_name} · ${r.reference}`, amount: r.amount,
+        })),
+      ].sort((a, b) => b.at - a.at).slice(0, 100);
+      return {
+        orders: mine.length, customersServed, sales, cashCollected, walletCollected,
+        commissionRate, commission: Math.round((sales * commissionRate) / 100),
+        shifts: myShifts.length, feed,
+      };
     },
     receivables: scopedOrders
       .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
