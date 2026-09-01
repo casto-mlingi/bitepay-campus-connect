@@ -1,19 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { z } from "zod";
-import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { BadgePercent, Receipt, Users, Wallet, Banknote, Clock, Activity } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 
-const searchSchema = z.object({
-  id: fallback(z.string(), "").default(""),
-  period: fallback(z.string(), "month").default("month"),
-});
-
 export const Route = createFileRoute("/my-performance")({
-  validateSearch: zodValidator(searchSchema),
+  validateSearch: (search: Record<string, unknown>) => ({
+    id: typeof search['id'] === "string" ? (search['id'] as string) : "",
+    period: typeof search['period'] === "string" ? (search['period'] as string) : "month",
+  }),
   component: PerformancePage,
   head: () => ({ meta: [
     { title: "Staff performance & commission — BitePay" },
