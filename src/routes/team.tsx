@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { UserPlus, Users, Shield, ShieldCheck, Crown, KeyRound, Ban, CheckCircle2, X, Pencil } from "lucide-react";
+import { UserPlus, Users, Shield, ShieldCheck, Crown, KeyRound, Ban, CheckCircle2, X, Pencil, ConciergeBell, Activity } from "lucide-react";
 import { useStore, type Profile, type StaffRole } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
@@ -68,6 +68,7 @@ function TeamPage() {
             <div><RoleBadge role={p.staff_role ?? "cashier"} /></div>
             <div>{p.disabled ? <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Disabled</span> : <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Active</span>}</div>
             <div className="flex items-center justify-end gap-1">
+              <button title="Performance & commission" onClick={() => navigate({ to: "/my-performance", search: { id: p.id, period: "month" } })} className="p-2 rounded-lg hover:bg-muted text-primary"><Activity className="w-4 h-4" /></button>
               <button title="Edit" onClick={() => setEdit(p)} className="p-2 rounded-lg hover:bg-muted"><Pencil className="w-4 h-4" /></button>
               <button title="Reset password" onClick={() => setReset({ p, kind: "password" })} className="p-2 rounded-lg hover:bg-muted"><KeyRound className="w-4 h-4" /></button>
               <button title="Reset PIN" onClick={() => setReset({ p, kind: "pin" })} className="p-2 rounded-lg hover:bg-muted text-xs font-bold">PIN</button>
@@ -106,6 +107,7 @@ function RoleBadge({ role }: { role: StaffRole }) {
     owner: { label: "Owner", cls: "bg-amber-100 text-amber-700", icon: <Crown className="w-3 h-3" /> },
     supervisor: { label: "Supervisor", cls: "bg-primary/10 text-primary", icon: <ShieldCheck className="w-3 h-3" /> },
     cashier: { label: "Cashier", cls: "bg-slate-100 text-slate-700", icon: <Shield className="w-3 h-3" /> },
+    waiter: { label: "Waiter", cls: "bg-sky-100 text-sky-700", icon: <ConciergeBell className="w-3 h-3" /> },
   };
   const m = map[role];
   return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${m.cls}`}>{m.icon}{m.label}</span>;
@@ -127,8 +129,8 @@ function AddStaffModal({ onClose, onSubmit, canManageAll }: { onClose: () => voi
         <Field label="Staff PIN (4–6 digits)"><Input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="1234" /></Field>
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
-            {(["cashier", "supervisor", "owner"] as StaffRole[]).map((r) => {
-              const disabled = r !== "cashier" && !canManageAll;
+            {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
+              const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
               return (
                 <button key={r} type="button" disabled={disabled} onClick={() => setRole(r)}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
@@ -157,8 +159,8 @@ function EditStaffModal({ p, onClose, onSubmit, canManageAll }: { p: Profile; on
         <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
-            {(["cashier", "supervisor", "owner"] as StaffRole[]).map((r) => {
-              const disabled = r !== "cashier" && !canManageAll;
+            {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
+              const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
               return (
                 <button key={r} type="button" disabled={disabled} onClick={() => setRole(r)}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>

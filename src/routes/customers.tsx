@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone, KeyRound, Hash, Inbox, Clock } from "lucide-react";
+import { Search, ShieldAlert, RotateCcw, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone, KeyRound, Hash, Inbox, Clock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useStore, formatTZS, type Profile, type TopUpRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
+import { ListFilter, useListFilter } from "@/components/list-filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -13,9 +14,12 @@ export const Route = createFileRoute("/customers")({
 });
 
 function Customers() {
-  const { currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin } = useStore();
+  const {
+    currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
+    resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf,
+  } = useStore();
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showQR, setShowQR] = useState<Profile | null>(null);
@@ -32,11 +36,20 @@ function Customers() {
   }, [currentUser, navigate]);
 
   const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);
+  const { filter, setFilter, match } = useListFilter();
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter((c) => c.full_name.toLowerCase().includes(q) || c.phone.includes(q) || c.id.toLowerCase().includes(q));
-  }, [customers, query]);
+    const q = filter.q.trim().toLowerCase();
+    return customers.filter((c) => {
+      if (q && !(c.full_name.toLowerCase().includes(q) || c.phone.includes(q) || c.id.toLowerCase().includes(q))) return false;
+      if (filter.status === "debtor" && c.wallet_balance >= 0) return false;
+      if (filter.status === "overdue" && !isOverdue(c.id)) return false;
+      if (filter.status === "low" && c.wallet_balance < 0) return false;
+      if (!match(c.created_at ?? 0)) return false;
+      return true;
+    });
+  }, [customers, filter, match, isOverdue]);
+
+  const pendingCredit = useMemo(() => payLaterRequests.filter((r) => r.status === "pending"), [payLaterRequests]);
 
   const pendingRequests = useMemo(() => topUpRequests.filter((r) => r.status === "pending"), [topUpRequests]);
 
@@ -142,13 +155,53 @@ function Customers() {
       )}
 
 
+      {pendingCredit.length > 0 && (
+        <section className="mb-5 bg-rose-50 border border-rose-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldAlert className="w-4 h-4 text-rose-700" />
+            <h2 className="font-bold text-rose-900">Pay-later (credit) requests</h2>
+            <span className="ml-auto text-xs font-bold text-rose-700">{pendingCredit.length}</span>
+          </div>
+          <ul className="space-y-2">
+            {pendingCredit.map((r) => (
+              <li key={r.id} className="bg-white border border-rose-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[180px]">
+                  <div className="font-semibold">{r.customer_name} <span className="text-xs text-muted-foreground font-normal">· {r.customer_phone}</span></div>
+                  <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}{r.reason ? ` · ${r.reason}` : ""}</div>
+                </div>
+                <div className="text-lg font-bold text-rose-700">{formatTZS(r.amount)}</div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => requestPin(`Approve ${formatTZS(r.amount)} credit for ${r.customer_name}`, (pin) => {
+                    const res = reviewPayLaterRequest(r.id, "approve", { pin });
+                    if (!res.ok) { showToast(res.reason); return; }
+                    setPinPrompt(null); showToast("Credit approved");
+                  })}>Approve</Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const reason = window.prompt("Reason for rejection?", "Credit limit reached");
+                    if (!reason) return;
+                    const res = reviewPayLaterRequest(r.id, "reject", { reason });
+                    showToast(res.ok ? "Request rejected" : res.reason);
+                  }}>Reject</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
         <section className="bg-surface border rounded-2xl overflow-hidden">
-          <div className="p-4 border-b flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className="pl-9" />
-            </div>
+          <div className="p-4 border-b">
+            <ListFilter
+              filter={filter}
+              onChange={setFilter}
+              placeholder="Search by name, phone or ID"
+              statuses={[
+                { value: "low", label: "In credit (positive)" },
+                { value: "debtor", label: "Debtors (negative)" },
+                { value: "overdue", label: "Overdue debtors" },
+              ]}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -219,10 +272,31 @@ function Customers() {
                 )}
               </div>
 
-              <div className="mt-4 rounded-xl bg-gradient-to-br from-success to-emerald-600 text-white p-4">
+              <div className={`mt-4 rounded-xl text-white p-4 ${selected.wallet_balance < 0 ? "bg-gradient-to-br from-rose-600 to-red-700" : "bg-gradient-to-br from-success to-emerald-600"}`}>
                 <div className="text-xs opacity-80 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> Wallet balance</div>
-                <div className="text-2xl font-extrabold mt-1">{formatTZS(selected.wallet_balance)}</div>
+                <div className="text-2xl font-extrabold mt-1">{selected.wallet_balance < 0 ? `− ${formatTZS(Math.abs(selected.wallet_balance))}` : formatTZS(selected.wallet_balance)}</div>
+                {selected.wallet_balance < 0 && (
+                  <div className="mt-1 text-[11px] font-semibold flex items-center gap-2">
+                    <span>Owing {formatTZS(debtorBalance(selected.id))}</span>
+                    {isOverdue(selected.id) && <span className="bg-white/25 px-1.5 py-0.5 rounded">OVERDUE</span>}
+                  </div>
+                )}
+                {selected.wallet_balance >= 0 && creditLimitOf(selected.id) > 0 && (
+                  <div className="mt-1 text-[11px] opacity-90">Approved credit limit {formatTZS(creditLimitOf(selected.id))}</div>
+                )}
               </div>
+
+              <button
+                onClick={() => requestPin(`Reset ${selected.full_name}'s password to the system default`, (pin) => {
+                  const res = resetCustomerPassword(selected.id, pin);
+                  if (!res.ok) { showToast(res.reason); return; }
+                  setPinPrompt(null);
+                  showToast(`Password reset to “${res.password}” — they must change it at next sign-in`);
+                })}
+                className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border text-sm font-semibold hover:bg-muted"
+              >
+                <RotateCcw className="w-4 h-4" /> Reset password (PIN required)
+              </button>
 
               <div className="mt-4 border rounded-xl p-3">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center justify-between">

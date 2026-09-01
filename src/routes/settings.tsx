@@ -37,12 +37,14 @@ function SettingsPage() {
   const [low, setLow] = useState<number>(store?.low_balance_threshold ?? 3000);
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
+  const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
 
   useEffect(() => {
     if (!store) return;
     setName(store.name); setLocation(store.location); setContact(store.contact_phone);
     setCurrency(store.currency); setLow(store.low_balance_threshold); setMobile(store.enable_mobile_tender);
     setServiceRate(store.service_rate ?? 5);
+    setCommissionRate(store.commission_rate ?? 0);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -50,7 +52,7 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)) });
+    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -130,6 +132,16 @@ function SettingsPage() {
             </div>
             <Input type="number" min={0} max={100} step="0.01" value={serviceRate}
               onChange={(e) => setServiceRate(Number(e.target.value) || 0)} className="w-24 text-right" />
+          </div>
+        </div>
+        <div className="p-3 rounded-lg border">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-sm">Staff commission (%)</div>
+              <div className="text-xs text-muted-foreground">Default share of the sales value each staff member handled. Override per member in <b>Team → Performance</b>. Set <b>0</b> to disable commissions.</div>
+            </div>
+            <Input type="number" min={0} max={100} step="0.01" value={commissionRate}
+              onChange={(e) => setCommissionRate(Number(e.target.value) || 0)} className="w-24 text-right" />
           </div>
         </div>
         <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">

@@ -18,6 +18,7 @@ import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PosRouteImport } from './routes/pos'
+import { Route as MyPerformanceRouteImport } from './routes/my-performance'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -74,6 +75,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const PosRoute = PosRouteImport.update({
   id: '/pos',
   path: '/pos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyPerformanceRoute = MyPerformanceRouteImport.update({
+  id: '/my-performance',
+  path: '/my-performance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MenuRoute = MenuRouteImport.update({
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/menu'
+    | '/my-performance'
     | '/pos'
     | '/settings'
     | '/setup'
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/menu'
+    | '/my-performance'
     | '/pos'
     | '/settings'
     | '/setup'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/menu'
+    | '/my-performance'
     | '/pos'
     | '/settings'
     | '/setup'
@@ -291,6 +303,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
   MenuRoute: typeof MenuRoute
+  MyPerformanceRoute: typeof MyPerformanceRoute
   PosRoute: typeof PosRoute
   SettingsRoute: typeof SettingsRoute
   SetupRoute: typeof SetupRoute
@@ -366,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/pos'
       fullPath: '/pos'
       preLoaderRoute: typeof PosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-performance': {
+      id: '/my-performance'
+      path: '/my-performance'
+      fullPath: '/my-performance'
+      preLoaderRoute: typeof MyPerformanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/menu': {
@@ -467,6 +487,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
   MenuRoute: MenuRoute,
+  MyPerformanceRoute: MyPerformanceRoute,
   PosRoute: PosRoute,
   SettingsRoute: SettingsRoute,
   SetupRoute: SetupRoute,
@@ -481,3 +502,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
