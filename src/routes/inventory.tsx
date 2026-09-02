@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil } from "lucide-react";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil, Eye, History, Check, X, Ban } from "lucide-react";
 import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
+import { ListFilter, useListFilter } from "@/components/list-filter";
 
 
 
@@ -597,10 +598,20 @@ function Row({ label, value }: { label: string; value: string }) {
 function MenuRequestsPanel() {
   const { customDishRequests, orders, can } = useStore();
   const [newOpen, setNewOpen] = useState(false);
+  const [detail, setDetail] = useState<CustomDishRequest | null>(null);
+  const { filter, setFilter, range } = useListFilter();
   const awaiting = customDishRequests.filter((r) => r.status === "accepted");
   const confirmed = customDishRequests.filter((r) => r.status === "confirmed");
   const processing = customDishRequests.filter((r) => r.status === "in_kitchen" || r.status === "fulfilled");
   const unpaid = customDishRequests.filter((r) => r.payment_mode === "on_delivery" && !r.settled_at);
+  const q = filter.q.trim().toLowerCase();
+  const all = customDishRequests.filter((r) => {
+    if (q && !(r.dish_name.toLowerCase().includes(q) || r.customer_name.toLowerCase().includes(q) || r.customer_phone.includes(q))) return false;
+    if (filter.status !== "all" && r.status !== filter.status) return false;
+    if (r.created_at < range.from || r.created_at > range.to) return false;
+    return true;
+  });
+  const awaitingApproval = customDishRequests.filter((r) => r.status === "awaiting_approval");
 
   return (
     <div className="space-y-6">
@@ -657,6 +668,15 @@ function MenuRequestsPanel() {
         </section>
       )}
 
+      {awaitingApproval.length > 0 && (
+        <section>
+          <h2 className="font-bold mb-2">Awaiting owner approval ({awaitingApproval.length})</h2>
+          <div className="space-y-2">
+            {awaitingApproval.map((r) => <ApprovalCard key={r.id} req={r} onOpen={() => setDetail(r)} />)}
+          </div>
+        </section>
+      )}
+
       {processing.length > 0 && (
         <section>
           <h2 className="font-bold mb-2">Processing orders ({processing.length})</h2>
@@ -677,6 +697,151 @@ function MenuRequestsPanel() {
           </div>
         </section>
       )}
+
+      <section>
+        <h2 className="font-bold mb-2 flex items-center gap-2"><History className="w-4 h-4 text-primary" /> All menu requests</h2>
+        <div className="bg-surface border rounded-2xl overflow-hidden">
+          <div className="p-4 border-b">
+            <ListFilter
+              filter={filter}
+              onChange={setFilter}
+              placeholder="Search dish, client or phone"
+              statuses={["pending", "accepted", "confirmed", "awaiting_approval", "in_kitchen", "fulfilled", "rejected", "cancelled"].map((v) => ({ value: v, label: v.replace(/_/g, " ") }))}
+            />
+          </div>
+          <div className="divide-y">
+            {all.length === 0 && <div className="p-8 text-center text-sm text-muted-foreground">No menu requests match this filter.</div>}
+            {all.map((r) => (
+              <button key={r.id} onClick={() => setDetail(r)} className="w-full text-left px-4 py-3 flex flex-wrap items-center gap-3 hover:bg-muted/40">
+                <div className="flex-1 min-w-[180px]">
+                  <div className="font-semibold text-sm">{r.dish_name}</div>
+                  <div className="text-xs text-muted-foreground">{r.customer_name} · {r.customer_phone} · {new Date(r.created_at).toLocaleString()}</div>
+                </div>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-muted capitalize">{r.status.replace(/_/g, " ")}</span>
+                <span className="text-xs font-semibold">{r.payment_mode === "on_delivery" ? "Pay on delivery" : "Wallet"}</span>
+                <span className="font-bold text-sm">{formatTZS(r.staff_price ?? r.suggested_price ?? 0)}</span>
+                <Eye className="w-4 h-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {detail && <RequestDetailModal req={customDishRequests.find((x) => x.id === detail.id) ?? detail} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+function ApprovalCard({ req, onOpen }: { req: CustomDishRequest; onOpen: () => void }) {
+  const { approveMenuRequest } = useStore();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-wrap items-center gap-3">
+      <div className="flex-1 min-w-[200px]">
+        <div className="font-semibold">{req.dish_name} <span className="text-xs font-normal text-muted-foreground">· {req.customer_name}</span></div>
+        <div className="text-xs text-muted-foreground">{formatTZS(req.staff_price ?? 0)} · above the approval threshold</div>
+        {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
+      </div>
+      <button onClick={onOpen} className="h-9 px-3 rounded-lg border text-xs font-semibold bg-white">Details</button>
+      <button onClick={() => { const r = approveMenuRequest(req.id, "approve"); if (!r.ok) setError(r.reason); }} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Approve</button>
+      <button onClick={() => { const reason = window.prompt("Reason?", "Not approved"); if (!reason) return; const r = approveMenuRequest(req.id, "reject", reason); if (!r.ok) setError(r.reason); }} className="h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1"><X className="w-3.5 h-3.5" /> Reject</button>
+    </div>
+  );
+}
+
+function RequestDetailModal({ req, onClose }: { req: CustomDishRequest; onClose: () => void }) {
+  const { auditsFor, rawMaterials, orders, cancelMenuRequest, hasStaffRole } = useStore();
+  const audits = auditsFor(req.id);
+  const order = orders.find((o) => o.id === req.order_id);
+  const [error, setError] = useState<string | null>(null);
+  const canCancel = hasStaffRole("supervisor") && !["fulfilled", "cancelled", "rejected"].includes(req.status);
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/60 grid place-items-center p-4 overflow-y-auto" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-background rounded-3xl w-full max-w-2xl p-6 my-8">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-xl">{req.dish_name}</h3>
+            <p className="text-sm text-muted-foreground">{req.customer_name} · {req.customer_phone}</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3 mt-4 text-sm">
+          <Info label="Status" value={req.status.replace(/_/g, " ")} />
+          <Info label="Raised by" value={req.created_by === "staff" ? `Staff${req.assigned_by ? ` · ${req.assigned_by}` : ""}` : "Customer"} />
+          <Info label="Payment mode" value={req.payment_mode === "on_delivery" ? "Pay on delivery" : "Wallet"} />
+          <Info label="Agreed price" value={formatTZS(req.staff_price ?? req.suggested_price ?? 0)} />
+          <Info label="Raw cost" value={formatTZS(req.raw_cost ?? 0)} />
+          <Info label="Labour" value={formatTZS(req.labor_cost ?? 0)} />
+          <Info label="Total cost" value={formatTZS(req.total_cost ?? 0)} />
+          <Info label="Paid so far" value={formatTZS(order?.amount_paid ?? req.paid_amount ?? 0)} />
+        </div>
+
+        {req.description && <p className="mt-4 text-sm text-foreground/80">{req.description}</p>}
+
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Raw materials assigned {req.stock_reserved ? "(reserved from stock)" : ""}</div>
+          {(req.cost_ingredients ?? []).length === 0 ? (
+            <div className="text-sm text-muted-foreground">No raw materials assigned yet.</div>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {(req.cost_ingredients ?? []).map((i) => {
+                const raw = rawMaterials.find((x) => x.id === i.raw_id);
+                return (
+                  <li key={i.raw_id} className="flex justify-between border-b last:border-0 py-1">
+                    <span>{raw?.name ?? i.raw_id}</span>
+                    <span className="text-muted-foreground">{i.qty} {raw?.unit ?? ""} · {formatTZS(Math.round((raw?.avg_cost ?? 0) * i.qty))}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1"><History className="w-3.5 h-3.5" /> Audit timeline</div>
+          {audits.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No audit entries recorded for this request.</div>
+          ) : (
+            <ol className="relative border-l pl-4 space-y-3">
+              {audits.map((a) => (
+                <li key={a.id}>
+                  <span className="absolute -left-[5px] w-2.5 h-2.5 rounded-full bg-primary" />
+                  <div className="text-sm font-semibold capitalize">{a.action.replace(/_/g, " ")}</div>
+                  <div className="text-xs text-muted-foreground">{a.detail}</div>
+                  <div className="text-[11px] text-muted-foreground">{a.actor_name} · {new Date(a.created_at).toLocaleString()}{a.order_id ? ` · ${a.order_id}` : ""}</div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+
+        {canCancel && (
+          <button
+            onClick={() => {
+              const reason = window.prompt("Cancel this request? Reserved stock is returned and any wallet charge refunded.", "Client cancelled");
+              if (!reason) return;
+              const r = cancelMenuRequest(req.id, reason);
+              if (!r.ok) setError(r.reason); else onClose();
+            }}
+            className="mt-5 w-full h-11 rounded-xl border border-red-200 text-red-700 font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-red-50"
+          >
+            <Ban className="w-4 h-4" /> Cancel request & return stock
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border p-2.5">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-semibold capitalize">{value}</div>
     </div>
   );
 }

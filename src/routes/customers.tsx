@@ -36,7 +36,7 @@ function Customers() {
   }, [currentUser, navigate]);
 
   const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);
-  const { filter, setFilter, match } = useListFilter();
+  const { filter, setFilter, range } = useListFilter();
   const filtered = useMemo(() => {
     const q = filter.q.trim().toLowerCase();
     return customers.filter((c) => {
@@ -44,10 +44,11 @@ function Customers() {
       if (filter.status === "debtor" && c.wallet_balance >= 0) return false;
       if (filter.status === "overdue" && !isOverdue(c.id)) return false;
       if (filter.status === "low" && c.wallet_balance < 0) return false;
-      if (!match(c.created_at ?? 0)) return false;
+      const at = c.created_at ?? 0;
+      if (at && (at < range.from || at > range.to)) return false;
       return true;
     });
-  }, [customers, filter, match, isOverdue]);
+  }, [customers, filter, range, isOverdue]);
 
   const pendingCredit = useMemo(() => payLaterRequests.filter((r) => r.status === "pending"), [payLaterRequests]);
 
