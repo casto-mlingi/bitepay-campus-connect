@@ -1,5 +1,5 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
 export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
@@ -20,6 +20,8 @@ export type Profile = {
   disabled?: boolean;
   /** Optional per-staff commission override (percent of sales they handled). */
   commission_rate?: number;
+  /** Commission already paid out to this staff member (running total). */
+  commission_balance?: number;
   last_login?: number;
   created_at?: number;
   store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
@@ -62,6 +64,8 @@ export type Store = {
   credit_terms_days?: number;
   /** Default staff commission, in percent of the sales value they handled. */
   commission_rate?: number;
+  /** Credit each order to the waiter serving that table/section. */
+  enable_waiter_tables?: boolean;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -333,6 +337,37 @@ export type Order = {
   cashier_id?: string;
   cashier_name?: string;
   shift_id?: string;
+  /** Waiter attribution (table service). */
+  waiter_id?: string;
+  waiter_name?: string;
+  table_no?: string;
+};
+
+/** A table (inside a section) served by one waiter. */
+export type TableAssignment = {
+  id: string;
+  store_id: string;
+  section: string;
+  table_no: string;
+  waiter_id: string;
+  waiter_name: string;
+};
+
+/** One nightly commission payout, booked as a Labor expense. */
+export type CommissionPayout = {
+  id: string;
+  store_id: string;
+  run_key: string; // yyyy-mm-dd of the trading day paid out
+  staff_id: string;
+  staff_name: string;
+  period_start: number;
+  period_end: number;
+  sales: number;
+  rate: number;
+  amount: number;
+  expense_id: string;
+  created_at: number;
+  auto: boolean;
 };
 
 export type Transaction = {
@@ -547,7 +582,7 @@ type Ctx = {
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
   placeOrder: (deliveryType: DeliveryType) => Order | null;
-  advanceOrder: (id: string) => void;
+  advanceOrder: (id: string) => Ok | Fail;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
   staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
   topUpRequests: TopUpRequest[];
@@ -558,8 +593,8 @@ type Ctx = {
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   verifyWalletPin: (customerId: string, pin: string) => boolean;
   serviceRate: number;
-  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
-  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
+  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
+  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
@@ -626,7 +661,33 @@ type Ctx = {
     commissionRate: number;
     commission: number;
     shifts: number;
+    commissionPaid: number;
+    commissionDue: number;
     feed: { id: string; at: number; title: string; detail: string; amount?: number }[];
+  };
+
+  // ---- Waiter tables & sections ----
+  waiterTablesEnabled: boolean;
+  tableAssignments: TableAssignment[];
+  assignTable: (input: { section: string; table_no: string; waiter_id: string }) => Ok | Fail;
+  removeTableAssignment: (id: string) => Ok | Fail;
+  waiterForTable: (table_no: string) => TableAssignment | null;
+
+  // ---- Commission payout run ----
+  commissionPayouts: CommissionPayout[];
+  /** Book commission for a trading day as a Labor expense and credit each member. */
+  runCommissionPayout: (input?: { day?: number; auto?: boolean }) =>
+    | { ok: true; paid: number; total: number; skipped: boolean }
+    | Fail;
+
+  // ---- Collections reporting ----
+  collectionsReport: (month: string) => {
+    month: string;
+    rows: { order_id: string; customer: string; at: number; amount: number; tender: "cash" | "mobile"; reference?: string; receipt_no: string; by: string }[];
+    total: number;
+    cash: number;
+    mobile: number;
+    outstanding: number;
   };
 
   // ---- Menu request governance ----
@@ -739,6 +800,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [customDishRequests, setCustomDishRequests] = useState<CustomDishRequest[]>([]);
   const [payLaterRequests, setPayLaterRequests] = useState<PayLaterRequest[]>([]);
   const [menuAudits, setMenuAudits] = useState<MenuRequestAudit[]>([]);
+  const [tableAssignments, setTableAssignments] = useState<TableAssignment[]>([]);
+  const [commissionPayouts, setCommissionPayouts] = useState<CommissionPayout[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
@@ -762,11 +825,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
+      tableAssignments, commissionPayouts,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
+     tableAssignments, commissionPayouts,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -792,6 +857,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.customDishRequests) setCustomDishRequests(s.customDishRequests);
     if (s.payLaterRequests) setPayLaterRequests(s.payLaterRequests);
     if (s.menuAudits) setMenuAudits(s.menuAudits);
+    if (s.tableAssignments) setTableAssignments(s.tableAssignments);
+    if (s.commissionPayouts) setCommissionPayouts(s.commissionPayouts);
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
     if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
@@ -1044,6 +1111,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => currentStoreId ? menuAudits.filter((a) => a.store_id === currentStoreId) : [],
     [menuAudits, currentStoreId],
   );
+  const scopedTables = useMemo(
+    () => currentStoreId ? tableAssignments.filter((t) => t.store_id === currentStoreId) : [],
+    [tableAssignments, currentStoreId],
+  );
+  const scopedPayouts = useMemo(
+    () => currentStoreId ? commissionPayouts.filter((c) => c.store_id === currentStoreId) : [],
+    [commissionPayouts, currentStoreId],
+  );
 
   /** Approved, unsettled pay-later lines = how far the wallet may go negative. */
   const creditLimitOf = useCallback((customerId: string, storeId?: string) => {
@@ -1100,7 +1175,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return no || `R-${day}-${pad(nextN)}`;
   };
 
-  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
+  /** Resolve the waiter credited with a table-service order (feature-flagged). */
+  const attributionFor = useCallback((table_no?: string) => {
+    if (!table_no || !currentStoreId) return null;
+    const s2 = stores.find((x) => x.id === currentStoreId);
+    if (!s2?.enable_waiter_tables) return null;
+    const t = tableAssignments.find((x) => x.store_id === currentStoreId && x.table_no.toLowerCase() === table_no.trim().toLowerCase());
+    return t ?? null;
+  }, [tableAssignments, currentStoreId, stores]);
+
+  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
@@ -1121,6 +1205,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+      table_no: table_no?.trim() || undefined,
+      waiter_id: attributionFor(table_no)?.waiter_id,
+      waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId);
@@ -1138,10 +1225,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
 
 
-  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
+  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     if (total <= 0) return { ok: false, reason: "Cart empty" };
@@ -1155,13 +1242,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: Date.now(), receipt_no, cash_paid: tender === "cash" ? cashReceived : total, wallet_paid: 0, tender,
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+      table_no: table_no?.trim() || undefined,
+      waiter_id: attributionFor(table_no)?.waiter_id,
+      waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates]);
+  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
@@ -1466,6 +1556,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
+      const current = orders.find((o) => o.id === id);
+      if (current && current.status === "ready" && current.payment_status === "unpaid" && !current.closed_out) {
+        const owing = Math.max(0, current.total_amount - (current.amount_paid ?? 0));
+        return { ok: false, reason: `Collect ${formatTZS(owing)} on hand-over before completing this order` };
+      }
       let becameCompleted = false;
       setOrders((prev) => prev.map((o) => {
         if (o.id !== id) return o;
@@ -1496,6 +1591,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           pushNotification({ store_id: target.store_id, user_id: target.customer_id, kind: "order", title: c.title, body: c.body });
         }
       }
+      return { ok: true };
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!currentStoreId) return;
@@ -1506,11 +1602,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else adjustCash((c) => c + amount);
     },
 
-    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
-      return _executePosSale(customerId, items, cashPortion, tender, reference);
+    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no }) {
+      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no);
     },
-    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference }) {
-      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference);
+    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no }) {
+      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no);
     },
     reverseSale(orderId, reason) {
       const original = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
@@ -2030,7 +2126,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const from = range?.from ?? 0;
       const to = range?.to ?? Number.MAX_SAFE_INTEGER;
       const inRange = (t: number) => t >= from && t <= to;
-      const mine = scopedOrders.filter((o) => o.cashier_id === staffId && !o.is_reversal && !o.reversed && inRange(o.created_at));
+      const mine = scopedOrders.filter((o) =>
+        (o.waiter_id ? o.waiter_id === staffId : o.cashier_id === staffId)
+        && !o.is_reversal && !o.reversed && inRange(o.created_at));
       const sales = mine.reduce((s2, o) => s2 + o.total_amount, 0);
       const cashCollected = mine.reduce((s2, o) => s2 + (o.cash_paid ?? 0), 0);
       const walletCollected = mine.reduce((s2, o) => s2 + (o.wallet_paid ?? 0), 0);
@@ -2055,12 +2153,131 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...scopedRequests.filter((r) => r.resolved_by === staffId && r.resolved_at && inRange(r.resolved_at)).map((r) => ({
           id: `t-${r.id}`, at: r.resolved_at!, title: `Top-up ${r.status}`, detail: `${r.customer_name} · ${r.reference}`, amount: r.amount,
         })),
+        ...scopedPayouts.filter((c) => c.staff_id === staffId && inRange(c.created_at)).map((c) => ({
+          id: `c-${c.id}`, at: c.created_at, title: "Commission paid out",
+          detail: `${c.run_key} · ${c.rate}% of ${formatTZS(c.sales)}${c.auto ? " · nightly run" : ""}`,
+          amount: c.amount,
+        })),
       ].sort((a, b) => b.at - a.at).slice(0, 100);
+      const commission = Math.round((sales * commissionRate) / 100);
+      const commissionPaid = scopedPayouts
+        .filter((c) => c.staff_id === staffId && inRange(c.created_at))
+        .reduce((n, c) => n + c.amount, 0);
       return {
         orders: mine.length, customersServed, sales, cashCollected, walletCollected,
-        commissionRate, commission: Math.round((sales * commissionRate) / 100),
-        shifts: myShifts.length, feed,
+        commissionRate, commission,
+        shifts: myShifts.length, commissionPaid, commissionDue: Math.max(0, commission - commissionPaid), feed,
       };
+    },
+
+    // ---- Waiter tables & sections ----
+    waiterTablesEnabled: !!store?.enable_waiter_tables,
+    tableAssignments: scopedTables,
+    assignTable({ section, table_no, waiter_id }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("team.manage_cashier")) return { ok: false, reason: "Supervisors and owners only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const table = table_no.trim();
+      if (!table) return { ok: false, reason: "Enter a table number" };
+      const waiter = profiles.find((x) => x.id === waiter_id && x.role === "staff");
+      if (!waiter) return { ok: false, reason: "Pick a staff member" };
+      const row: TableAssignment = {
+        id: uid("tb"), store_id: currentStoreId, section: section.trim() || "Main",
+        table_no: table, waiter_id, waiter_name: waiter.full_name,
+      };
+      setTableAssignments((prev) => [
+        ...prev.filter((t) => !(t.store_id === currentStoreId && t.table_no.toLowerCase() === table.toLowerCase())),
+        row,
+      ]);
+      return { ok: true };
+    },
+    removeTableAssignment(id) {
+      if (!can("team.manage_cashier")) return { ok: false, reason: "Supervisors and owners only" };
+      setTableAssignments((prev) => prev.filter((t) => t.id !== id));
+      return { ok: true };
+    },
+    waiterForTable(table_no) {
+      const t = table_no.trim().toLowerCase();
+      return scopedTables.find((x) => x.table_no.toLowerCase() === t) ?? null;
+    },
+
+    // ---- Commission payout run ----
+    commissionPayouts: scopedPayouts,
+    runCommissionPayout(input) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const day = new Date(input?.day ?? Date.now() - 86400000);
+      const start = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+      const end = start + 86400000 - 1;
+      const run_key = new Date(start).toISOString().slice(0, 10);
+      if (commissionPayouts.some((c) => c.store_id === currentStoreId && c.run_key === run_key)) {
+        return { ok: true, paid: 0, total: 0, skipped: true };
+      }
+      const staff = profiles.filter((x) => x.role === "staff" && x.store_id === currentStoreId && !x.disabled);
+      const now = Date.now();
+      const rows: CommissionPayout[] = [];
+      const exps: Expense[] = [];
+      for (const m of staff) {
+        const rate = Math.max(0, Math.min(100, m.commission_rate ?? store?.commission_rate ?? 0));
+        if (rate <= 0) continue;
+        const sales = orders
+          .filter((o) => o.store_id === currentStoreId && !o.is_reversal && !o.reversed
+            && o.created_at >= start && o.created_at <= end
+            && (o.waiter_id ? o.waiter_id === m.id : o.cashier_id === m.id))
+          .reduce((n, o) => n + o.total_amount, 0);
+        const amount = Math.round((sales * rate) / 100);
+        if (amount <= 0) continue;
+        const expense_id = uid("EX");
+        exps.push({
+          id: expense_id, store_id: currentStoreId, date: now, category: "Labor", amount,
+          description: `Commission payout · ${m.full_name} · ${run_key} (${rate}% of ${formatTZS(sales)})`,
+          payment_method: "cash",
+        });
+        rows.push({
+          id: uid("cp"), store_id: currentStoreId, run_key, staff_id: m.id, staff_name: m.full_name,
+          period_start: start, period_end: end, sales, rate, amount, expense_id,
+          created_at: now, auto: !!input?.auto,
+        });
+      }
+      if (rows.length === 0) {
+        // Still stamp the run so the nightly job does not retry all day.
+        setCommissionPayouts((prev) => [{
+          id: uid("cp"), store_id: currentStoreId, run_key, staff_id: "", staff_name: "—",
+          period_start: start, period_end: end, sales: 0, rate: 0, amount: 0, expense_id: "",
+          created_at: now, auto: !!input?.auto,
+        }, ...prev]);
+        return { ok: true, paid: 0, total: 0, skipped: false };
+      }
+      const total = rows.reduce((n, r) => n + r.amount, 0);
+      setExpenses((prev) => [...exps, ...prev]);
+      adjustCash((c) => c - total);
+      setCommissionPayouts((prev) => [...rows, ...prev]);
+      setProfiles((prev) => prev.map((m) => {
+        const row = rows.find((r) => r.staff_id === m.id);
+        return row ? { ...m, commission_balance: (m.commission_balance ?? 0) + row.amount } : m;
+      }));
+      for (const r of rows) {
+        pushNotification({
+          store_id: currentStoreId, user_id: r.staff_id, kind: "info",
+          title: "Commission paid 💸",
+          body: `${formatTZS(r.amount)} commission for ${r.run_key} (${r.rate}% of ${formatTZS(r.sales)}) was booked to your balance.`,
+        });
+      }
+      return { ok: true, paid: rows.length, total, skipped: false };
+    },
+
+    // ---- Collections reporting ----
+    collectionsReport(month) {
+      const rows = scopedOrders.flatMap((o) => (o.payments ?? []).map((pmt) => ({
+        order_id: o.id, customer: o.customer_name, at: pmt.created_at, amount: pmt.amount,
+        tender: pmt.tender, reference: pmt.reference, receipt_no: pmt.receipt_no, by: pmt.by_name,
+      }))).filter((r) => new Date(r.at).toISOString().slice(0, 7) === month)
+        .sort((a, b) => b.at - a.at);
+      const total = rows.reduce((n, r) => n + r.amount, 0);
+      const cash = rows.filter((r) => r.tender === "cash").reduce((n, r) => n + r.amount, 0);
+      const outstanding = scopedOrders
+        .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
+        .reduce((n, o) => n + Math.max(0, o.total_amount - (o.amount_paid ?? 0)), 0);
+      return { month, rows, total, cash, mobile: total - cash, outstanding };
     },
     receivables: scopedOrders
       .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
@@ -2390,7 +2607,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests]);
+  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
+
+  // ---- Nightly commission payout run -------------------------------------
+  // Once a day (first staff session after midnight) yesterday's commission is
+  // booked as a Labor expense and credited to each member's balance.
+  const nightlyRef = useRef<string>("");
+  useEffect(() => {
+    if (!currentStoreId || !currentUser || currentUser.role !== "staff") return;
+    if (!sync.hydrated) return;
+    const key = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (nightlyRef.current === key) return;
+    nightlyRef.current = key;
+    value.runCommissionPayout({ auto: true });
+  }, [currentStoreId, currentUser, sync.hydrated, value]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

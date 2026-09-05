@@ -38,6 +38,7 @@ function SettingsPage() {
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
+  const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
 
   useEffect(() => {
     if (!store) return;
@@ -45,6 +46,7 @@ function SettingsPage() {
     setCurrency(store.currency); setLow(store.low_balance_threshold); setMobile(store.enable_mobile_tender);
     setServiceRate(store.service_rate ?? 5);
     setCommissionRate(store.commission_rate ?? 0);
+    setWaiterTables(store.enable_waiter_tables ?? false);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -52,7 +54,7 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)) });
+    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -144,6 +146,13 @@ function SettingsPage() {
               onChange={(e) => setCommissionRate(Number(e.target.value) || 0)} className="w-24 text-right" />
           </div>
         </div>
+        <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
+          <div>
+            <div className="font-semibold text-sm">Waiter tables &amp; sections</div>
+            <div className="text-xs text-muted-foreground">Credit each sale to the waiter serving that table. Assign tables in <b>Tables</b>. Off = sales are credited to whoever rings them up.</div>
+          </div>
+          <input type="checkbox" checked={waiterTables} onChange={(e) => setWaiterTables(e.target.checked)} className="w-5 h-5 accent-primary" />
+        </label>
         <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
           <div>
             <div className="font-semibold text-sm">Mobile Money (Lipa Namba) tender</div>

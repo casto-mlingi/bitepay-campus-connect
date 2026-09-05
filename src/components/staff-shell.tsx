@@ -1,13 +1,13 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity, HandCoins, Grid2X2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
 
-export type StaffTab = "orders" | "me" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores";
+export type StaffTab = "orders" | "me" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores" | "credit" | "tables";
 
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
-  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests, myStores, currentStoreId, switchStore } = useStore();
+  const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests, myStores, currentStoreId, switchStore, waiterTablesEnabled } = useStore();
 
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
@@ -64,7 +64,11 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
               {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
-              {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
+              {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label="Credit" active={active === "credit"} />}
+              {waiterTablesEnabled && can("team.view") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
+              {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label="Credit" active={active === "credit"} />}
+          {waiterTablesEnabled && can("team.view") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
+          {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
               {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
               {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
 

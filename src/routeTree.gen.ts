@@ -26,6 +26,7 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomersRouteImport } from './routes/customers'
+import { Route as CreditRouteImport } from './routes/credit'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -117,6 +118,11 @@ const CustomersRoute = CustomersRouteImport.update({
   path: '/customers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CreditRoute = CreditRouteImport.update({
+  id: '/credit',
+  path: '/credit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CartRoute = CartRouteImport.update({
   id: '/cart',
   path: '/cart',
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
+  '/credit': typeof CreditRoute
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
+  '/credit': typeof CreditRoute
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
@@ -197,6 +205,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/cart': typeof CartRoute
+  '/credit': typeof CreditRoute
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
@@ -223,6 +232,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/cart'
+    | '/credit'
     | '/customers'
     | '/dashboard'
     | '/finance'
@@ -247,6 +257,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/cart'
+    | '/credit'
     | '/customers'
     | '/dashboard'
     | '/finance'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/cart'
+    | '/credit'
     | '/customers'
     | '/dashboard'
     | '/finance'
@@ -296,6 +308,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   CartRoute: typeof CartRoute
+  CreditRoute: typeof CreditRoute
   CustomersRoute: typeof CustomersRoute
   DashboardRoute: typeof DashboardRoute
   FinanceRoute: typeof FinanceRoute
@@ -437,6 +450,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/credit': {
+      id: '/credit'
+      path: '/credit'
+      fullPath: '/credit'
+      preLoaderRoute: typeof CreditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cart': {
       id: '/cart'
       path: '/cart'
@@ -480,6 +500,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   CartRoute: CartRoute,
+  CreditRoute: CreditRoute,
   CustomersRoute: CustomersRoute,
   DashboardRoute: DashboardRoute,
   FinanceRoute: FinanceRoute,
