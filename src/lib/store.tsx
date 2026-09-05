@@ -20,6 +20,8 @@ export type Profile = {
   disabled?: boolean;
   /** Optional per-staff commission override (percent of sales they handled). */
   commission_rate?: number;
+  /** Commission already paid out to this staff member (running total). */
+  commission_balance?: number;
   last_login?: number;
   created_at?: number;
   store_id?: string; // home canteen (customer signup) / ACTIVE tenant (staff)
@@ -62,6 +64,8 @@ export type Store = {
   credit_terms_days?: number;
   /** Default staff commission, in percent of the sales value they handled. */
   commission_rate?: number;
+  /** Credit each order to the waiter serving that table/section. */
+  enable_waiter_tables?: boolean;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -333,6 +337,37 @@ export type Order = {
   cashier_id?: string;
   cashier_name?: string;
   shift_id?: string;
+  /** Waiter attribution (table service). */
+  waiter_id?: string;
+  waiter_name?: string;
+  table_no?: string;
+};
+
+/** A table (inside a section) served by one waiter. */
+export type TableAssignment = {
+  id: string;
+  store_id: string;
+  section: string;
+  table_no: string;
+  waiter_id: string;
+  waiter_name: string;
+};
+
+/** One nightly commission payout, booked as a Labor expense. */
+export type CommissionPayout = {
+  id: string;
+  store_id: string;
+  run_key: string; // yyyy-mm-dd of the trading day paid out
+  staff_id: string;
+  staff_name: string;
+  period_start: number;
+  period_end: number;
+  sales: number;
+  rate: number;
+  amount: number;
+  expense_id: string;
+  created_at: number;
+  auto: boolean;
 };
 
 export type Transaction = {
@@ -626,7 +661,33 @@ type Ctx = {
     commissionRate: number;
     commission: number;
     shifts: number;
+    commissionPaid: number;
+    commissionDue: number;
     feed: { id: string; at: number; title: string; detail: string; amount?: number }[];
+  };
+
+  // ---- Waiter tables & sections ----
+  waiterTablesEnabled: boolean;
+  tableAssignments: TableAssignment[];
+  assignTable: (input: { section: string; table_no: string; waiter_id: string }) => Ok | Fail;
+  removeTableAssignment: (id: string) => Ok | Fail;
+  waiterForTable: (table_no: string) => TableAssignment | null;
+
+  // ---- Commission payout run ----
+  commissionPayouts: CommissionPayout[];
+  /** Book commission for a trading day as a Labor expense and credit each member. */
+  runCommissionPayout: (input?: { day?: number; auto?: boolean }) =>
+    | { ok: true; paid: number; total: number; skipped: boolean }
+    | Fail;
+
+  // ---- Collections reporting ----
+  collectionsReport: (month: string) => {
+    month: string;
+    rows: { order_id: string; customer: string; at: number; amount: number; tender: "cash" | "mobile"; reference?: string; receipt_no: string; by: string }[];
+    total: number;
+    cash: number;
+    mobile: number;
+    outstanding: number;
   };
 
   // ---- Menu request governance ----
@@ -739,6 +800,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [customDishRequests, setCustomDishRequests] = useState<CustomDishRequest[]>([]);
   const [payLaterRequests, setPayLaterRequests] = useState<PayLaterRequest[]>([]);
   const [menuAudits, setMenuAudits] = useState<MenuRequestAudit[]>([]);
+  const [tableAssignments, setTableAssignments] = useState<TableAssignment[]>([]);
+  const [commissionPayouts, setCommissionPayouts] = useState<CommissionPayout[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
@@ -762,11 +825,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
+      tableAssignments, commissionPayouts,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
+     tableAssignments, commissionPayouts,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -792,6 +857,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.customDishRequests) setCustomDishRequests(s.customDishRequests);
     if (s.payLaterRequests) setPayLaterRequests(s.payLaterRequests);
     if (s.menuAudits) setMenuAudits(s.menuAudits);
+    if (s.tableAssignments) setTableAssignments(s.tableAssignments);
+    if (s.commissionPayouts) setCommissionPayouts(s.commissionPayouts);
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
     if (s.adminAuditLog) setAdminAuditLog(s.adminAuditLog);
