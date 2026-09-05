@@ -2126,7 +2126,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const from = range?.from ?? 0;
       const to = range?.to ?? Number.MAX_SAFE_INTEGER;
       const inRange = (t: number) => t >= from && t <= to;
-      const mine = scopedOrders.filter((o) => o.cashier_id === staffId && !o.is_reversal && !o.reversed && inRange(o.created_at));
+      const mine = scopedOrders.filter((o) =>
+        (o.waiter_id ? o.waiter_id === staffId : o.cashier_id === staffId)
+        && !o.is_reversal && !o.reversed && inRange(o.created_at));
       const sales = mine.reduce((s2, o) => s2 + o.total_amount, 0);
       const cashCollected = mine.reduce((s2, o) => s2 + (o.cash_paid ?? 0), 0);
       const walletCollected = mine.reduce((s2, o) => s2 + (o.wallet_paid ?? 0), 0);
@@ -2151,12 +2153,131 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...scopedRequests.filter((r) => r.resolved_by === staffId && r.resolved_at && inRange(r.resolved_at)).map((r) => ({
           id: `t-${r.id}`, at: r.resolved_at!, title: `Top-up ${r.status}`, detail: `${r.customer_name} · ${r.reference}`, amount: r.amount,
         })),
+        ...scopedPayouts.filter((c) => c.staff_id === staffId && inRange(c.created_at)).map((c) => ({
+          id: `c-${c.id}`, at: c.created_at, title: "Commission paid out",
+          detail: `${c.run_key} · ${c.rate}% of ${formatTZS(c.sales)}${c.auto ? " · nightly run" : ""}`,
+          amount: c.amount,
+        })),
       ].sort((a, b) => b.at - a.at).slice(0, 100);
+      const commission = Math.round((sales * commissionRate) / 100);
+      const commissionPaid = scopedPayouts
+        .filter((c) => c.staff_id === staffId && inRange(c.created_at))
+        .reduce((n, c) => n + c.amount, 0);
       return {
         orders: mine.length, customersServed, sales, cashCollected, walletCollected,
-        commissionRate, commission: Math.round((sales * commissionRate) / 100),
-        shifts: myShifts.length, feed,
+        commissionRate, commission,
+        shifts: myShifts.length, commissionPaid, commissionDue: Math.max(0, commission - commissionPaid), feed,
       };
+    },
+
+    // ---- Waiter tables & sections ----
+    waiterTablesEnabled: !!store?.enable_waiter_tables,
+    tableAssignments: scopedTables,
+    assignTable({ section, table_no, waiter_id }) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      if (!can("team.manage_cashier")) return { ok: false, reason: "Supervisors and owners only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const table = table_no.trim();
+      if (!table) return { ok: false, reason: "Enter a table number" };
+      const waiter = profiles.find((x) => x.id === waiter_id && x.role === "staff");
+      if (!waiter) return { ok: false, reason: "Pick a staff member" };
+      const row: TableAssignment = {
+        id: uid("tb"), store_id: currentStoreId, section: section.trim() || "Main",
+        table_no: table, waiter_id, waiter_name: waiter.full_name,
+      };
+      setTableAssignments((prev) => [
+        ...prev.filter((t) => !(t.store_id === currentStoreId && t.table_no.toLowerCase() === table.toLowerCase())),
+        row,
+      ]);
+      return { ok: true };
+    },
+    removeTableAssignment(id) {
+      if (!can("team.manage_cashier")) return { ok: false, reason: "Supervisors and owners only" };
+      setTableAssignments((prev) => prev.filter((t) => t.id !== id));
+      return { ok: true };
+    },
+    waiterForTable(table_no) {
+      const t = table_no.trim().toLowerCase();
+      return scopedTables.find((x) => x.table_no.toLowerCase() === t) ?? null;
+    },
+
+    // ---- Commission payout run ----
+    commissionPayouts: scopedPayouts,
+    runCommissionPayout(input) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      const day = new Date(input?.day ?? Date.now() - 86400000);
+      const start = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+      const end = start + 86400000 - 1;
+      const run_key = new Date(start).toISOString().slice(0, 10);
+      if (commissionPayouts.some((c) => c.store_id === currentStoreId && c.run_key === run_key)) {
+        return { ok: true, paid: 0, total: 0, skipped: true };
+      }
+      const staff = profiles.filter((x) => x.role === "staff" && x.store_id === currentStoreId && !x.disabled);
+      const now = Date.now();
+      const rows: CommissionPayout[] = [];
+      const exps: Expense[] = [];
+      for (const m of staff) {
+        const rate = Math.max(0, Math.min(100, m.commission_rate ?? store?.commission_rate ?? 0));
+        if (rate <= 0) continue;
+        const sales = orders
+          .filter((o) => o.store_id === currentStoreId && !o.is_reversal && !o.reversed
+            && o.created_at >= start && o.created_at <= end
+            && (o.waiter_id ? o.waiter_id === m.id : o.cashier_id === m.id))
+          .reduce((n, o) => n + o.total_amount, 0);
+        const amount = Math.round((sales * rate) / 100);
+        if (amount <= 0) continue;
+        const expense_id = uid("EX");
+        exps.push({
+          id: expense_id, store_id: currentStoreId, date: now, category: "Labor", amount,
+          description: `Commission payout · ${m.full_name} · ${run_key} (${rate}% of ${formatTZS(sales)})`,
+          payment_method: "cash",
+        });
+        rows.push({
+          id: uid("cp"), store_id: currentStoreId, run_key, staff_id: m.id, staff_name: m.full_name,
+          period_start: start, period_end: end, sales, rate, amount, expense_id,
+          created_at: now, auto: !!input?.auto,
+        });
+      }
+      if (rows.length === 0) {
+        // Still stamp the run so the nightly job does not retry all day.
+        setCommissionPayouts((prev) => [{
+          id: uid("cp"), store_id: currentStoreId, run_key, staff_id: "", staff_name: "—",
+          period_start: start, period_end: end, sales: 0, rate: 0, amount: 0, expense_id: "",
+          created_at: now, auto: !!input?.auto,
+        }, ...prev]);
+        return { ok: true, paid: 0, total: 0, skipped: false };
+      }
+      const total = rows.reduce((n, r) => n + r.amount, 0);
+      setExpenses((prev) => [...exps, ...prev]);
+      adjustCash((c) => c - total);
+      setCommissionPayouts((prev) => [...rows, ...prev]);
+      setProfiles((prev) => prev.map((m) => {
+        const row = rows.find((r) => r.staff_id === m.id);
+        return row ? { ...m, commission_balance: (m.commission_balance ?? 0) + row.amount } : m;
+      }));
+      for (const r of rows) {
+        pushNotification({
+          store_id: currentStoreId, user_id: r.staff_id, kind: "info",
+          title: "Commission paid 💸",
+          body: `${formatTZS(r.amount)} commission for ${r.run_key} (${r.rate}% of ${formatTZS(r.sales)}) was booked to your balance.`,
+        });
+      }
+      return { ok: true, paid: rows.length, total, skipped: false };
+    },
+
+    // ---- Collections reporting ----
+    collectionsReport(month) {
+      const rows = scopedOrders.flatMap((o) => (o.payments ?? []).map((pmt) => ({
+        order_id: o.id, customer: o.customer_name, at: pmt.created_at, amount: pmt.amount,
+        tender: pmt.tender, reference: pmt.reference, receipt_no: pmt.receipt_no, by: pmt.by_name,
+      }))).filter((r) => new Date(r.at).toISOString().slice(0, 7) === month)
+        .sort((a, b) => b.at - a.at);
+      const total = rows.reduce((n, r) => n + r.amount, 0);
+      const cash = rows.filter((r) => r.tender === "cash").reduce((n, r) => n + r.amount, 0);
+      const outstanding = scopedOrders
+        .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
+        .reduce((n, o) => n + Math.max(0, o.total_amount - (o.amount_paid ?? 0)), 0);
+      return { month, rows, total, cash, mobile: total - cash, outstanding };
     },
     receivables: scopedOrders
       .filter((o) => o.payment_status === "unpaid" && !o.closed_out && !o.is_reversal)
@@ -2486,7 +2607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests]);
+  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
