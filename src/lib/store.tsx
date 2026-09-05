@@ -1,5 +1,5 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
 export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
@@ -2608,6 +2608,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return false;
     },
   }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
+
+  // ---- Nightly commission payout run -------------------------------------
+  // Once a day (first staff session after midnight) yesterday's commission is
+  // booked as a Labor expense and credited to each member's balance.
+  const nightlyRef = useRef<string>("");
+  useEffect(() => {
+    if (!currentStoreId || !currentUser || currentUser.role !== "staff") return;
+    if (!sync.hydrated) return;
+    const key = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (nightlyRef.current === key) return;
+    nightlyRef.current = key;
+    value.runCommissionPayout({ auto: true });
+  }, [currentStoreId, currentUser, sync.hydrated, value]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
