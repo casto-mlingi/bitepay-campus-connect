@@ -582,7 +582,7 @@ type Ctx = {
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
   placeOrder: (deliveryType: DeliveryType) => Order | null;
-  advanceOrder: (id: string) => void;
+  advanceOrder: (id: string) => Ok | Fail;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
   staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
   topUpRequests: TopUpRequest[];
@@ -593,8 +593,8 @@ type Ctx = {
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   verifyWalletPin: (customerId: string, pin: string) => boolean;
   serviceRate: number;
-  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
-  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string }) => SaleResult;
+  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
+  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
@@ -1111,6 +1111,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => currentStoreId ? menuAudits.filter((a) => a.store_id === currentStoreId) : [],
     [menuAudits, currentStoreId],
   );
+  const scopedTables = useMemo(
+    () => currentStoreId ? tableAssignments.filter((t) => t.store_id === currentStoreId) : [],
+    [tableAssignments, currentStoreId],
+  );
+  const scopedPayouts = useMemo(
+    () => currentStoreId ? commissionPayouts.filter((c) => c.store_id === currentStoreId) : [],
+    [commissionPayouts, currentStoreId],
+  );
 
   /** Approved, unsettled pay-later lines = how far the wallet may go negative. */
   const creditLimitOf = useCallback((customerId: string, storeId?: string) => {
@@ -1167,7 +1175,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return no || `R-${day}-${pad(nextN)}`;
   };
 
-  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string): SaleResult => {
+  /** Resolve the waiter credited with a table-service order (feature-flagged). */
+  const attributionFor = useCallback((table_no?: string) => {
+    if (!table_no || !currentStoreId) return null;
+    const s2 = stores.find((x) => x.id === currentStoreId);
+    if (!s2?.enable_waiter_tables) return null;
+    const t = tableAssignments.find((x) => x.store_id === currentStoreId && x.table_no.toLowerCase() === table_no.trim().toLowerCase());
+    return t ?? null;
+  }, [tableAssignments, currentStoreId, stores]);
+
+  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
@@ -1188,6 +1205,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+      table_no: table_no?.trim() || undefined,
+      waiter_id: attributionFor(table_no)?.waiter_id,
+      waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId);
@@ -1205,10 +1225,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates]);
+  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
 
 
-  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string): SaleResult => {
+  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     if (total <= 0) return { ok: false, reason: "Cart empty" };
@@ -1222,13 +1242,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: Date.now(), receipt_no, cash_paid: tender === "cash" ? cashReceived : total, wallet_paid: 0, tender,
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
+      table_no: table_no?.trim() || undefined,
+      waiter_id: attributionFor(table_no)?.waiter_id,
+      waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates]);
+  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
@@ -1533,6 +1556,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     advanceOrder(id) {
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
+      const current = orders.find((o) => o.id === id);
+      if (current && current.status === "ready" && current.payment_status === "unpaid" && !current.closed_out) {
+        const owing = Math.max(0, current.total_amount - (current.amount_paid ?? 0));
+        return { ok: false, reason: `Collect ${formatTZS(owing)} on hand-over before completing this order` };
+      }
       let becameCompleted = false;
       setOrders((prev) => prev.map((o) => {
         if (o.id !== id) return o;
@@ -1563,6 +1591,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           pushNotification({ store_id: target.store_id, user_id: target.customer_id, kind: "order", title: c.title, body: c.body });
         }
       }
+      return { ok: true };
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!currentStoreId) return;
@@ -1573,11 +1602,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else adjustCash((c) => c + amount);
     },
 
-    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference }) {
-      return _executePosSale(customerId, items, cashPortion, tender, reference);
+    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no }) {
+      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no);
     },
-    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference }) {
-      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference);
+    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no }) {
+      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no);
     },
     reverseSale(orderId, reason) {
       const original = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
