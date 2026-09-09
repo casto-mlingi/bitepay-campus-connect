@@ -322,6 +322,19 @@ function POS() {
             </div>
           )}
 
+          {waiterTablesEnabled && (
+            <label className="block mt-3">
+              <span className="text-xs text-muted-foreground">Table number (credits the waiter)</span>
+              <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. T4" className="mt-1" />
+              {tableNo.trim() && (
+                <span className="text-[11px] text-muted-foreground">
+                  {waiterForTable(tableNo)?.waiter_name ?? "No waiter assigned to this table yet"}
+                </span>
+              )}
+            </label>
+          )}
+
+
           <div className="mt-4 border-t pt-3">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Items</div>
             {lines.length === 0 ? (
