@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { HandCoins, Receipt, AlertTriangle } from "lucide-react";
+import { HandCoins, Receipt, AlertTriangle, FileBarChart } from "lucide-react";
 import { useStore, formatTZS, type Order } from "@/lib/store";
 import { ListFilter, useListFilter } from "@/components/list-filter";
 
@@ -36,7 +36,45 @@ export function ReceivablesCard() {
       <div className="p-4 border-b flex flex-wrap items-center gap-3">
         <h2 className="font-bold flex items-center gap-2"><HandCoins className="w-4 h-4 text-primary" /> Pay-on-delivery collections</h2>
         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{rows.length} open · {formatTZS(totalDue)} due</span>
+        <button onClick={() => setShowReport((v) => !v)} className="ml-auto h-9 px-3 rounded-lg border text-xs font-semibold hover:bg-muted inline-flex items-center gap-1">
+          <FileBarChart className="w-3.5 h-3.5" /> {showReport ? "Hide" : "Monthly"} report
+        </button>
       </div>
+
+      {showReport && (
+        <div className="p-4 border-b bg-muted/30 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 rounded-xl border bg-background px-3 text-sm" aria-label="Report month" />
+            <span className="text-xs text-muted-foreground">{report.rows.length} payments collected</span>
+            <button onClick={() => exportCollectionsCsv(report)} className="h-9 px-3 rounded-lg border text-xs font-semibold hover:bg-background">Download CSV</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <Fig label="Collected" value={formatTZS(report.total)} />
+            <Fig label="Cash" value={formatTZS(report.cash)} />
+            <Fig label="Mobile money" value={formatTZS(report.mobile)} />
+            <Fig label="Still outstanding" value={formatTZS(report.outstanding)} tone />
+          </div>
+          <div className="max-h-64 overflow-y-auto rounded-xl border bg-background">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr><th className="text-left px-3 py-2">Date</th><th className="text-left px-3 py-2">Client</th><th className="text-left px-3 py-2">Receipt</th><th className="text-left px-3 py-2">Tender</th><th className="text-right px-3 py-2">Amount</th></tr>
+              </thead>
+              <tbody>
+                {report.rows.length === 0 && <tr><td colSpan={5} className="text-center py-6 text-muted-foreground">No collections in this month.</td></tr>}
+                {report.rows.map((r) => (
+                  <tr key={r.receipt_no} className="border-t">
+                    <td className="px-3 py-2 whitespace-nowrap">{new Date(r.at).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">{r.customer}</td>
+                    <td className="px-3 py-2 font-mono">{r.receipt_no}{r.reference ? ` · ${r.reference}` : ""}</td>
+                    <td className="px-3 py-2 capitalize">{r.tender}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatTZS(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       <div className="p-4 border-b">
         <ListFilter
           filter={filter}
@@ -72,6 +110,31 @@ export function ReceivablesCard() {
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl text-sm">{toast}</div>}
     </section>
   );
+}
+
+function Fig({ label, value, tone }: { label: string; value: string; tone?: boolean }) {
+  return (
+    <div className={`rounded-xl border p-3 ${tone ? "bg-rose-50 border-rose-200" : "bg-background"}`}>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className={`font-bold ${tone ? "text-rose-700" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+type Report = { month: string; rows: { order_id: string; customer: string; at: number; amount: number; tender: string; reference?: string; receipt_no: string; by: string }[] };
+
+function exportCollectionsCsv(report: Report) {
+  const head = "Date,Order,Client,Receipt,Reference,Tender,Amount,Collected by";
+  const body = report.rows.map((r) =>
+    [new Date(r.at).toISOString(), r.order_id, r.customer, r.receipt_no, r.reference ?? "", r.tender, r.amount, r.by]
+      .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","),
+  );
+  const blob = new Blob([[head, ...body].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `collections-${report.month}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function flash(set: (v: string) => void, msg: string) {
