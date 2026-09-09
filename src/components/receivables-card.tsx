@@ -9,9 +9,12 @@ import { ListFilter, useListFilter } from "@/components/list-filter";
  * until the outstanding balance hits zero (owners may close it out instead).
  */
 export function ReceivablesCard() {
-  const { receivables, recordOrderPayment, closeOutOrder, can, hasStaffRole } = useStore();
+  const { receivables, recordOrderPayment, closeOutOrder, can, hasStaffRole, collectionsReport } = useStore();
   const { filter, setFilter, range } = useListFilter();
   const [toast, setToast] = useState("");
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [showReport, setShowReport] = useState(false);
+  const report = useMemo(() => collectionsReport(month), [collectionsReport, month]);
 
   const rows = useMemo(() => {
     const q = filter.q.trim().toLowerCase();
