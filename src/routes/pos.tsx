@@ -20,7 +20,8 @@ type Tender = "cash" | "mobile";
 
 function POS() {
   const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
-    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin } = useStore();
+    availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
+    waiterTablesEnabled, waiterForTable } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("wallet");
   const [query, setQuery] = useState("");
@@ -37,6 +38,7 @@ function POS() {
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
   const [mobileRef, setMobileRef] = useState<string>("");
+  const [tableNo, setTableNo] = useState<string>("");
   const [toast, setToast] = useState<string>("");
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
 
@@ -105,7 +107,7 @@ function POS() {
       setLines([]); setSplitCash(0); setMobileRef("");
       return;
     }
-    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef });
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
@@ -125,7 +127,7 @@ function POS() {
       setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
       return;
     }
-    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef });
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
@@ -319,6 +321,19 @@ function POS() {
               </label>
             </div>
           )}
+
+          {waiterTablesEnabled && (
+            <label className="block mt-3">
+              <span className="text-xs text-muted-foreground">Table number (credits the waiter)</span>
+              <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. T4" className="mt-1" />
+              {tableNo.trim() && (
+                <span className="text-[11px] text-muted-foreground">
+                  {waiterForTable(tableNo)?.waiter_name ?? "No waiter assigned to this table yet"}
+                </span>
+              )}
+            </label>
+          )}
+
 
           <div className="mt-4 border-t pt-3">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Items</div>

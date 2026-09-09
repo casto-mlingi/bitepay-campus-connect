@@ -29,7 +29,8 @@ const PERIODS: { key: string; label: string; from: () => number }[] = [
 ];
 
 function PerformancePage() {
-  const { currentUser, profiles, staffPerformance, can } = useStore();
+  const { currentUser, profiles, staffPerformance, can, hasStaffRole, runCommissionPayout, commissionPayouts } = useStore();
+  const [payoutMsg, setPayoutMsg] = useState("");
   const { id, period } = Route.useSearch();
   const navigate = useNavigate();
   const [p, setP] = useState(period);
@@ -75,6 +76,29 @@ function PerformancePage() {
         <Stat icon={<Banknote className="w-4 h-4" />} label="Sales value" value={formatTZS(stats.sales)} />
         <Stat icon={<BadgePercent className="w-4 h-4" />} label={`Commission (${stats.commissionRate}%)`} value={formatTZS(stats.commission)} tone />
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Stat icon={<BadgePercent className="w-4 h-4" />} label="Commission paid out" value={formatTZS(stats.commissionPaid)} />
+        <Stat icon={<BadgePercent className="w-4 h-4" />} label="Still due" value={formatTZS(stats.commissionDue)} tone />
+        <Stat icon={<Receipt className="w-4 h-4" />} label="Payout runs" value={String(commissionPayouts.filter((p) => p.staff_id === member.id).length)} />
+        {hasStaffRole("owner") && (
+          <button
+            onClick={() => {
+              const res = runCommissionPayout({});
+              setPayoutMsg(res.ok
+                ? (res.skipped ? "Yesterday's commission was already paid out." : `Paid ${formatTZS(res.total)} to ${res.paid} member(s) — booked as a Labor expense.`)
+                : res.reason);
+              setTimeout(() => setPayoutMsg(""), 4000);
+            }}
+            className="rounded-2xl border border-primary/30 bg-primary/5 p-4 text-left hover:bg-primary/10"
+          >
+            <div className="text-xs text-muted-foreground">Nightly run</div>
+            <div className="text-sm font-bold mt-1">Pay out yesterday's commission</div>
+          </button>
+        )}
+      </div>
+
+      {payoutMsg && <div className="mb-4 rounded-xl border bg-surface px-4 py-3 text-sm font-semibold">{payoutMsg}</div>}
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="bg-surface border rounded-2xl p-5 space-y-3">

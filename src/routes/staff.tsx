@@ -27,6 +27,7 @@ const nextLabel: Record<OrderStatus, string | null> = {
 function StaffDashboard() {
   const { currentUser, orders, advanceOrder } = useStore();
   const navigate = useNavigate();
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     if (!currentUser) navigate({ to: "/" });
@@ -73,13 +74,14 @@ function StaffDashboard() {
                   <div className="text-center text-xs text-muted-foreground py-10">Nothing here</div>
                 )}
                 {list.map((o) => (
-                  <OrderCard key={o.id} order={o} nextLabel={nextLabel[o.status]} onAdvance={() => advanceOrder(o.id)} />
+                  <OrderCard key={o.id} order={o} nextLabel={nextLabel[o.status]} onAdvance={() => { const r = advanceOrder(o.id); if (!r.ok) { setToast(r.reason); setTimeout(() => setToast(""), 3200); } }} />
                 ))}
               </div>
             </div>
           );
         })}
       </div>
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2.5 rounded-xl shadow-xl text-sm font-semibold">{toast}</div>}
     </StaffShell>
   );
 }

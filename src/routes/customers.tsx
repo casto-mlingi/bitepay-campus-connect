@@ -236,7 +236,12 @@ function Customers() {
                       </td>
                       <td className="px-4 py-2.5 hidden sm:table-cell text-muted-foreground">{c.phone}</td>
                       <td className="px-4 py-2.5 hidden md:table-cell font-mono text-xs text-muted-foreground">{c.id}</td>
-                      <td className="px-4 py-2.5 text-right font-bold">{formatTZS(c.wallet_balance)}</td>
+                      <td className="px-4 py-2.5 text-right font-bold">
+                        <span className={c.wallet_balance < 0 ? "text-rose-600" : ""}>
+                          {c.wallet_balance < 0 ? `− ${formatTZS(Math.abs(c.wallet_balance))}` : formatTZS(c.wallet_balance)}
+                        </span>
+                        {isOverdue(c.id) && <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Overdue</div>}
+                      </td>
                       <td className="px-4 py-2.5 text-right">
                         {canViewQR && (
                           <button onClick={(e) => { e.stopPropagation(); openQR(c); }} className="p-1.5 rounded-md hover:bg-muted" title="Show QR / barcode (PIN required)">
