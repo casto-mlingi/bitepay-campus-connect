@@ -44,7 +44,7 @@ function POS() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const freshCustomer = customer ? profiles.find((p) => p.id === customer.id) ?? null : null;

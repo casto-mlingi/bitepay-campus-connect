@@ -26,7 +26,7 @@ function TeamPage() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const staff = useMemo(() => profiles.filter((p) => p.role === "staff").sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0)), [profiles]);

@@ -31,7 +31,7 @@ function InventoryPage() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;

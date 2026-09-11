@@ -32,7 +32,7 @@ function Customers() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);

@@ -26,7 +26,7 @@ function AnalyticsPage() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const startOfDay = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }, []);

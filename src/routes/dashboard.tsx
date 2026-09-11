@@ -27,7 +27,7 @@ function Dashboard() {
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
-    else if (currentUser.role === "staff") navigate({ to: "/staff" });
+    else if (currentUser && currentUser.role === "staff") navigate({ to: "/staff" });
   }, [currentUser, navigate]);
 
   // Auto-popup the newest unread notification on login/mount
