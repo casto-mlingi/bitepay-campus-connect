@@ -906,6 +906,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sync = useSnapshotSync<Snapshot>({ snapshot, apply: applySnapshot, isOnline });
 
   const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
+  // Sign-in state is settled once storage has been read and, when a session
+  // was stored, its profile has arrived from the local snapshot.
+  const sessionReady =
+    restoreDone && (restoreTimedOut || !restoredUid || currentUserId !== restoredUid || !!rawUser);
   const availableCanteens = useMemo(
     () => stores.filter((s) => s.subscription.status === "active"),
     [stores],
