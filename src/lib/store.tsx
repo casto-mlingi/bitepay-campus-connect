@@ -821,6 +821,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- Keep the signed-in user across page refreshes ---------------------
   const sessionRestored = useRef(false);
+  const [restoredUid, setRestoredUid] = useState<string | null>(null);
+  const [restoreDone, setRestoreDone] = useState(false);
+  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -831,13 +834,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           selectedCanteenId?: string | null;
           superAdminSignedIn?: boolean;
         };
-        if (s.currentUserId) setCurrentUserId(s.currentUserId);
+        if (s.currentUserId) { setCurrentUserId(s.currentUserId); setRestoredUid(s.currentUserId); }
         if (s.selectedCanteenId) setSelectedCanteenId(s.selectedCanteenId);
         if (s.superAdminSignedIn) setSuperAdminSignedIn(true);
       }
     } catch { /* ignore corrupt storage */ }
     sessionRestored.current = true;
+    setRestoreDone(true);
+    const t = window.setTimeout(() => setRestoreTimedOut(true), 6000);
+    return () => window.clearTimeout(t);
   }, []);
+
 
   useEffect(() => {
     if (typeof window === "undefined" || !sessionRestored.current) return;
