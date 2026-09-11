@@ -1296,7 +1296,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
 
   const value: Ctx = useMemo(() => ({
-    currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    currentUser, sessionReady, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
     adminData: {
       orders, transactions, tickets, topUpRequests, purchases, expenses,
       wastage, shifts, customDishRequests, notifications, treasuries,
