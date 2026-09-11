@@ -25,7 +25,7 @@ function AnalyticsPage() {
   const [wasteReason, setWasteReason] = useState("Spoiled");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 

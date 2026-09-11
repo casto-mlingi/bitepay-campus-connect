@@ -22,7 +22,7 @@ function TopUpPage() {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
   const myRequests = useMemo(
     () => (currentUser ? topUpRequests.filter((r) => r.customer_id === currentUser.id).slice(0, 6) : []),

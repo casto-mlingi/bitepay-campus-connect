@@ -26,7 +26,7 @@ function Dashboard() {
   const [popup, setPopup] = useState<null | { title: string; body: string; kind: string }>(null);
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser.role === "staff") navigate({ to: "/staff" });
   }, [currentUser, navigate]);
 

@@ -17,7 +17,7 @@ function CartPage() {
   const [placed, setPlaced] = useState<string | null>(null);
   const [payLaterMsg, setPayLaterMsg] = useState("");
 
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
   if (!currentUser) return null;
 
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);

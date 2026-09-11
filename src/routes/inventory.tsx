@@ -30,7 +30,7 @@ function InventoryPage() {
   const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 

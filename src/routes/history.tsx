@@ -15,7 +15,7 @@ function HistoryPage() {
   const navigate = useNavigate();
   const [unlocked, setUnlocked] = useState(false);
   const [asking, setAsking] = useState(false);
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
   if (!currentUser) return null;
 
   const locked = Boolean(currentUser.wallet_pin) && !unlocked;

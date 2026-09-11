@@ -30,7 +30,7 @@ function FinancePage() {
   const [tab, setTab] = useState<Tab>("treasury");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
     else if (!hasStaffRole("supervisor")) navigate({ to: "/staff" });
   }, [currentUser, navigate, hasStaffRole]);

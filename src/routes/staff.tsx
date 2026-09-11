@@ -30,7 +30,7 @@ function StaffDashboard() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
