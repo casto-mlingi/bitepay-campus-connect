@@ -27,14 +27,14 @@ function daysLeft(expires: number) {
 }
 
 function StoresPage() {
-  const { currentUser, myStores, myRoleAt, currentStoreId, switchStore, createStore } = useStore();
+  const { currentUser, sessionReady, myStores, myRoleAt, currentStoreId, switchStore, createStore } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;

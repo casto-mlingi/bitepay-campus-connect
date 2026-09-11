@@ -17,7 +17,7 @@ export const Route = createFileRoute("/team")({
 });
 
 function TeamPage() {
-  const { currentUser, profiles, can, addStaff, updateStaff, disableStaff, resetStaffCredential } = useStore();
+  const { currentUser, sessionReady, profiles, can, addStaff, updateStaff, disableStaff, resetStaffCredential } = useStore();
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
   const [edit, setEdit] = useState<Profile | null>(null);
@@ -25,8 +25,8 @@ function TeamPage() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const staff = useMemo(() => profiles.filter((p) => p.role === "staff").sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0)), [profiles]);

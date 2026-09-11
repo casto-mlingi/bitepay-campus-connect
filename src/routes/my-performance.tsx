@@ -29,15 +29,15 @@ const PERIODS: { key: string; label: string; from: () => number }[] = [
 ];
 
 function PerformancePage() {
-  const { currentUser, profiles, staffPerformance, can, hasStaffRole, runCommissionPayout, commissionPayouts } = useStore();
+  const { currentUser, sessionReady, profiles, staffPerformance, can, hasStaffRole, runCommissionPayout, commissionPayouts } = useStore();
   const [payoutMsg, setPayoutMsg] = useState("");
   const { id, period } = Route.useSearch();
   const navigate = useNavigate();
   const [p, setP] = useState(period);
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const targetId = id || currentUser?.id || "";

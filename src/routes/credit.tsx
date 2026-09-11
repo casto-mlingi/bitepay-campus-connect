@@ -20,7 +20,7 @@ export const Route = createFileRoute("/credit")({
 
 function CreditPage() {
   const {
-    currentUser, can, store, payLaterRequests, reviewPayLaterRequest,
+    currentUser, sessionReady, can, store, payLaterRequests, reviewPayLaterRequest,
     profiles, debtorBalance, isOverdue, creditLimitOf,
   } = useStore();
   const navigate = useNavigate();
@@ -30,8 +30,8 @@ function CreditPage() {
   const [pin, setPin] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const rows = useMemo(() => {

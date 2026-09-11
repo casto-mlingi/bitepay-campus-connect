@@ -19,7 +19,7 @@ type Mode = "wallet" | "cash";
 type Tender = "cash" | "mobile";
 
 function POS() {
-  const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
+  const { currentUser, sessionReady, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
     waiterTablesEnabled, waiterForTable } = useStore();
   const navigate = useNavigate();
@@ -43,8 +43,8 @@ function POS() {
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const freshCustomer = customer ? profiles.find((p) => p.id === customer.id) ?? null : null;

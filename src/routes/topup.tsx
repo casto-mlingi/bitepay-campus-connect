@@ -14,7 +14,7 @@ export const Route = createFileRoute("/topup")({
 const presets = [5000, 10000, 20000, 50000];
 
 function TopUpPage() {
-  const { currentUser, topUpRequests, submitTopUpRequest } = useStore();
+  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest } = useStore();
   const navigate = useNavigate();
   const [amount, setAmount] = useState<number>(10000);
   const [reference, setReference] = useState("");
@@ -22,7 +22,7 @@ function TopUpPage() {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
   const myRequests = useMemo(
     () => (currentUser ? topUpRequests.filter((r) => r.customer_id === currentUser.id).slice(0, 6) : []),

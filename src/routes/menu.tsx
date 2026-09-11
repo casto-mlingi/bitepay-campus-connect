@@ -10,12 +10,12 @@ export const Route = createFileRoute("/menu")({
 });
 
 function MenuPage() {
-  const { currentUser, products, cart, addToCart, setQty, availablePlates } = useStore();
+  const { currentUser, sessionReady, products, cart, addToCart, setQty, availablePlates } = useStore();
   const navigate = useNavigate();
   const [category, setCategory] = useState<string>("All");
   const [query, setQuery] = useState("");
 
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
   const available = useMemo(() => products.filter((p) => {
     const plates = availablePlates(p.id);

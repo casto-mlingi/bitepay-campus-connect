@@ -18,7 +18,7 @@ export const Route = createFileRoute("/tables")({
 });
 
 function TablesPage() {
-  const { currentUser, can, profiles, tableAssignments, assignTable, removeTableAssignment, waiterTablesEnabled } = useStore();
+  const { currentUser, sessionReady, can, profiles, tableAssignments, assignTable, removeTableAssignment, waiterTablesEnabled } = useStore();
   const navigate = useNavigate();
   const [section, setSection] = useState("Main hall");
   const [tableNo, setTableNo] = useState("");
@@ -26,8 +26,8 @@ function TablesPage() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/shift")({
 });
 
 function ShiftPage() {
-  const { currentUser, activeShift, shifts, orders, openShift, closeShift } = useStore();
+  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift } = useStore();
   const navigate = useNavigate();
   const [float, setFloat] = useState<number>(50000);
   const [countedCash, setCountedCash] = useState<number>(0);
@@ -21,8 +21,8 @@ function ShiftPage() {
   const [toast, setToast] = useState<string>("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const shiftOrders = useMemo(

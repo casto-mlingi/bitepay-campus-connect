@@ -14,7 +14,7 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function Dashboard() {
-  const { currentUser, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification, verifyWalletPin, setWalletPin } = useStore();
+  const { currentUser, sessionReady, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification, verifyWalletPin, setWalletPin } = useStore();
   const navigate = useNavigate();
   const [showId, setShowId] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
@@ -26,8 +26,8 @@ function Dashboard() {
   const [popup, setPopup] = useState<null | { title: string; body: string; kind: string }>(null);
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role === "staff") navigate({ to: "/staff" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role === "staff") navigate({ to: "/staff" });
   }, [currentUser, navigate]);
 
   // Auto-popup the newest unread notification on login/mount

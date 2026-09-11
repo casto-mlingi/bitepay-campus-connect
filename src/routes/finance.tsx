@@ -23,15 +23,15 @@ type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal";
 
 function FinancePage() {
   const {
-    currentUser, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
+    currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
     recordPurchase, recordExpense, hasStaffRole,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
     else if (!hasStaffRole("supervisor")) navigate({ to: "/staff" });
   }, [currentUser, navigate, hasStaffRole]);
 

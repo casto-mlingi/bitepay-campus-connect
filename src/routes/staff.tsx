@@ -25,13 +25,13 @@ const nextLabel: Record<OrderStatus, string | null> = {
 };
 
 function StaffDashboard() {
-  const { currentUser, orders, advanceOrder } = useStore();
+  const { currentUser, sessionReady, orders, advanceOrder } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;

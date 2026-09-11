@@ -18,7 +18,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { currentUser, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
+  const { currentUser, sessionReady, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showPlans, setShowPlans] = useState(false);
@@ -26,8 +26,8 @@ function SettingsPage() {
 
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const [name, setName] = useState(store?.name ?? "");

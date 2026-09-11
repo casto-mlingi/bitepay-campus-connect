@@ -508,6 +508,7 @@ type Treasury = { cash: number; bank: number };
 
 type Ctx = {
   currentUser: Profile | null;
+  sessionReady: boolean;
   profiles: Profile[]; // filtered to current store
   allProfiles: Profile[]; // unfiltered (for admin / login lookup)
   // Unfiltered, cross-tenant data for the super-admin console only
@@ -819,6 +820,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  // ---- Keep the signed-in user across page refreshes ---------------------
+  const sessionRestored = useRef(false);
+  const [restoredUid, setRestoredUid] = useState<string | null>(null);
+  const [restoreDone, setRestoreDone] = useState(false);
+  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("bitepay.session");
+      if (raw) {
+        const s = JSON.parse(raw) as {
+          currentUserId?: string | null;
+          selectedCanteenId?: string | null;
+          superAdminSignedIn?: boolean;
+        };
+        if (s.currentUserId) { setCurrentUserId(s.currentUserId); setRestoredUid(s.currentUserId); }
+        if (s.selectedCanteenId) setSelectedCanteenId(s.selectedCanteenId);
+        if (s.superAdminSignedIn) setSuperAdminSignedIn(true);
+      }
+    } catch { /* ignore corrupt storage */ }
+    sessionRestored.current = true;
+    setRestoreDone(true);
+    const t = window.setTimeout(() => setRestoreTimedOut(true), 6000);
+    return () => window.clearTimeout(t);
+  }, []);
+
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !sessionRestored.current) return;
+    try {
+      window.localStorage.setItem(
+        "bitepay.session",
+        JSON.stringify({ currentUserId, selectedCanteenId, superAdminSignedIn }),
+      );
+    } catch { /* storage full or blocked */ }
+  }, [currentUserId, selectedCanteenId, superAdminSignedIn]);
+
   // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
   const snapshot = useMemo(
     () => ({
@@ -869,6 +907,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sync = useSnapshotSync<Snapshot>({ snapshot, apply: applySnapshot, isOnline });
 
   const rawUser = profiles.find((p) => p.id === currentUserId) ?? null;
+  // Sign-in state is settled once storage has been read and, when a session
+  // was stored, its profile has arrived from the local snapshot.
+  const sessionReady =
+    restoreDone && (restoreTimedOut || !restoredUid || currentUserId !== restoredUid || !!rawUser);
   const availableCanteens = useMemo(
     () => stores.filter((s) => s.subscription.status === "active"),
     [stores],
@@ -1254,7 +1296,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
 
   const value: Ctx = useMemo(() => ({
-    currentUser, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    currentUser, sessionReady, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
     adminData: {
       orders, transactions, tickets, topUpRequests, purchases, expenses,
       wastage, shifts, customDishRequests, notifications, treasuries,
@@ -2607,7 +2649,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is

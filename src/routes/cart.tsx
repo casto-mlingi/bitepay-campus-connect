@@ -11,13 +11,13 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
+  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);
   const [payLaterMsg, setPayLaterMsg] = useState("");
 
-  useEffect(() => { if (!currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
   if (!currentUser) return null;
 
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);

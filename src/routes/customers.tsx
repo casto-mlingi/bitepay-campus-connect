@@ -15,7 +15,7 @@ export const Route = createFileRoute("/customers")({
 
 function Customers() {
   const {
-    currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
+    currentUser, sessionReady, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
     resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf,
   } = useStore();
   const navigate = useNavigate();
@@ -31,8 +31,8 @@ function Customers() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);

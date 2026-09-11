@@ -24,14 +24,14 @@ export const Route = createFileRoute("/inventory")({
 type Tab = "raw" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
-  const { currentUser, customDishRequests } = useStore();
+  const { currentUser, sessionReady, customDishRequests } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("raw");
   const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;
 
   useEffect(() => {
-    if (!currentUser) navigate({ to: "/" });
-    else if (currentUser.role !== "staff") navigate({ to: "/dashboard" });
+    if (sessionReady && !currentUser) navigate({ to: "/" });
+    else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
