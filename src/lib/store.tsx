@@ -819,6 +819,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  // ---- Keep the signed-in user across page refreshes ---------------------
+  const sessionRestored = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("bitepay.session");
+      if (raw) {
+        const s = JSON.parse(raw) as {
+          currentUserId?: string | null;
+          selectedCanteenId?: string | null;
+          superAdminSignedIn?: boolean;
+        };
+        if (s.currentUserId) setCurrentUserId(s.currentUserId);
+        if (s.selectedCanteenId) setSelectedCanteenId(s.selectedCanteenId);
+        if (s.superAdminSignedIn) setSuperAdminSignedIn(true);
+      }
+    } catch { /* ignore corrupt storage */ }
+    sessionRestored.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !sessionRestored.current) return;
+    try {
+      window.localStorage.setItem(
+        "bitepay.session",
+        JSON.stringify({ currentUserId, selectedCanteenId, superAdminSignedIn }),
+      );
+    } catch { /* storage full or blocked */ }
+  }, [currentUserId, selectedCanteenId, superAdminSignedIn]);
+
   // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
   const snapshot = useMemo(
     () => ({
