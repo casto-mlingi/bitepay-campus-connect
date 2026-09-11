@@ -508,6 +508,7 @@ type Treasury = { cash: number; bank: number };
 
 type Ctx = {
   currentUser: Profile | null;
+  sessionReady: boolean;
   profiles: Profile[]; // filtered to current store
   allProfiles: Profile[]; // unfiltered (for admin / login lookup)
   // Unfiltered, cross-tenant data for the super-admin console only
