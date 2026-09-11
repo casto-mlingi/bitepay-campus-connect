@@ -27,7 +27,7 @@ function daysLeft(expires: number) {
 }
 
 function StoresPage() {
-  const { currentUser, myStores, myRoleAt, currentStoreId, switchStore, createStore } = useStore();
+  const { currentUser, sessionReady, myStores, myRoleAt, currentStoreId, switchStore, createStore } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showNew, setShowNew] = useState(false);

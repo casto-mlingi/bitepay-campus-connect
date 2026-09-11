@@ -17,7 +17,7 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function AnalyticsPage() {
-  const { currentUser, orders, batches, wastage, products, logWastage } = useStore();
+  const { currentUser, sessionReady, orders, batches, wastage, products, logWastage } = useStore();
   const navigate = useNavigate();
   const [showWaste, setShowWaste] = useState(false);
   const [wasteBatch, setWasteBatch] = useState("");

@@ -29,7 +29,7 @@ const PERIODS: { key: string; label: string; from: () => number }[] = [
 ];
 
 function PerformancePage() {
-  const { currentUser, profiles, staffPerformance, can, hasStaffRole, runCommissionPayout, commissionPayouts } = useStore();
+  const { currentUser, sessionReady, profiles, staffPerformance, can, hasStaffRole, runCommissionPayout, commissionPayouts } = useStore();
   const [payoutMsg, setPayoutMsg] = useState("");
   const { id, period } = Route.useSearch();
   const navigate = useNavigate();

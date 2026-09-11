@@ -23,7 +23,7 @@ type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal";
 
 function FinancePage() {
   const {
-    currentUser, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
+    currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
     recordPurchase, recordExpense, hasStaffRole,
   } = useStore();
   const navigate = useNavigate();

@@ -25,7 +25,7 @@ const nextLabel: Record<OrderStatus, string | null> = {
 };
 
 function StaffDashboard() {
-  const { currentUser, orders, advanceOrder } = useStore();
+  const { currentUser, sessionReady, orders, advanceOrder } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
 

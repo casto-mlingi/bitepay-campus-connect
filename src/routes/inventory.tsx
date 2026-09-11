@@ -24,7 +24,7 @@ export const Route = createFileRoute("/inventory")({
 type Tab = "raw" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
-  const { currentUser, customDishRequests } = useStore();
+  const { currentUser, sessionReady, customDishRequests } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("raw");
   const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;

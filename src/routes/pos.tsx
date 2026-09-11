@@ -19,7 +19,7 @@ type Mode = "wallet" | "cash";
 type Tender = "cash" | "mobile";
 
 function POS() {
-  const { currentUser, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
+  const { currentUser, sessionReady, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
     waiterTablesEnabled, waiterForTable } = useStore();
   const navigate = useNavigate();

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/shift")({
 });
 
 function ShiftPage() {
-  const { currentUser, activeShift, shifts, orders, openShift, closeShift } = useStore();
+  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift } = useStore();
   const navigate = useNavigate();
   const [float, setFloat] = useState<number>(50000);
   const [countedCash, setCountedCash] = useState<number>(0);

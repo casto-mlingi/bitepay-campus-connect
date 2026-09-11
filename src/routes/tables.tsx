@@ -18,7 +18,7 @@ export const Route = createFileRoute("/tables")({
 });
 
 function TablesPage() {
-  const { currentUser, can, profiles, tableAssignments, assignTable, removeTableAssignment, waiterTablesEnabled } = useStore();
+  const { currentUser, sessionReady, can, profiles, tableAssignments, assignTable, removeTableAssignment, waiterTablesEnabled } = useStore();
   const navigate = useNavigate();
   const [section, setSection] = useState("Main hall");
   const [tableNo, setTableNo] = useState("");

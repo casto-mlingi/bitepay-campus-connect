@@ -11,7 +11,7 @@ export const Route = createFileRoute("/history")({
 });
 
 function HistoryPage() {
-  const { currentUser, transactions, verifyWalletPin } = useStore();
+  const { currentUser, sessionReady, transactions, verifyWalletPin } = useStore();
   const navigate = useNavigate();
   const [unlocked, setUnlocked] = useState(false);
   const [asking, setAsking] = useState(false);

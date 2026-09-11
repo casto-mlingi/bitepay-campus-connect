@@ -11,7 +11,7 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
+  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);

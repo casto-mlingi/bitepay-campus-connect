@@ -20,7 +20,7 @@ export const Route = createFileRoute("/credit")({
 
 function CreditPage() {
   const {
-    currentUser, can, store, payLaterRequests, reviewPayLaterRequest,
+    currentUser, sessionReady, can, store, payLaterRequests, reviewPayLaterRequest,
     profiles, debtorBalance, isOverdue, creditLimitOf,
   } = useStore();
   const navigate = useNavigate();

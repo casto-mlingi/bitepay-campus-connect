@@ -15,7 +15,7 @@ export const Route = createFileRoute("/customers")({
 
 function Customers() {
   const {
-    currentUser, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
+    currentUser, sessionReady, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
     resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf,
   } = useStore();
   const navigate = useNavigate();

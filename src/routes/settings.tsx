@@ -18,7 +18,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { currentUser, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
+  const { currentUser, sessionReady, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showPlans, setShowPlans] = useState(false);

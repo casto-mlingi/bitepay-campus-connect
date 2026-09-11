@@ -17,7 +17,7 @@ export const Route = createFileRoute("/team")({
 });
 
 function TeamPage() {
-  const { currentUser, profiles, can, addStaff, updateStaff, disableStaff, resetStaffCredential } = useStore();
+  const { currentUser, sessionReady, profiles, can, addStaff, updateStaff, disableStaff, resetStaffCredential } = useStore();
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
   const [edit, setEdit] = useState<Profile | null>(null);
