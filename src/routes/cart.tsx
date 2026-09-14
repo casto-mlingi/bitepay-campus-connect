@@ -52,7 +52,7 @@ function CartPage() {
   const addressMissing = delivery === "delivery" && !address.trim();
   const credit = creditLimitOf(currentUser.id);
   const shortfall = Math.max(0, total - currentUser.wallet_balance);
-  const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0;
+  const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0 && !addressMissing;
   const pendingPayLater = payLaterRequests.some((r) => r.status === "pending");
 
   if (placed) {
