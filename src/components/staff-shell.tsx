@@ -3,6 +3,8 @@ import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2,
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
+import { NotificationBell } from "@/components/notification-bell";
+import { useAlertNotifications } from "@/lib/use-alert-notifications";
 
 export type StaffTab = "orders" | "me" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores" | "credit" | "tables";
 
