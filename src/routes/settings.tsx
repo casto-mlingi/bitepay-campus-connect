@@ -39,6 +39,7 @@ function SettingsPage() {
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
+  const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
 
   useEffect(() => {
     if (!store) return;
@@ -47,6 +48,7 @@ function SettingsPage() {
     setServiceRate(store.service_rate ?? 5);
     setCommissionRate(store.commission_rate ?? 0);
     setWaiterTables(store.enable_waiter_tables ?? false);
+    setDeliveryFee(store.delivery_fee ?? 0);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -54,7 +56,7 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables });
+    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -134,6 +136,16 @@ function SettingsPage() {
             </div>
             <Input type="number" min={0} max={100} step="0.01" value={serviceRate}
               onChange={(e) => setServiceRate(Number(e.target.value) || 0)} className="w-24 text-right" />
+          </div>
+        </div>
+        <div className="p-3 rounded-lg border">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-sm">Delivery cost</div>
+              <div className="text-xs text-muted-foreground">Flat fee shown to the customer when they choose <b>Delivery</b> at checkout. Set <b>0</b> for free delivery.</div>
+            </div>
+            <Input type="number" min={0} step="any" value={deliveryFee}
+              onChange={(e) => setDeliveryFee(Number(e.target.value) || 0)} className="w-28 text-right" />
           </div>
         </div>
         <div className="p-3 rounded-lg border">

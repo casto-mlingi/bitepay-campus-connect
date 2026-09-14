@@ -66,6 +66,8 @@ export type Store = {
   commission_rate?: number;
   /** Credit each order to the waiter serving that table/section. */
   enable_waiter_tables?: boolean;
+  /** Flat fee added when a customer chooses delivery. 0 = free delivery. */
+  delivery_fee?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -341,6 +343,10 @@ export type Order = {
   waiter_id?: string;
   waiter_name?: string;
   table_no?: string;
+  /** Where the customer wants the food delivered (delivery orders only). */
+  delivery_address?: string;
+  delivery_note?: string;
+  delivery_fee?: number;
 };
 
 /** A table (inside a section) served by one waiter. */
@@ -582,7 +588,7 @@ type Ctx = {
   addToCart: (p: Product) => void;
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
-  placeOrder: (deliveryType: DeliveryType) => Order | null;
+  placeOrder: (deliveryType: DeliveryType, options?: { address?: string; note?: string }) => Order | null;
   advanceOrder: (id: string) => Ok | Fail;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
   staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
@@ -594,6 +600,8 @@ type Ctx = {
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   verifyWalletPin: (customerId: string, pin: string) => boolean;
   serviceRate: number;
+  /** Flat delivery fee for the active canteen (set by staff in Settings). */
+  deliveryFee: number;
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
@@ -1480,6 +1488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
     },
     serviceRate: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.service_rate ?? 5),
+    deliveryFee: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.delivery_fee ?? 0),
     setWalletPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "Wallet PIN must be 4–6 digits" };
@@ -1568,23 +1577,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart((prev) => qty <= 0 ? prev.filter((c) => c.product.id !== id) : prev.map((c) => c.product.id === id ? { ...c, qty } : c));
     },
     clearCart() { setCart([]); },
-    placeOrder(deliveryType) {
+    placeOrder(deliveryType, options) {
       if (!currentUser || currentUser.role !== "customer") return null;
       const sid = activeStoreId;
       if (!sid) return null;
       const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
-      const rate = stores.find((st) => st.id === sid)?.service_rate ?? 5;
+      const st = stores.find((x) => x.id === sid);
+      const rate = st?.service_rate ?? 5;
       const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
-      const total = subtotal + extra;
+      const fee = deliveryType === "delivery" ? Math.max(0, st?.delivery_fee ?? 0) : 0;
+      const total = subtotal + extra + fee;
       const bal = walletFor(rawUser!, sid);
       const limit = creditLimitOf(currentUser.id, sid);
       if (total <= 0 || bal + limit < total) return null;
+      const address = options?.address?.trim();
+      if (deliveryType === "delivery" && !address) return null;
       const id = nextOrderId();
       const order: Order = {
         id, store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
         items: cart.map((c) => ({ product_id: c.product.id, name: c.product.name, price: c.product.price, qty: c.qty })),
         total_amount: total, status: "new", delivery_type: deliveryType, payment_status: "paid",
         created_at: Date.now(),
+        ...(deliveryType === "delivery"
+          ? { delivery_address: address, delivery_note: options?.note?.trim() || undefined, delivery_fee: fee }
+          : {}),
       };
       setOrders((prev) => [order, ...prev]);
       consumePlates(order.items, sid);

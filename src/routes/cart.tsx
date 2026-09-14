@@ -1,9 +1,26 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Minus, Plus, Trash2, Wallet, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Minus, Plus, Trash2, Wallet, AlertTriangle, CheckCircle2, ArrowLeft, MapPin, Bike } from "lucide-react";
 import { useStore, formatTZS, type DeliveryType } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 import { Button } from "@/components/ui/button";
+
+const ADDRESS_KEY = "bitepay.recent_addresses";
+
+function loadAddresses(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(ADDRESS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((a) => typeof a === "string").slice(0, 5) : [];
+  } catch { return []; }
+}
+
+function rememberAddress(address: string) {
+  try {
+    const next = [address, ...loadAddresses().filter((a) => a !== address)].slice(0, 5);
+    localStorage.setItem(ADDRESS_KEY, JSON.stringify(next));
+  } catch { /* storage blocked */ }
+}
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
@@ -11,21 +28,31 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
+  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, deliveryFee, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);
   const [payLaterMsg, setPayLaterMsg] = useState("");
+  const [recent, setRecent] = useState<string[]>([]);
+  const [address, setAddress] = useState("");
+  const [note, setNote] = useState("");
 
   useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => {
+    const list = loadAddresses();
+    setRecent(list);
+    setAddress((a) => a || list[0] || "");
+  }, []);
   if (!currentUser) return null;
 
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
   const tax = Math.max(0, Math.round(subtotal * (serviceRate / 100)));
-  const total = subtotal + tax;
+  const fee = delivery === "delivery" ? Math.max(0, deliveryFee) : 0;
+  const total = subtotal + tax + fee;
+  const addressMissing = delivery === "delivery" && !address.trim();
   const credit = creditLimitOf(currentUser.id);
   const shortfall = Math.max(0, total - currentUser.wallet_balance);
-  const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0;
+  const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0 && !addressMissing;
   const pendingPayLater = payLaterRequests.some((r) => r.status === "pending");
 
   if (placed) {
@@ -89,6 +116,7 @@ function CartPage() {
             <h3 className="font-bold mb-3">Order Summary</h3>
             <Row label="Subtotal" value={formatTZS(subtotal)} />
             {tax > 0 && <Row label={`Extra charge (${serviceRate}%)`} value={formatTZS(tax)} />}
+            {delivery === "delivery" && <Row label="Delivery cost" value={fee > 0 ? formatTZS(fee) : "Free"} />}
             <div className="my-3 border-t border-dashed" />
             <Row label="Total" value={formatTZS(total)} strong />
           </div>
@@ -108,6 +136,58 @@ function CartPage() {
                 </button>
               ))}
             </div>
+
+            {delivery === "delivery" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2 rounded-xl bg-primary/10 text-primary px-3 py-2 text-sm">
+                  <Bike className="w-4 h-4 shrink-0" />
+                  <span className="font-semibold">
+                    {fee > 0 ? `Delivery cost ${formatTZS(fee)}` : "Delivery is free"}
+                  </span>
+                  <span className="ml-auto text-xs opacity-80">added to your total</span>
+                </div>
+
+                {recent.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1.5">Recent addresses</div>
+                    <div className="flex flex-wrap gap-2">
+                      {recent.map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => setAddress(a)}
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium max-w-full ${
+                            address === a ? "border-primary bg-primary/5 text-primary" : "border-border"
+                          }`}
+                        >
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{a}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground">Delivery address</label>
+                  <textarea
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    rows={2}
+                    placeholder="Block, room / office, landmark…"
+                    className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  <input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Note for the rider (optional)"
+                    className="mt-2 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  {addressMissing && (
+                    <div className="mt-1.5 text-xs text-destructive">Add where the food should be delivered.</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 bg-surface border rounded-3xl p-5">
