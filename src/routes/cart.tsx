@@ -28,18 +28,28 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
+  const { currentUser, sessionReady, cart, setQty, placeOrder, serviceRate, deliveryFee, creditLimitOf, submitPayLaterRequest, payLaterRequests } = useStore();
   const navigate = useNavigate();
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
   const [placed, setPlaced] = useState<string | null>(null);
   const [payLaterMsg, setPayLaterMsg] = useState("");
+  const [recent, setRecent] = useState<string[]>([]);
+  const [address, setAddress] = useState("");
+  const [note, setNote] = useState("");
 
   useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
+  useEffect(() => {
+    const list = loadAddresses();
+    setRecent(list);
+    setAddress((a) => a || list[0] || "");
+  }, []);
   if (!currentUser) return null;
 
   const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
   const tax = Math.max(0, Math.round(subtotal * (serviceRate / 100)));
-  const total = subtotal + tax;
+  const fee = delivery === "delivery" ? Math.max(0, deliveryFee) : 0;
+  const total = subtotal + tax + fee;
+  const addressMissing = delivery === "delivery" && !address.trim();
   const credit = creditLimitOf(currentUser.id);
   const shortfall = Math.max(0, total - currentUser.wallet_balance);
   const canPay = currentUser.wallet_balance + credit >= total && cart.length > 0;
