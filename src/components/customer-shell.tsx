@@ -3,6 +3,8 @@ import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store 
 import { useStore } from "@/lib/store";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
+import { NotificationBell } from "@/components/notification-bell";
+import { useAlertNotifications } from "@/lib/use-alert-notifications";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
   const { currentUser, logout, availableCanteens, canteenGroups, activeOrgId, selectedCanteenId, setSelectedCanteen, store } = useStore();
