@@ -3,6 +3,8 @@ import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2,
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
+import { NotificationBell } from "@/components/notification-bell";
+import { useAlertNotifications } from "@/lib/use-alert-notifications";
 
 export type StaffTab = "orders" | "me" | "pos" | "inventory" | "analytics" | "finance" | "customers" | "shift" | "team" | "settings" | "stores" | "credit" | "tables";
 
@@ -12,6 +14,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
+  useAlertNotifications();
 
   useEffect(() => {
     const onChange = () => setIsFull(!!document.fullscreenElement);
@@ -85,6 +88,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               </Link>
             )}
             <SyncPill className="hidden sm:inline-flex" />
+            <NotificationBell />
             <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full ${isOnline ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
               {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
               {isOnline ? "Online" : `Offline · ${pendingSales.length} queued`}
