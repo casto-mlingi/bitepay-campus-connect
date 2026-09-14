@@ -588,7 +588,7 @@ type Ctx = {
   addToCart: (p: Product) => void;
   setQty: (id: string, qty: number) => void;
   clearCart: () => void;
-  placeOrder: (deliveryType: DeliveryType) => Order | null;
+  placeOrder: (deliveryType: DeliveryType, options?: { address?: string; note?: string }) => Order | null;
   advanceOrder: (id: string) => Ok | Fail;
   topUp: (customerId: string, amount: number, description?: string, tender?: "cash" | "mobile", reference?: string) => void;
   staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
@@ -600,6 +600,8 @@ type Ctx = {
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   verifyWalletPin: (customerId: string, pin: string) => boolean;
   serviceRate: number;
+  /** Flat delivery fee for the active canteen (set by staff in Settings). */
+  deliveryFee: number;
   posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
@@ -1486,6 +1488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
     },
     serviceRate: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.service_rate ?? 5),
+    deliveryFee: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.delivery_fee ?? 0),
     setWalletPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "Wallet PIN must be 4–6 digits" };
