@@ -14,6 +14,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
+  useAlertNotifications();
 
   useEffect(() => {
     const onChange = () => setIsFull(!!document.fullscreenElement);
