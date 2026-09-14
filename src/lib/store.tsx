@@ -1577,23 +1577,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart((prev) => qty <= 0 ? prev.filter((c) => c.product.id !== id) : prev.map((c) => c.product.id === id ? { ...c, qty } : c));
     },
     clearCart() { setCart([]); },
-    placeOrder(deliveryType) {
+    placeOrder(deliveryType, options) {
       if (!currentUser || currentUser.role !== "customer") return null;
       const sid = activeStoreId;
       if (!sid) return null;
       const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
-      const rate = stores.find((st) => st.id === sid)?.service_rate ?? 5;
+      const st = stores.find((x) => x.id === sid);
+      const rate = st?.service_rate ?? 5;
       const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
-      const total = subtotal + extra;
+      const fee = deliveryType === "delivery" ? Math.max(0, st?.delivery_fee ?? 0) : 0;
+      const total = subtotal + extra + fee;
       const bal = walletFor(rawUser!, sid);
       const limit = creditLimitOf(currentUser.id, sid);
       if (total <= 0 || bal + limit < total) return null;
+      const address = options?.address?.trim();
+      if (deliveryType === "delivery" && !address) return null;
       const id = nextOrderId();
       const order: Order = {
         id, store_id: sid, customer_id: currentUser.id, customer_name: currentUser.full_name,
         items: cart.map((c) => ({ product_id: c.product.id, name: c.product.name, price: c.product.price, qty: c.qty })),
         total_amount: total, status: "new", delivery_type: deliveryType, payment_status: "paid",
         created_at: Date.now(),
+        ...(deliveryType === "delivery"
+          ? { delivery_address: address, delivery_note: options?.note?.trim() || undefined, delivery_fee: fee }
+          : {}),
       };
       setOrders((prev) => [order, ...prev]);
       consumePlates(order.items, sid);
