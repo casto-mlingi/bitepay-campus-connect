@@ -116,6 +116,7 @@ function CartPage() {
             <h3 className="font-bold mb-3">Order Summary</h3>
             <Row label="Subtotal" value={formatTZS(subtotal)} />
             {tax > 0 && <Row label={`Extra charge (${serviceRate}%)`} value={formatTZS(tax)} />}
+            {delivery === "delivery" && <Row label="Delivery cost" value={fee > 0 ? formatTZS(fee) : "Free"} />}
             <div className="my-3 border-t border-dashed" />
             <Row label="Total" value={formatTZS(total)} strong />
           </div>
@@ -135,6 +136,58 @@ function CartPage() {
                 </button>
               ))}
             </div>
+
+            {delivery === "delivery" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2 rounded-xl bg-primary/10 text-primary px-3 py-2 text-sm">
+                  <Bike className="w-4 h-4 shrink-0" />
+                  <span className="font-semibold">
+                    {fee > 0 ? `Delivery cost ${formatTZS(fee)}` : "Delivery is free"}
+                  </span>
+                  <span className="ml-auto text-xs opacity-80">added to your total</span>
+                </div>
+
+                {recent.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1.5">Recent addresses</div>
+                    <div className="flex flex-wrap gap-2">
+                      {recent.map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => setAddress(a)}
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium max-w-full ${
+                            address === a ? "border-primary bg-primary/5 text-primary" : "border-border"
+                          }`}
+                        >
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{a}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground">Delivery address</label>
+                  <textarea
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    rows={2}
+                    placeholder="Block, room / office, landmark…"
+                    className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  <input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Note for the rider (optional)"
+                    className="mt-2 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  {addressMissing && (
+                    <div className="mt-1.5 text-xs text-destructive">Add where the food should be delivered.</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 bg-surface border rounded-3xl p-5">
