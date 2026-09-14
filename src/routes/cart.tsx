@@ -1,9 +1,26 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Minus, Plus, Trash2, Wallet, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Minus, Plus, Trash2, Wallet, AlertTriangle, CheckCircle2, ArrowLeft, MapPin, Bike } from "lucide-react";
 import { useStore, formatTZS, type DeliveryType } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 import { Button } from "@/components/ui/button";
+
+const ADDRESS_KEY = "bitepay.recent_addresses";
+
+function loadAddresses(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(ADDRESS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((a) => typeof a === "string").slice(0, 5) : [];
+  } catch { return []; }
+}
+
+function rememberAddress(address: string) {
+  try {
+    const next = [address, ...loadAddresses().filter((a) => a !== address)].slice(0, 5);
+    localStorage.setItem(ADDRESS_KEY, JSON.stringify(next));
+  } catch { /* storage blocked */ }
+}
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
