@@ -66,6 +66,8 @@ export type Store = {
   commission_rate?: number;
   /** Credit each order to the waiter serving that table/section. */
   enable_waiter_tables?: boolean;
+  /** Flat fee added when a customer chooses delivery. 0 = free delivery. */
+  delivery_fee?: number;
   enable_mobile_tender: boolean;
   created_at: number;
   subscription: Subscription;
@@ -341,6 +343,10 @@ export type Order = {
   waiter_id?: string;
   waiter_name?: string;
   table_no?: string;
+  /** Where the customer wants the food delivered (delivery orders only). */
+  delivery_address?: string;
+  delivery_note?: string;
+  delivery_fee?: number;
 };
 
 /** A table (inside a section) served by one waiter. */
