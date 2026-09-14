@@ -10,6 +10,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
   const { currentUser, logout, availableCanteens, canteenGroups, activeOrgId, selectedCanteenId, setSelectedCanteen, store } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  useAlertNotifications();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,6 +87,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
               <span className="font-medium">{currentUser?.full_name}</span>
             </div>
             <SyncPill />
+            <NotificationBell />
             <button onClick={handleLogout} aria-label="Sign out" className="p-2 rounded-lg hover:bg-muted">
               <LogOut className="w-4 h-4" />
             </button>
