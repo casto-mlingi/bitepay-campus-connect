@@ -1391,7 +1391,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       wastage, shifts, customDishRequests, notifications, treasuries,
     },
     orders: scopedOrders, transactions: scopedTx, cart,
-    rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
+    rawMaterials: scopedRaw, batches: scopedBatches,
+    cookedCommodityBatches: currentStoreId ? cookedCommodityBatches.filter((b) => b.store_id === currentStoreId) : [],
+    menuPortionMappings: currentStoreId ? menuPortionMappings.filter((m) => m.store_id === currentStoreId) : [],
+    cookedCommodityUsages: currentStoreId ? cookedCommodityUsages.filter((u) => u.store_id === currentStoreId) : [],
+    wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
@@ -1831,6 +1835,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
       setBatches((prev) => [batch, ...prev]);
       return batch;
+    },
+    createCookedCommodityBatch({ raw_material_id, name, unit, quantity }) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can create cooked batches" };
+      const cleanName = name.trim();
+      if (!cleanName || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
+      if (raw_material_id) {
+        const raw = rawMaterials.find((r) => r.id === raw_material_id && r.store_id === currentStoreId);
+        if (!raw) return { ok: false, reason: "Raw material not found" };
+        if (raw.unit !== unit) return { ok: false, reason: `Use ${raw.unit} for ${raw.name}` };
+        if (raw.stock < quantity) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
+        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - quantity } : r));
+      }
+      const now = Date.now();
+      const batch: CookedCommodityBatch = {
+        id: `CB-${now}`, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
+        initial_quantity: quantity, remaining_quantity: quantity, created_at: now, active: true,
+      };
+      setCookedCommodityBatches((prev) => [batch, ...prev.map((b) =>
+        b.store_id === currentStoreId && b.name.toLowerCase() === cleanName.toLowerCase() && b.unit === unit
+          ? { ...b, active: false }
+          : b)]);
+      return { ok: true, value: batch };
+    },
+    setProductPortionMappings(product_id, mappings) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can edit portions" };
+      if (!products.some((p) => p.id === product_id && p.store_id === currentStoreId)) return { ok: false, reason: "Dish not found" };
+      const valid = mappings.filter((m) => m.commodity_name.trim() && m.quantity > 0);
+      setMenuPortionMappings((prev) => [
+        ...prev.filter((m) => !(m.store_id === currentStoreId && m.product_id === product_id)),
+        ...valid.map((m) => ({ ...m, id: uid("mp"), store_id: currentStoreId, product_id, commodity_name: m.commodity_name.trim() })),
+      ]);
+      return { ok: true };
+    },
+    closeCookedCommodityBatch(batch_id) {
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
+      if (!cookedCommodityBatches.some((b) => b.id === batch_id && b.store_id === currentStoreId)) return { ok: false, reason: "Cooked batch not found" };
+      setCookedCommodityBatches((prev) => prev.map((b) => b.id === batch_id ? { ...b, active: false } : b));
+      return { ok: true };
     },
     updateBatch(batch_id, patch) {
       if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can edit batches" };
