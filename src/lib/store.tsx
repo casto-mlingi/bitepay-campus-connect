@@ -1684,7 +1684,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : {}),
       };
       setOrders((prev) => [order, ...prev]);
-      consumePlates(order.items, sid);
+      consumePlates(order.items, sid, id);
       setWallet(currentUser.id, sid, -total);
       setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
