@@ -1174,8 +1174,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 
 
-  /** Deduct sold plates from cooking batches (FIFO by creation date). */
-  const consumePlates = useCallback((items: OrderItem[], sid: string) => {
+  /** Deduct sold plates and shared cooked portions, FIFO by creation date. */
+  const consumePlates = useCallback((items: OrderItem[], sid: string, orderId: string) => {
     setBatches((prev) => {
       const taken: Record<string, number> = {};
       for (const it of items) {
@@ -1196,7 +1196,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (Object.keys(taken).length === 0) return prev;
       return prev.map((b, idx) => taken[idx] ? { ...b, plates_remaining: Math.max(0, b.plates_remaining - taken[idx]) } : b);
     });
-  }, []);
+
+    const usage: CookedCommodityUsage[] = [];
+    const available = cookedCommodityBatches
+      .filter((b) => b.store_id === sid && b.active)
+      .sort((a, b) => a.created_at - b.created_at)
+      .map((b) => ({ ...b }));
+    for (const item of items) {
+      const mappings = menuPortionMappings.filter((m) => m.store_id === sid && m.product_id === item.product_id);
+      for (const mapping of mappings) {
+        let needed = mapping.quantity * item.qty;
+        for (const batch of available) {
+          if (needed <= 0) break;
+          if (batch.name.trim().toLowerCase() !== mapping.commodity_name.trim().toLowerCase() || batch.unit !== mapping.unit) continue;
+          const take = Math.min(batch.remaining_quantity, needed);
+          if (take <= 0) continue;
+          batch.remaining_quantity -= take;
+          needed -= take;
+          usage.push({
+            id: uid("cu"), store_id: sid, batch_id: batch.id, order_id: orderId,
+            product_id: item.product_id, quantity: take, created_at: Date.now(),
+          });
+        }
+      }
+    }
+    if (usage.length) {
+      // Usage rows are immutable and merge safely across tills; the cached balance is for quick display.
+      setCookedCommodityUsages((prev) => [...usage, ...prev]);
+      const usedByBatch = new Map<string, number>();
+      for (const row of usage) usedByBatch.set(row.batch_id, (usedByBatch.get(row.batch_id) ?? 0) + row.quantity);
+      setCookedCommodityBatches((prev) => prev.map((b) => usedByBatch.has(b.id)
+        ? { ...b, remaining_quantity: Math.max(0, b.remaining_quantity - (usedByBatch.get(b.id) ?? 0)) }
+        : b));
+    }
+  }, [cookedCommodityBatches, menuPortionMappings]);
 
   // ---- Pay-later / debtor helpers ---------------------------------------
   const scopedPayLater = useMemo(
@@ -1308,7 +1341,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
-    consumePlates(items, currentStoreId);
+    consumePlates(items, currentStoreId, id);
     setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
@@ -1345,7 +1378,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
-    consumePlates(items, currentStoreId);
+    consumePlates(items, currentStoreId, id);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
