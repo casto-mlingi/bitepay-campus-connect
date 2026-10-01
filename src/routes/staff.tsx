@@ -114,6 +114,15 @@ function OrderCard({ order, nextLabel, onAdvance }: { order: Order; nextLabel: s
         </div>
         <div className="font-bold text-sm">{formatTZS(order.total_amount)}</div>
       </div>
+      {order.delivery_type === "delivery" && order.delivery_address && (
+        <div className="mt-2 rounded-lg bg-primary/10 p-2.5 text-xs">
+          <div className="flex items-start gap-1.5 font-semibold text-primary">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{order.delivery_address}</span>
+          </div>
+          {order.delivery_note && <div className="mt-1 pl-5 text-muted-foreground">{order.delivery_note}</div>}
+        </div>
+      )}
       {nextLabel && (
         <button
           onClick={onAdvance}
