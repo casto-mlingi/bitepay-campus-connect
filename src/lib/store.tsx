@@ -413,6 +413,31 @@ export type CookingBatch = {
   created_at: number;
 };
 
+/** A bulk-cooked shared item (for example one 10 kg pot of beans). */
+export type CookedCommodityBatch = {
+  id: string;
+  store_id: string;
+  raw_material_id?: string;
+  name: string;
+  unit: "kg" | "liters" | "pcs";
+  initial_quantity: number;
+  remaining_quantity: number;
+  created_at: number;
+  active: boolean;
+};
+
+export type StandardPortion = "full" | "half" | "side" | "custom";
+/** Quantity drawn from a shared cooked batch for one sold menu item. */
+export type MenuPortionMapping = {
+  id: string;
+  store_id: string;
+  product_id: string;
+  commodity_name: string;
+  portion: StandardPortion;
+  quantity: number;
+  unit: "kg" | "liters" | "pcs";
+};
+
 export type WastageLog = {
   id: string;
   store_id: string;
@@ -537,6 +562,8 @@ type Ctx = {
   cart: CartItem[];
   rawMaterials: RawMaterial[];
   batches: CookingBatch[];
+  cookedCommodityBatches: CookedCommodityBatch[];
+  menuPortionMappings: MenuPortionMapping[];
   wastage: WastageLog[];
   purchases: Purchase[];
   expenses: Expense[];
@@ -615,6 +642,9 @@ type Ctx = {
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number; ingredients?: BatchIngredient[] }) => Ok | Fail;
   deleteBatch: (batch_id: string) => Ok | Fail;
+  createCookedCommodityBatch: (input: { raw_material_id?: string; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
+  setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
+  closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
