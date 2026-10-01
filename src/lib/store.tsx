@@ -438,6 +438,17 @@ export type MenuPortionMapping = {
   unit: "kg" | "liters" | "pcs";
 };
 
+/** Immutable sale draw-down record; merging devices cannot overwrite each other's usage. */
+export type CookedCommodityUsage = {
+  id: string;
+  store_id: string;
+  batch_id: string;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  created_at: number;
+};
+
 export type WastageLog = {
   id: string;
   store_id: string;
@@ -564,6 +575,7 @@ type Ctx = {
   batches: CookingBatch[];
   cookedCommodityBatches: CookedCommodityBatch[];
   menuPortionMappings: MenuPortionMapping[];
+  cookedCommodityUsages: CookedCommodityUsage[];
   wastage: WastageLog[];
   purchases: Purchase[];
   expenses: Expense[];
