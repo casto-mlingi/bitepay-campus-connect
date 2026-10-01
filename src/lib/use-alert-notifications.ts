@@ -33,7 +33,7 @@ export function useAlertNotifications() {
         events.push({
           id: `o:${o.id}`,
           title: "New order received",
-          body: `${o.customer_name} · ${o.items.reduce((s, i) => s + i.qty, 0)} item(s) · ${formatTZS(o.total_amount)}`,
+          body: `${o.customer_name} · ${o.items.map((i) => `${i.qty}× ${i.name}`).join(", ")} · ${o.delivery_type === "delivery" ? "Delivery" : "Pickup"}`,
           tag: `order-${o.id}`,
         });
       }

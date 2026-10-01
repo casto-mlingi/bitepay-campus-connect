@@ -413,6 +413,42 @@ export type CookingBatch = {
   created_at: number;
 };
 
+/** A bulk-cooked shared item (for example one 10 kg pot of beans). */
+export type CookedCommodityBatch = {
+  id: string;
+  store_id: string;
+  raw_material_id?: string;
+  name: string;
+  unit: "kg" | "liters" | "pcs";
+  initial_quantity: number;
+  remaining_quantity: number;
+  created_at: number;
+  active: boolean;
+};
+
+export type StandardPortion = "full" | "half" | "side" | "custom";
+/** Quantity drawn from a shared cooked batch for one sold menu item. */
+export type MenuPortionMapping = {
+  id: string;
+  store_id: string;
+  product_id: string;
+  commodity_name: string;
+  portion: StandardPortion;
+  quantity: number;
+  unit: "kg" | "liters" | "pcs";
+};
+
+/** Immutable sale draw-down record; merging devices cannot overwrite each other's usage. */
+export type CookedCommodityUsage = {
+  id: string;
+  store_id: string;
+  batch_id: string;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  created_at: number;
+};
+
 export type WastageLog = {
   id: string;
   store_id: string;
@@ -537,6 +573,9 @@ type Ctx = {
   cart: CartItem[];
   rawMaterials: RawMaterial[];
   batches: CookingBatch[];
+  cookedCommodityBatches: CookedCommodityBatch[];
+  menuPortionMappings: MenuPortionMapping[];
+  cookedCommodityUsages: CookedCommodityUsage[];
   wastage: WastageLog[];
   purchases: Purchase[];
   expenses: Expense[];
@@ -615,6 +654,9 @@ type Ctx = {
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number; ingredients?: BatchIngredient[] }) => Ok | Fail;
   deleteBatch: (batch_id: string) => Ok | Fail;
+  createCookedCommodityBatch: (input: { raw_material_id?: string; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
+  setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
+  closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
@@ -795,6 +837,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
+  const [cookedCommodityBatches, setCookedCommodityBatches] = useState<CookedCommodityBatch[]>([]);
+  const [menuPortionMappings, setMenuPortionMappings] = useState<MenuPortionMapping[]>([]);
+  const [cookedCommodityUsages, setCookedCommodityUsages] = useState<CookedCommodityUsage[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -868,13 +913,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
   const snapshot = useMemo(
     () => ({
-      profiles, products, orders, transactions, rawMaterials, batches, wastage,
+      profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
       tableAssignments, commissionPayouts,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
-    [profiles, products, orders, transactions, rawMaterials, batches, wastage,
+    [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
      tableAssignments, commissionPayouts,
@@ -890,6 +935,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.transactions) setTransactions(s.transactions);
     if (s.rawMaterials) setRawMaterials(s.rawMaterials);
     if (s.batches) setBatches(s.batches);
+    if (s.cookedCommodityBatches) setCookedCommodityBatches(s.cookedCommodityBatches);
+    if (s.menuPortionMappings) setMenuPortionMappings(s.menuPortionMappings);
+    if (s.cookedCommodityUsages) setCookedCommodityUsages(s.cookedCommodityUsages);
     if (s.wastage) setWastage(s.wastage);
     if (s.purchases) setPurchases(s.purchases);
     if (s.expenses) setExpenses(s.expenses);
@@ -1126,8 +1174,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 
 
-  /** Deduct sold plates from cooking batches (FIFO by creation date). */
-  const consumePlates = useCallback((items: OrderItem[], sid: string) => {
+  /** Deduct sold plates and shared cooked portions, FIFO by creation date. */
+  const consumePlates = useCallback((items: OrderItem[], sid: string, orderId: string) => {
     setBatches((prev) => {
       const taken: Record<string, number> = {};
       for (const it of items) {
@@ -1148,7 +1196,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (Object.keys(taken).length === 0) return prev;
       return prev.map((b, idx) => taken[idx] ? { ...b, plates_remaining: Math.max(0, b.plates_remaining - taken[idx]) } : b);
     });
-  }, []);
+
+    const usage: CookedCommodityUsage[] = [];
+    const available = cookedCommodityBatches
+      .filter((b) => b.store_id === sid && b.active)
+      .sort((a, b) => a.created_at - b.created_at)
+      .map((b) => ({ ...b }));
+    for (const item of items) {
+      const mappings = menuPortionMappings.filter((m) => m.store_id === sid && m.product_id === item.product_id);
+      for (const mapping of mappings) {
+        let needed = mapping.quantity * item.qty;
+        for (const batch of available) {
+          if (needed <= 0) break;
+          if (batch.name.trim().toLowerCase() !== mapping.commodity_name.trim().toLowerCase() || batch.unit !== mapping.unit) continue;
+          const take = Math.min(batch.remaining_quantity, needed);
+          if (take <= 0) continue;
+          batch.remaining_quantity -= take;
+          needed -= take;
+          usage.push({
+            id: uid("cu"), store_id: sid, batch_id: batch.id, order_id: orderId,
+            product_id: item.product_id, quantity: take, created_at: Date.now(),
+          });
+        }
+      }
+    }
+    if (usage.length) {
+      // Usage rows are immutable and merge safely across tills; the cached balance is for quick display.
+      setCookedCommodityUsages((prev) => [...usage, ...prev]);
+      const usedByBatch = new Map<string, number>();
+      for (const row of usage) usedByBatch.set(row.batch_id, (usedByBatch.get(row.batch_id) ?? 0) + row.quantity);
+      setCookedCommodityBatches((prev) => prev.map((b) => usedByBatch.has(b.id)
+        ? { ...b, remaining_quantity: Math.max(0, b.remaining_quantity - (usedByBatch.get(b.id) ?? 0)) }
+        : b));
+    }
+  }, [cookedCommodityBatches, menuPortionMappings]);
 
   // ---- Pay-later / debtor helpers ---------------------------------------
   const scopedPayLater = useMemo(
@@ -1260,7 +1341,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
-    consumePlates(items, currentStoreId);
+    consumePlates(items, currentStoreId, id);
     setWallet(cust.id, currentStoreId, -walletPart + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
@@ -1297,7 +1378,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       waiter_name: attributionFor(table_no)?.waiter_name,
     };
     setOrders((prev) => [order, ...prev]);
-    consumePlates(items, currentStoreId);
+    consumePlates(items, currentStoreId, id);
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
@@ -1310,7 +1391,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       wastage, shifts, customDishRequests, notifications, treasuries,
     },
     orders: scopedOrders, transactions: scopedTx, cart,
-    rawMaterials: scopedRaw, batches: scopedBatches, wastage: scopedWaste,
+    rawMaterials: scopedRaw, batches: scopedBatches,
+    cookedCommodityBatches: currentStoreId ? cookedCommodityBatches.filter((b) => b.store_id === currentStoreId) : [],
+    menuPortionMappings: currentStoreId ? menuPortionMappings.filter((m) => m.store_id === currentStoreId) : [],
+    cookedCommodityUsages: currentStoreId ? cookedCommodityUsages.filter((u) => u.store_id === currentStoreId) : [],
+    wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
@@ -1603,7 +1688,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : {}),
       };
       setOrders((prev) => [order, ...prev]);
-      consumePlates(order.items, sid);
+      consumePlates(order.items, sid, id);
       setWallet(currentUser.id, sid, -total);
       setTransactions((prev) => [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, order_id: id, type: "deduction", amount: total, description: `Order ${id}`, created_at: Date.now() }, ...prev]);
       setCart([]);
@@ -1750,6 +1835,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
       setBatches((prev) => [batch, ...prev]);
       return batch;
+    },
+    createCookedCommodityBatch({ raw_material_id, name, unit, quantity }) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can create cooked batches" };
+      const cleanName = name.trim();
+      if (!cleanName || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
+      if (raw_material_id) {
+        const raw = rawMaterials.find((r) => r.id === raw_material_id && r.store_id === currentStoreId);
+        if (!raw) return { ok: false, reason: "Raw material not found" };
+        if (raw.unit !== unit) return { ok: false, reason: `Use ${raw.unit} for ${raw.name}` };
+        if (raw.stock < quantity) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
+        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - quantity } : r));
+      }
+      const now = Date.now();
+      const batch: CookedCommodityBatch = {
+        id: `CB-${now}`, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
+        initial_quantity: quantity, remaining_quantity: quantity, created_at: now, active: true,
+      };
+      setCookedCommodityBatches((prev) => [batch, ...prev.map((b) =>
+        b.store_id === currentStoreId && b.name.toLowerCase() === cleanName.toLowerCase() && b.unit === unit
+          ? { ...b, active: false }
+          : b)]);
+      return { ok: true, value: batch };
+    },
+    setProductPortionMappings(product_id, mappings) {
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can edit portions" };
+      if (!products.some((p) => p.id === product_id && p.store_id === currentStoreId)) return { ok: false, reason: "Dish not found" };
+      const valid = mappings.filter((m) => m.commodity_name.trim() && m.quantity > 0);
+      setMenuPortionMappings((prev) => [
+        ...prev.filter((m) => !(m.store_id === currentStoreId && m.product_id === product_id)),
+        ...valid.map((m) => ({ ...m, id: uid("mp"), store_id: currentStoreId, product_id, commodity_name: m.commodity_name.trim() })),
+      ]);
+      return { ok: true };
+    },
+    closeCookedCommodityBatch(batch_id) {
+      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
+      if (!cookedCommodityBatches.some((b) => b.id === batch_id && b.store_id === currentStoreId)) return { ok: false, reason: "Cooked batch not found" };
+      setCookedCommodityBatches((prev) => prev.map((b) => b.id === batch_id ? { ...b, active: false } : b));
+      return { ok: true };
     },
     updateBatch(batch_id, patch) {
       if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can edit batches" };

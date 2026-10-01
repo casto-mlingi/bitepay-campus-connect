@@ -229,7 +229,17 @@ function CartPage() {
 
             <Button
               disabled={!canPay}
-              onClick={() => { const o = placeOrder(delivery); if (o) setPlaced(o.id); }}
+              onClick={() => {
+                const cleanAddress = address.trim();
+                const o = placeOrder(delivery, { address: cleanAddress, note });
+                if (o) {
+                  if (delivery === "delivery" && cleanAddress) {
+                    rememberAddress(cleanAddress);
+                    setRecent(loadAddresses());
+                  }
+                  setPlaced(o.id);
+                }
+              }}
               className="w-full mt-4 h-12 rounded-xl text-base font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50"
             >
               Place Order

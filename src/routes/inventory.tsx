@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil, Eye, History, Check, X, Ban } from "lucide-react";
-import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest } from "@/lib/store";
+import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest, type StandardPortion } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 import { ListFilter, useListFilter } from "@/components/list-filter";
@@ -296,7 +296,11 @@ function MenuPanel() {
 
 /* ────────────── Cooking Batches ────────────── */
 function BatchesPanel() {
-  const { rawMaterials, products, batches, createBatch, updateBatch, deleteBatch } = useStore();
+  const {
+    rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings,
+    createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
+    setProductPortionMappings, closeCookedCommodityBatch,
+  } = useStore();
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
@@ -305,6 +309,9 @@ function BatchesPanel() {
   const [delId, setDelId] = useState<string | null>(null);
   const [editErr, setEditErr] = useState("");
   const [form, setForm] = useState<{ plates: number; remaining: number; labor: number; ings: BatchIngredient[] }>({ plates: 0, remaining: 0, labor: 0, ings: [] });
+  const [commodity, setCommodity] = useState({ rawId: "", name: "", unit: "kg" as "kg" | "liters" | "pcs", quantity: 10 });
+  const [portion, setPortion] = useState({ productId: products[0]?.id ?? "", commodityName: "", portion: "full" as StandardPortion, quantity: 0.25, unit: "kg" as "kg" | "liters" | "pcs" });
+  const [commodityMessage, setCommodityMessage] = useState("");
 
   useEffect(() => {
     if (!productId && products[0]) setProductId(products[0].id);
@@ -338,6 +345,80 @@ function BatchesPanel() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
+      <section className="lg:col-span-5 border bg-surface rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg">Shared Cooked Stock</h2>
+          <p className="text-sm text-muted-foreground">Track one cooked item across several dishes using standard full, half, or side portions.</p>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-4">
+          <form className="border rounded-lg p-4 space-y-3" onSubmit={(e) => {
+            e.preventDefault();
+            const result = createCookedCommodityBatch({ raw_material_id: commodity.rawId || undefined, name: commodity.name, unit: commodity.unit, quantity: commodity.quantity });
+            setCommodityMessage(result.ok ? `${commodity.name} batch is ready` : result.reason);
+            if (result.ok) setCommodity({ ...commodity, name: "" });
+          }}>
+            <div className="font-semibold">Start cooked batch</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <input required placeholder="Cooked item, e.g. Beans" value={commodity.name} onChange={(e) => setCommodity({ ...commodity, name: e.target.value })} className="h-10 rounded-lg border bg-background px-3 text-sm" />
+              <select value={commodity.rawId} onChange={(e) => {
+                const raw = rawMaterials.find((r) => r.id === e.target.value);
+                setCommodity({ ...commodity, rawId: e.target.value, unit: raw?.unit ?? commodity.unit });
+              }} className="h-10 rounded-lg border bg-background px-3 text-sm">
+                <option value="">No raw-stock deduction</option>
+                {rawMaterials.filter((r) => r.unit === "kg" || r.unit === "liters" || r.unit === "pcs").map((r) => <option key={r.id} value={r.id}>{r.name} · {r.stock.toFixed(3)} {r.unit}</option>)}
+              </select>
+              <input type="number" min={0.00001} step="any" inputMode="decimal" value={commodity.quantity} onChange={(e) => setCommodity({ ...commodity, quantity: Number(e.target.value) })} className="h-10 rounded-lg border bg-background px-3 text-sm" />
+              <select value={commodity.unit} onChange={(e) => setCommodity({ ...commodity, unit: e.target.value as typeof commodity.unit })} className="h-10 rounded-lg border bg-background px-3 text-sm" disabled={Boolean(commodity.rawId)}>
+                <option value="kg">kg</option><option value="liters">liters</option><option value="pcs">pieces</option>
+              </select>
+            </div>
+            <button className="h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Start batch</button>
+          </form>
+
+          <form className="border rounded-lg p-4 space-y-3" onSubmit={(e) => {
+            e.preventDefault();
+            const existing = menuPortionMappings.filter((m) => m.product_id === portion.productId && m.commodity_name.toLowerCase() !== portion.commodityName.trim().toLowerCase());
+            const result = setProductPortionMappings(portion.productId, [...existing.map(({ commodity_name, portion: size, quantity, unit }) => ({ commodity_name, portion: size, quantity, unit })), { commodity_name: portion.commodityName, portion: portion.portion, quantity: portion.quantity, unit: portion.unit }]);
+            setCommodityMessage(result.ok ? "Dish portion saved" : result.reason);
+          }}>
+            <div className="font-semibold">Dish portion recipe</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <select value={portion.productId} onChange={(e) => setPortion({ ...portion, productId: e.target.value })} className="h-10 rounded-lg border bg-background px-3 text-sm">
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <select required value={portion.commodityName} onChange={(e) => {
+                const batch = cookedCommodityBatches.find((b) => b.name === e.target.value);
+                setPortion({ ...portion, commodityName: e.target.value, unit: batch?.unit ?? portion.unit });
+              }} className="h-10 rounded-lg border bg-background px-3 text-sm">
+                <option value="">Choose cooked item</option>
+                {[...new Set(cookedCommodityBatches.map((b) => b.name))].map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <select value={portion.portion} onChange={(e) => setPortion({ ...portion, portion: e.target.value as StandardPortion })} className="h-10 rounded-lg border bg-background px-3 text-sm">
+                <option value="full">Full</option><option value="half">Half</option><option value="side">Side</option><option value="custom">Custom</option>
+              </select>
+              <div className="flex items-center gap-2">
+                <input type="number" min={0.00001} step="any" inputMode="decimal" value={portion.quantity} onChange={(e) => setPortion({ ...portion, quantity: Number(e.target.value) })} className="h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm" />
+                <span className="text-sm text-muted-foreground">{portion.unit} / plate</span>
+              </div>
+            </div>
+            <button className="h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Save portion</button>
+          </form>
+        </div>
+        {commodityMessage && <div className="text-sm rounded-lg bg-muted px-3 py-2">{commodityMessage}</div>}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {cookedCommodityBatches.map((batch) => {
+            const sold = Math.max(0, batch.initial_quantity - batch.remaining_quantity);
+            const percent = batch.initial_quantity > 0 ? Math.min(100, (sold / batch.initial_quantity) * 100) : 0;
+            return <div key={batch.id} className="border rounded-lg p-3">
+              <div className="flex justify-between gap-3"><span className="font-semibold">{batch.name}</span><span className="text-xs text-muted-foreground">{batch.active ? "Active" : "Closed"}</span></div>
+              <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${percent}%` }} /></div>
+              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold = <strong className="text-foreground">{batch.remaining_quantity.toFixed(3)} {batch.unit}</strong></div>
+              {batch.active && <button type="button" onClick={() => closeCookedCommodityBatch(batch.id)} className="mt-3 text-xs font-semibold text-destructive">Close batch</button>}
+            </div>;
+          })}
+          {cookedCommodityBatches.length === 0 && <div className="text-sm text-muted-foreground">No shared cooked batches yet.</div>}
+        </div>
+      </section>
       <form onSubmit={submit} className="lg:col-span-3 bg-surface border rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <ChefHat className="w-5 h-5 text-primary" />
