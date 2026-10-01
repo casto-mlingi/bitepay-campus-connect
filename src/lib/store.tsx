@@ -837,6 +837,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [batches, setBatches] = useState<CookingBatch[]>([]);
+  const [cookedCommodityBatches, setCookedCommodityBatches] = useState<CookedCommodityBatch[]>([]);
+  const [menuPortionMappings, setMenuPortionMappings] = useState<MenuPortionMapping[]>([]);
+  const [cookedCommodityUsages, setCookedCommodityUsages] = useState<CookedCommodityUsage[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -910,13 +913,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
   const snapshot = useMemo(
     () => ({
-      profiles, products, orders, transactions, rawMaterials, batches, wastage,
+      profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
       tableAssignments, commissionPayouts,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
-    [profiles, products, orders, transactions, rawMaterials, batches, wastage,
+    [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
      tableAssignments, commissionPayouts,
@@ -932,6 +935,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.transactions) setTransactions(s.transactions);
     if (s.rawMaterials) setRawMaterials(s.rawMaterials);
     if (s.batches) setBatches(s.batches);
+    if (s.cookedCommodityBatches) setCookedCommodityBatches(s.cookedCommodityBatches);
+    if (s.menuPortionMappings) setMenuPortionMappings(s.menuPortionMappings);
+    if (s.cookedCommodityUsages) setCookedCommodityUsages(s.cookedCommodityUsages);
     if (s.wastage) setWastage(s.wastage);
     if (s.purchases) setPurchases(s.purchases);
     if (s.expenses) setExpenses(s.expenses);
