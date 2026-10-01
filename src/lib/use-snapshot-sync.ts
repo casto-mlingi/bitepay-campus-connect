@@ -37,6 +37,20 @@ export type SyncState = {
   conflict: null;
 };
 
+const SYNC_TIMEOUT_MS = 12_000;
+
+async function withTimeout<T>(operation: Promise<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out. Retrying automatically.`)), SYNC_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 type Options<T> = {
   /** Serializable snapshot of everything we want to persist. */
   snapshot: T;
@@ -78,7 +92,10 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     }
     setState((s) => ({ ...s, status: "error", pendingPush: pendingPush || s.pendingPush, error: message }));
   }, []);
-  const noteSuccess = useCallback(() => { failRef.current = 0; }, []);
+  const noteSuccess = useCallback(() => {
+    failRef.current = 0;
+    setState((s) => ({ ...s, error: null }));
+  }, []);
 
   const markClean = useCallback((rev: number) => {
     revisionRef.current = rev;
@@ -113,7 +130,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     applyRef.current(merged);
     try { localStorage.setItem(SNAPSHOT_KEY, payload); } catch { /* ignore */ }
     try {
-      const res = await pushSnapshot({ data: { key, revision, payload } });
+      const res = await withTimeout(pushSnapshot({ data: { key, revision, payload } }), "Database upload");
       if (res.ok) {
         markClean(res.revision ?? revision);
         setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
@@ -135,7 +152,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     busyRef.current = true;
     setState((s) => ({ ...s, status: "pulling", error: null }));
     try {
-      const res = await pullSnapshot({ data: { key } });
+      const res = await withTimeout(pullSnapshot({ data: { key } }), "Database refresh");
       if (res.found && (force || res.revision > revisionRef.current)) {
         if (dirtyRef.current && !force) {
           await mergeAndPublish(res.payload, res.revision);
@@ -170,10 +187,10 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     try {
       const payload = JSON.stringify(snapshotRef.current);
       const revision = revisionRef.current;
-      const res = await pushSnapshot({ data: { key, revision, payload } });
+      const res = await withTimeout(pushSnapshot({ data: { key, revision, payload } }), "Database upload");
       if (!res.ok && res.stale) {
         // The server holds a newer snapshot — merge both sides, then republish.
-        const remote = await pullSnapshot({ data: { key } });
+        const remote = await withTimeout(pullSnapshot({ data: { key } }), "Database recovery");
         if (remote.found) await mergeAndPublish(remote.payload, remote.revision);
         return;
       }
