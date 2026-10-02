@@ -1201,7 +1201,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const available = cookedCommodityBatches
       .filter((b) => b.store_id === sid && b.active)
       .sort((a, b) => a.created_at - b.created_at)
-      .map((b) => ({ ...b }));
+      .map((b) => ({
+        ...b,
+        remaining_quantity: Math.max(0, b.initial_quantity - cookedCommodityUsages
+          .filter((u) => u.batch_id === b.id)
+          .reduce((sum, u) => sum + u.quantity, 0)),
+      }));
     for (const item of items) {
       const mappings = menuPortionMappings.filter((m) => m.store_id === sid && m.product_id === item.product_id);
       for (const mapping of mappings) {
@@ -1229,7 +1234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ? { ...b, remaining_quantity: Math.max(0, b.remaining_quantity - (usedByBatch.get(b.id) ?? 0)) }
         : b));
     }
-  }, [cookedCommodityBatches, menuPortionMappings]);
+  }, [cookedCommodityBatches, cookedCommodityUsages, menuPortionMappings]);
 
   // ---- Pay-later / debtor helpers ---------------------------------------
   const scopedPayLater = useMemo(
@@ -1778,6 +1783,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (cashPart > 0) {
         if (original.tender === "mobile") adjustBank((b) => b - cashPart);
         else adjustCash((c) => c - cashPart);
+      }
+      const commodityRows = cookedCommodityUsages.filter((u) => u.order_id === original.id && u.quantity > 0);
+      if (commodityRows.length) {
+        const restored = commodityRows.map((u) => ({ ...u, id: uid("cur"), order_id: id, quantity: -u.quantity, created_at: Date.now() }));
+        setCookedCommodityUsages((prev) => [...restored, ...prev]);
+        const returnedByBatch = new Map<string, number>();
+        for (const row of commodityRows) returnedByBatch.set(row.batch_id, (returnedByBatch.get(row.batch_id) ?? 0) + row.quantity);
+        setCookedCommodityBatches((prev) => prev.map((b) => returnedByBatch.has(b.id)
+          ? { ...b, remaining_quantity: Math.min(b.initial_quantity, b.remaining_quantity + (returnedByBatch.get(b.id) ?? 0)) }
+          : b));
       }
       return { ok: true, order: credit };
     },
@@ -2790,7 +2805,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is

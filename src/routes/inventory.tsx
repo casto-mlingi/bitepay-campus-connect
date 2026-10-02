@@ -297,7 +297,7 @@ function MenuPanel() {
 /* ────────────── Cooking Batches ────────────── */
 function BatchesPanel() {
   const {
-    rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings,
+    rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages,
     createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
     setProductPortionMappings, closeCookedCommodityBatch,
   } = useStore();
@@ -407,12 +407,13 @@ function BatchesPanel() {
         {commodityMessage && <div className="text-sm rounded-lg bg-muted px-3 py-2">{commodityMessage}</div>}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {cookedCommodityBatches.map((batch) => {
-            const sold = Math.max(0, batch.initial_quantity - batch.remaining_quantity);
+            const sold = cookedCommodityUsages.filter((u) => u.batch_id === batch.id).reduce((sum, u) => sum + u.quantity, 0);
+            const remaining = Math.max(0, batch.initial_quantity - sold);
             const percent = batch.initial_quantity > 0 ? Math.min(100, (sold / batch.initial_quantity) * 100) : 0;
             return <div key={batch.id} className="border rounded-lg p-3">
               <div className="flex justify-between gap-3"><span className="font-semibold">{batch.name}</span><span className="text-xs text-muted-foreground">{batch.active ? "Active" : "Closed"}</span></div>
               <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${percent}%` }} /></div>
-              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold = <strong className="text-foreground">{batch.remaining_quantity.toFixed(3)} {batch.unit}</strong></div>
+              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold = <strong className="text-foreground">{remaining.toFixed(3)} {batch.unit}</strong></div>
               {batch.active && <button type="button" onClick={() => closeCookedCommodityBatch(batch.id)} className="mt-3 text-xs font-semibold text-destructive">Close batch</button>}
             </div>;
           })}
