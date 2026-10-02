@@ -6,4 +6,4 @@
 - [x] Add standardized full/sub-portion mappings from menu items to cooked commodities.
 - [x] Deduct mapped portions from active batches when POS/customer sales complete.
 - [x] Add batch reconciliation showing initial, sold, and estimated remaining quantities.
-- [ ] Verify responsive UI, types, app routes, and current build health.
+- [x] Verify responsive UI, types, app routes, and current build health.
