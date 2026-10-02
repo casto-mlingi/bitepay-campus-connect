@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/topup")({
   component: TopUpPage,
-  head: () => ({ meta: [{ title: "Top-Up — BitePay" }, { name: "description", content: "Request a wallet top-up on BitePay." }] }),
+  head: () => ({ meta: [{ title: "Top-Up — BitePay" }, { name: "description", content: "Request a wallet top-up on BitePay." }, { property: "og:title", content: "Top-Up — BitePay" }, { property: "og:description", content: "Request a wallet top-up on BitePay." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 const presets = [5000, 10000, 20000, 50000];

@@ -12,7 +12,8 @@ export const Route = createFileRoute("/")({
     { property: "og:title", content: "BitePay — Prepaid Wallets for Canteens & Hotels" },
     { property: "og:description", content: "Top-up once, order in seconds. Full POS, inventory, batch costing and treasury for operators." },
     { property: "og:type", content: "website" },
-  ] }),
+  
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 function HomePage() {

@@ -15,7 +15,9 @@ export const Route = createFileRoute("/login")({
     { name: "description", content: "Sign in to your BitePay wallet or staff console." },
     { property: "og:title", content: "Sign in — BitePay" },
     { property: "og:description", content: "Access your BitePay customer wallet or staff console." },
-  ] }),
+  
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 type Tab = "customer" | "staff";

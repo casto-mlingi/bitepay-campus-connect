@@ -10,7 +10,7 @@ import { CustomerShell } from "@/components/customer-shell";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
-  head: () => ({ meta: [{ title: "Dashboard — BitePay" }, { name: "description", content: "Your BitePay wallet, quick actions, digital ID and recent orders." }] }),
+  head: () => ({ meta: [{ title: "Dashboard — BitePay" }, { name: "description", content: "Your BitePay wallet, quick actions, digital ID and recent orders." }, { property: "og:title", content: "Dashboard — BitePay" }, { property: "og:description", content: "Your BitePay wallet, quick actions, digital ID and recent orders." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function Dashboard() {

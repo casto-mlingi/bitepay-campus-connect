@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/shift")({
   component: ShiftPage,
-  head: () => ({ meta: [{ title: "Shift & Z-Report — BitePay Staff" }, { name: "description", content: "Open a shift with float, close with counted cash and mobile totals — per-tender Z-report with variance." }] }),
+  head: () => ({ meta: [{ title: "Shift & Z-Report — BitePay Staff" }, { name: "description", content: "Open a shift with float, close with counted cash and mobile totals — per-tender Z-report with variance." }, { property: "og:title", content: "Shift & Z-Report — BitePay Staff" }, { property: "og:description", content: "Open a shift with float, close with counted cash and mobile totals — per-tender Z-report with variance." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function ShiftPage() {

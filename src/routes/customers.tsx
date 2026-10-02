@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/customers")({
   component: Customers,
-  head: () => ({ meta: [{ title: "Prepaid Customers — BitePay Staff" }, { name: "description", content: "Manage prepaid wallet customers, top-ups and scannable ID cards." }] }),
+  head: () => ({ meta: [{ title: "Prepaid Customers — BitePay Staff" }, { name: "description", content: "Manage prepaid wallet customers, top-ups and scannable ID cards." }, { property: "og:title", content: "Prepaid Customers — BitePay Staff" }, { property: "og:description", content: "Manage prepaid wallet customers, top-ups and scannable ID cards." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function Customers() {

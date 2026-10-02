@@ -15,7 +15,9 @@ export const Route = createFileRoute("/finance")({
       { name: "description", content: "Treasury dashboard, procurement, expenses, journal and P&L for BitePay canteen." },
       { property: "og:title", content: "Finance & Treasury — BitePay Staff" },
       { property: "og:description", content: "Double-entry style treasury and P&L for the canteen." },
-    ],
+    
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },],
   }),
 });
 

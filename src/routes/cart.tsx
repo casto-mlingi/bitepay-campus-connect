@@ -24,7 +24,7 @@ function rememberAddress(address: string) {
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
-  head: () => ({ meta: [{ title: "Cart — BitePay" }, { name: "description", content: "Review your order and pay from your BitePay wallet." }] }),
+  head: () => ({ meta: [{ title: "Cart — BitePay" }, { name: "description", content: "Review your order and pay from your BitePay wallet." }, { property: "og:title", content: "Cart — BitePay" }, { property: "og:description", content: "Review your order and pay from your BitePay wallet." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function CartPage() {

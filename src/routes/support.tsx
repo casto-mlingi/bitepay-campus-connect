@@ -13,7 +13,9 @@ export const Route = createFileRoute("/support")({
     { name: "description", content: "Submit a support ticket to the BitePay team." },
     { property: "og:title", content: "BitePay Support" },
     { property: "og:description", content: "Get help from the BitePay team." },
-  ] }),
+  
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 function SupportPage() {

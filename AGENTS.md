@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Shared cooked-stock balances are derived from immutable per-order usage rows so offline device merges preserve every deduction.
