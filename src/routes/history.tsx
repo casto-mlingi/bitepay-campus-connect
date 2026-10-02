@@ -7,7 +7,7 @@ import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/history")({
   component: HistoryPage,
-  head: () => ({ meta: [{ title: "Transactions — BitePay" }, { name: "description", content: "Your BitePay wallet transaction history." }] }),
+  head: () => ({ meta: [{ title: "Transactions — BitePay" }, { name: "description", content: "Your BitePay wallet transaction history." }, { property: "og:title", content: "Transactions — BitePay" }, { property: "og:description", content: "Your BitePay wallet transaction history." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function HistoryPage() {

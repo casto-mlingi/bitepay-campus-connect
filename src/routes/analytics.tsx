@@ -12,7 +12,9 @@ export const Route = createFileRoute("/analytics")({
       { name: "description", content: "Live P&L, batch costs, and wastage tracking for the canteen." },
       { property: "og:title", content: "Analytics Dashboard — BitePay Staff" },
       { property: "og:description", content: "Compare today's sales revenue against batch costs in real time." },
-    ],
+    
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },],
   }),
 });
 

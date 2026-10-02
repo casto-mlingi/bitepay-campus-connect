@@ -11,7 +11,7 @@ import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
-  head: () => ({ meta: [{ title: "Walk-in POS — BitePay Staff" }, { name: "description", content: "Point of sale with wallet, cash and mobile money (Lipa Namba), receipts, refunds and offline queue." }] }),
+  head: () => ({ meta: [{ title: "Walk-in POS — BitePay Staff" }, { name: "description", content: "Point of sale with wallet, cash and mobile money (Lipa Namba), receipts, refunds and offline queue." }, { property: "og:title", content: "Walk-in POS — BitePay Staff" }, { property: "og:description", content: "Point of sale with wallet, cash and mobile money (Lipa Namba), receipts, refunds and offline queue." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 type Line = { product: Product; qty: number };

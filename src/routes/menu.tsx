@@ -6,7 +6,7 @@ import { CustomerShell } from "@/components/customer-shell";
 
 export const Route = createFileRoute("/menu")({
   component: MenuPage,
-  head: () => ({ meta: [{ title: "Menu — BitePay" }, { name: "description", content: "Browse the canteen menu and order with your BitePay wallet." }] }),
+  head: () => ({ meta: [{ title: "Menu — BitePay" }, { name: "description", content: "Browse the canteen menu and order with your BitePay wallet." }, { property: "og:title", content: "Menu — BitePay" }, { property: "og:description", content: "Browse the canteen menu and order with your BitePay wallet." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 function MenuPage() {

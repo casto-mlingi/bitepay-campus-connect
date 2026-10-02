@@ -13,7 +13,11 @@ export const Route = createFileRoute("/team")({
   head: () => ({ meta: [
     { title: "Team — BitePay Staff" },
     { name: "description", content: "Manage staff accounts, roles and access for your BitePay store." },
-  ] }),
+  
+      { property: "og:title", content: "Team — BitePay Staff" },
+      { property: "og:description", content: "Manage staff accounts, roles and access for your BitePay store." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 function TeamPage() {

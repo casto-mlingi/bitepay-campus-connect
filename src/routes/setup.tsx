@@ -13,7 +13,11 @@ export const Route = createFileRoute("/setup")({
   head: () => ({ meta: [
     { title: "Set up your store — BitePay" },
     { name: "description", content: "First-run setup for the BitePay store owner. Create your store profile and manager account." },
-  ] }),
+  
+      { property: "og:title", content: "Set up your store — BitePay" },
+      { property: "og:description", content: "First-run setup for the BitePay store owner. Create your store profile and manager account." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 function SetupWizard() {

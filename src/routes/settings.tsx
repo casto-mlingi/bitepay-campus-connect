@@ -14,7 +14,11 @@ export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
     { title: "Store settings — BitePay Staff" },
     { name: "description", content: "Configure your BitePay store profile and feature toggles." },
-  ] }),
+  
+      { property: "og:title", content: "Store settings — BitePay Staff" },
+      { property: "og:description", content: "Configure your BitePay store profile and feature toggles." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },] }),
 });
 
 function SettingsPage() {
