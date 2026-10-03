@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { uploadImage } from "@/lib/images.functions";
 import { Camera, Upload, X, Check, RotateCcw } from "lucide-react";
 
 // Reads a file to data URL while reporting progress (0..100).
@@ -80,10 +81,20 @@ export function DishImagePicker({ value, onChange, onBusyChange }: Props) {
     }
   };
 
-  const commit = () => {
+  const commit = async () => {
     if (!source) return;
     const out = renderCrop(source, zoom, offset.x, offset.y, VIEW);
-    onChange(out);
+    setPhase("processing");
+    setProgress(90);
+    // Store the photo as a file on the server; keep it inline only while offline
+    // (the store uploads leftover inline photos once the connection returns).
+    let finalUrl = out;
+    try {
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        finalUrl = (await uploadImage({ data: { dataUrl: out } })).url;
+      }
+    } catch { /* offline or server busy — inline fallback */ }
+    onChange(finalUrl);
     setSource(null);
     setBusy(false);
     setProgress(0);

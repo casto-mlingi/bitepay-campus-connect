@@ -199,6 +199,12 @@ function POS() {
         </div>
       )}
 
+      {lines.length > 0 && (
+        <button type="button" onClick={() => document.getElementById("pos-receipt")?.scrollIntoView({ behavior: "smooth" })}
+          className="lg:hidden fixed bottom-20 inset-x-4 z-40 h-12 rounded-xl bg-primary text-primary-foreground font-semibold shadow-xl flex items-center justify-between px-4">
+          <span>View cart · {lines.reduce((n, l) => n + l.qty, 0)} item(s)</span><span>{formatTZS(total)}</span>
+        </button>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
         <section>
           <h1 className="text-2xl font-bold">Walk-in POS</h1>
@@ -235,7 +241,7 @@ function POS() {
           </div>
         </section>
 
-        <aside className="bg-surface border rounded-2xl p-5 h-fit lg:sticky lg:top-24">
+        <aside id="pos-receipt" className="bg-surface border rounded-2xl p-5 h-fit lg:sticky lg:top-24 scroll-mt-28">
           <h2 className="font-bold text-lg">Current Receipt</h2>
 
           <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">

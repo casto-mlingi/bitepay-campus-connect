@@ -69,8 +69,6 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
               {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label="Credit" active={active === "credit"} />}
               {waiterTablesEnabled && can("team.view") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
-              {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label="Credit" active={active === "credit"} />}
-          {waiterTablesEnabled && can("team.view") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
           {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
               {can("settings.manage") && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
               {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
@@ -126,7 +124,13 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
         </div>
       </header>
       <SubscriptionBanner daysLeft={subscriptionDaysLeft()} blocked={isSubscriptionBlocked()} status={store?.subscription.status} />
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6">{children}</main>
+      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-4 md:py-6 pb-24 md:pb-6">{children}</main>
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+        <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label="Orders" active={active === "orders"} />
+        <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label="Cart" active={active === "pos"} />
+        <BottomLink to="/my-performance" icon={<Activity className="w-5 h-5" />} label="My stats" active={active === "me"} />
+        <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label="Shift" active={active === "shift"} />
+      </nav>
     </div>
   );
 }
@@ -154,6 +158,15 @@ function TopLink({ to, icon, label, active, badge }: { to: string; icon: ReactNo
     <Link to={to} className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
       {icon}{label}
       {badge && badge > 0 ? <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-amber-500 text-white">{badge}</span> : null}
+    </Link>
+  );
+}
+
+function BottomLink({ to, icon, label, active }: { to: string; icon: ReactNode; label: string; active?: boolean }) {
+  return (
+    <Link to={to} search={to === "/my-performance" ? ({ id: "", period: "month" } as never) : undefined}
+      className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>
+      {icon}{label}
     </Link>
   );
 }

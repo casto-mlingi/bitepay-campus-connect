@@ -301,8 +301,12 @@ function BatchesPanel() {
   const {
     rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages,
     createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
-    setProductPortionMappings, closeCookedCommodityBatch,
+    setProductPortionMappings, closeCookedCommodityBatch, logCookedCommodityWaste,
   } = useStore();
+  const [wasteFor, setWasteFor] = useState<string | null>(null);
+  const [wasteQty, setWasteQty] = useState("");
+  const [wasteReason, setWasteReason] = useState("Spoiled");
+  const [wasteErr, setWasteErr] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [plates, setPlates] = useState(40);
   const [ings, setIngs] = useState<BatchIngredient[]>([]);
@@ -409,14 +413,44 @@ function BatchesPanel() {
         {commodityMessage && <div className="text-sm rounded-lg bg-muted px-3 py-2">{commodityMessage}</div>}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {cookedCommodityBatches.map((batch) => {
-            const sold = cookedCommodityUsages.filter((u) => u.batch_id === batch.id).reduce((sum, u) => sum + u.quantity, 0);
-            const remaining = Math.max(0, batch.initial_quantity - sold);
-            const percent = batch.initial_quantity > 0 ? Math.min(100, (sold / batch.initial_quantity) * 100) : 0;
+            const rows = cookedCommodityUsages.filter((u) => u.batch_id === batch.id);
+            const sold = rows.filter((u) => u.kind !== "waste").reduce((sum, u) => sum + u.quantity, 0);
+            const wasted = rows.filter((u) => u.kind === "waste").reduce((sum, u) => sum + u.quantity, 0);
+            const remaining = Math.max(0, batch.initial_quantity - sold - wasted);
+            const percent = batch.initial_quantity > 0 ? Math.min(100, ((sold + wasted) / batch.initial_quantity) * 100) : 0;
+            const wasteRows = rows.filter((u) => u.kind === "waste");
             return <div key={batch.id} className="border rounded-lg p-3">
               <div className="flex justify-between gap-3"><span className="font-semibold">{batch.name}</span><span className="text-xs text-muted-foreground">{batch.active ? "Active" : "Closed"}</span></div>
               <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${percent}%` }} /></div>
-              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold = <strong className="text-foreground">{remaining.toFixed(3)} {batch.unit}</strong></div>
-              {batch.active && <button type="button" onClick={() => closeCookedCommodityBatch(batch.id)} className="mt-3 text-xs font-semibold text-destructive">Close batch</button>}
+              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold − {wasted.toFixed(3)} wasted = <strong className="text-foreground">{remaining.toFixed(3)} {batch.unit}</strong></div>
+              {wasteRows.length > 0 && <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+                {wasteRows.slice(0, 4).map((w) => <li key={w.id}>🗑 {w.quantity} {batch.unit} · {w.reason}{w.by_name ? ` · ${w.by_name}` : ""} · {new Date(w.created_at).toLocaleString()}</li>)}
+              </ul>}
+              {wasteFor === batch.id ? (
+                <form className="mt-3 space-y-2" onSubmit={(e) => {
+                  e.preventDefault();
+                  const r = logCookedCommodityWaste(batch.id, Number(wasteQty), wasteReason);
+                  if (!r.ok) { setWasteErr(r.reason); return; }
+                  setWasteFor(null); setWasteQty(""); setWasteErr("");
+                }}>
+                  <div className="flex gap-2">
+                    <input type="number" min={0.00001} step="any" inputMode="decimal" required placeholder={`Qty (${batch.unit})`} value={wasteQty} onChange={(e) => setWasteQty(e.target.value)} className="h-9 w-24 rounded-lg border bg-background px-2 text-sm" />
+                    <select value={wasteReason} onChange={(e) => setWasteReason(e.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm">
+                      <option>Spoiled</option><option>Burnt</option><option>Dropped / spilled</option><option>Leftover discarded</option><option>Expired</option>
+                    </select>
+                  </div>
+                  {wasteErr && <div className="text-xs text-destructive">{wasteErr}</div>}
+                  <div className="flex gap-2">
+                    <button className="h-8 px-3 rounded-lg bg-destructive text-destructive-foreground text-xs font-semibold">Record waste</button>
+                    <button type="button" onClick={() => { setWasteFor(null); setWasteErr(""); }} className="h-8 px-3 rounded-lg bg-muted text-xs font-semibold">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="mt-3 flex gap-4">
+                  {remaining > 0 && <button type="button" onClick={() => { setWasteFor(batch.id); setWasteErr(""); }} className="text-xs font-semibold text-primary">Log waste</button>}
+                  {batch.active && <button type="button" onClick={() => closeCookedCommodityBatch(batch.id)} className="text-xs font-semibold text-destructive">Close batch</button>}
+                </div>
+              )}
             </div>;
           })}
           {cookedCommodityBatches.length === 0 && <div className="text-sm text-muted-foreground">No shared cooked batches yet.</div>}

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Clock, ChefHat, PackageCheck, CheckCircle2, MapPin, ShoppingBag, ArrowRight, Sparkles, Check, X } from "lucide-react";
 import { useStore, formatTZS, type Order, type OrderStatus, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
@@ -28,6 +28,12 @@ function StaffDashboard() {
   const { currentUser, sessionReady, orders, advanceOrder } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [activeCol, setActiveCol] = useState(0);
+  const jumpTo = (i: number) => {
+    const el = boardRef.current?.children[i] as HTMLElement | undefined;
+    el?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  };
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
@@ -38,9 +44,9 @@ function StaffDashboard() {
 
   return (
     <StaffShell active="orders">
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex items-end justify-between mb-4 md:mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Live Orders</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Live Orders</h1>
           <p className="text-muted-foreground">Real-time board — advance orders as you cook.</p>
         </div>
         <div className="hidden sm:flex gap-4 text-sm">
@@ -57,11 +63,22 @@ function StaffDashboard() {
 
       <CustomDishRequestsPanel />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="md:hidden sticky top-[104px] z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur flex gap-1.5 overflow-x-auto">
+        {columns.map((c, i) => (
+          <button key={c.key} type="button" onClick={() => jumpTo(i)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${activeCol === i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            {c.title} · {orders.filter((o) => o.status === c.key).length}
+          </button>
+        ))}
+      </div>
+      <div
+        ref={boardRef}
+        onScroll={(e) => { const el = e.currentTarget; setActiveCol(Math.round(el.scrollLeft / Math.max(1, el.clientWidth * 0.88))); }}
+        className="-mx-4 px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-4 md:gap-4 md:overflow-visible"
+      >
         {columns.map((col) => {
           const list = orders.filter((o) => o.status === col.key);
           return (
-            <div key={col.key} className={`bg-surface rounded-2xl border border-t-4 ${col.accent} flex flex-col`}>
+            <div key={col.key} className={`bg-surface rounded-2xl border border-t-4 ${col.accent} flex flex-col shrink-0 w-[88%] snap-start md:w-auto`}>
               <div className="p-4 border-b">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-semibold">{col.icon}{col.title}</div>
