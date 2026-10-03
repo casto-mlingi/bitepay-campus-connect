@@ -1,4 +1,5 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
+import { uploadImage } from "@/lib/images.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
@@ -447,6 +448,10 @@ export type CookedCommodityUsage = {
   product_id: string;
   quantity: number;
   created_at: number;
+  /** "waste" rows record spoiled/discarded stock; absent = sold. */
+  kind?: "sale" | "waste";
+  reason?: string;
+  by_name?: string;
 };
 
 export type WastageLog = {
@@ -657,6 +662,7 @@ type Ctx = {
   createCookedCommodityBatch: (input: { raw_material_id?: string; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
+  logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
   recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
@@ -1885,6 +1891,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ]);
       return { ok: true };
     },
+    logCookedCommodityWaste(batch_id, quantity, reason) {
+      if (!currentStoreId || !currentUser) return { ok: false, reason: "Sign in first" };
+      const b = cookedCommodityBatches.find((x) => x.id === batch_id && x.store_id === currentStoreId);
+      if (!b) return { ok: false, reason: "Cooked batch not found" };
+      if (!(quantity > 0)) return { ok: false, reason: "Enter a quantity above zero" };
+      if (!reason.trim()) return { ok: false, reason: "Give a reason" };
+      const used = cookedCommodityUsages.filter((u) => u.batch_id === b.id).reduce((n, u) => n + u.quantity, 0);
+      const remaining = Math.max(0, b.initial_quantity - used);
+      if (quantity > remaining + 1e-9) return { ok: false, reason: `Only ${remaining} ${b.unit} left in this batch` };
+      setCookedCommodityUsages((prev) => [{
+        id: uid("cw"), store_id: currentStoreId, batch_id, order_id: "WASTE", product_id: "",
+        quantity, created_at: Date.now(), kind: "waste", reason: reason.trim(), by_name: currentUser.full_name,
+      }, ...prev]);
+      setCookedCommodityBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, remaining_quantity: Math.max(0, remaining - quantity) } : x));
+      return { ok: true };
+    },
     closeCookedCommodityBatch(batch_id) {
       if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
       if (!cookedCommodityBatches.some((b) => b.id === batch_id && b.store_id === currentStoreId)) return { ok: false, reason: "Cooked batch not found" };
@@ -2811,14 +2833,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Once a day (first staff session after midnight) yesterday's commission is
   // booked as a Labor expense and credited to each member's balance.
   const nightlyRef = useRef<string>("");
+  const valueRef = useRef(value);
+  valueRef.current = value;
   useEffect(() => {
     if (!currentStoreId || !currentUser || currentUser.role !== "staff") return;
     if (!sync.hydrated) return;
-    const key = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    if (nightlyRef.current === key) return;
-    nightlyRef.current = key;
-    value.runCommissionPayout({ auto: true });
-  }, [currentStoreId, currentUser, sync.hydrated, value]);
+    const tick = () => {
+      const key = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      if (nightlyRef.current === key) return;
+      nightlyRef.current = key;
+      valueRef.current.runCommissionPayout({ auto: true });
+    };
+    tick();
+    // Re-check every minute so an open till books the run right after midnight.
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [currentStoreId, currentUser, sync.hydrated]);
+
+  // ---- Move inline dish photos to server file storage -------------------
+  const uploadingRef = useRef(false);
+  useEffect(() => {
+    if (!isOnline || !sync.hydrated || uploadingRef.current) return;
+    const inline = products.filter((p) => p.image?.startsWith("data:"));
+    if (!inline.length) return;
+    uploadingRef.current = true;
+    void (async () => {
+      for (const p of inline.slice(0, 5)) {
+        try {
+          const { url } = await uploadImage({ data: { dataUrl: p.image! } });
+          setProducts((prev) => prev.map((x) => x.id === p.id && x.image === p.image ? { ...x, image: url } : x));
+        } catch { break; }
+      }
+      uploadingRef.current = false;
+    })();
+  }, [products, isOnline, sync.hydrated]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
