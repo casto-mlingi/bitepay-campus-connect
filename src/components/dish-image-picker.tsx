@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { uploadImage } from "@/lib/images.functions";
 import { Camera, Upload, X, Check, RotateCcw } from "lucide-react";
 
 // Reads a file to data URL while reporting progress (0..100).
@@ -90,7 +91,6 @@ export function DishImagePicker({ value, onChange, onBusyChange }: Props) {
     let finalUrl = out;
     try {
       if (typeof navigator === "undefined" || navigator.onLine) {
-        const { uploadImage } = await import("@/lib/images.functions");
         finalUrl = (await uploadImage({ data: { dataUrl: out } })).url;
       }
     } catch { /* offline or server busy — inline fallback */ }
