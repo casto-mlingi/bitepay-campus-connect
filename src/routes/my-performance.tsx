@@ -53,10 +53,10 @@ function PerformancePage() {
   if (viewingOther && !can("team.view")) return <StaffShell><AccessDenied feature="Staff performance" /></StaffShell>;
 
   return (
-    <StaffShell active="team">
+    <StaffShell active={viewingOther ? "team" : "me"}>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2"><Activity className="w-7 h-7 text-primary" /> {viewingOther ? member.full_name : "My performance"}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2"><Activity className="w-6 h-6 md:w-7 md:h-7 text-primary" /> {viewingOther ? member.full_name : "My performance"}</h1>
           <p className="text-muted-foreground capitalize">{member.staff_role ?? "cashier"} · activity log & commission</p>
         </div>
         <div className="flex gap-1 bg-muted rounded-xl p-1">
