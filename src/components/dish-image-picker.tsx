@@ -80,10 +80,21 @@ export function DishImagePicker({ value, onChange, onBusyChange }: Props) {
     }
   };
 
-  const commit = () => {
+  const commit = async () => {
     if (!source) return;
     const out = renderCrop(source, zoom, offset.x, offset.y, VIEW);
-    onChange(out);
+    setPhase("processing");
+    setProgress(90);
+    // Store the photo as a file on the server; keep it inline only while offline
+    // (the store uploads leftover inline photos once the connection returns).
+    let finalUrl = out;
+    try {
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        const { uploadImage } = await import("@/lib/images.functions");
+        finalUrl = (await uploadImage({ data: { dataUrl: out } })).url;
+      }
+    } catch { /* offline or server busy — inline fallback */ }
+    onChange(finalUrl);
     setSource(null);
     setBusy(false);
     setProgress(0);
