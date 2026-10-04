@@ -10,7 +10,7 @@
 
 ## New requests (Oct 3)
 - [x] Android install (home-screen app) that asks for notification permission
-- [ ] Publish app for phone install + alert test
+- [x] Publish app for phone install + alert test
 - [x] Mobile staff layout: swipeable order board, cart, My performance
 - [x] Automatic nightly commission payout (Labor expense + waiter balances)
 - [x] Dish photos to file storage + rebuilt sync retry
