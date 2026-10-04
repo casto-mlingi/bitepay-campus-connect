@@ -83,8 +83,13 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   // Transient network/database hiccups shouldn't paint the UI red — only show
   // the error state once several consecutive attempts have failed.
   const failRef = useRef(0);
+  // Exponential backoff with jitter: slow links get breathing room instead of
+  // a request storm, and the next attempt is scheduled automatically.
+  const nextTryRef = useRef(0);
   const noteFailure = useCallback((err: unknown, pendingPush: boolean) => {
     failRef.current += 1;
+    const delay = Math.min(60_000, 2_000 * 2 ** (failRef.current - 1));
+    nextTryRef.current = Date.now() + delay + Math.random() * 1_000;
     const message = err instanceof Error ? err.message : String(err);
     if (failRef.current < 3) {
       setState((s) => ({ ...s, status: "idle", pendingPush: pendingPush || s.pendingPush, error: null }));
@@ -94,6 +99,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   }, []);
   const noteSuccess = useCallback(() => {
     failRef.current = 0;
+    nextTryRef.current = 0;
     setState((s) => ({ ...s, error: null }));
   }, []);
 
@@ -257,6 +263,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
 
   // Flush the queue as soon as connectivity returns.
   useEffect(() => {
+    if (isOnline) nextTryRef.current = 0;
     if (isOnline && hydrated && state.pendingPush) void remotePush();
     if (!isOnline) setState((s) => ({ ...s, status: "offline" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,6 +276,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     if (!hydrated) return;
     const id = setInterval(() => {
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      if (Date.now() < nextTryRef.current) return;
       if (pendingRef.current) { void remotePush(); return; }
       void remotePull(false);
     }, 5000);
