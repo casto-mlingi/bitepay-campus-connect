@@ -32,6 +32,7 @@ import { Route as CartRouteImport } from './routes/cart'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicSelcomWebhookRouteImport } from './routes/api/public/selcom/webhook'
 import { Route as ApiPublicImagesIdRouteImport } from './routes/api/public/images/$id'
 import { Route as ApiPublicHealthDbRouteImport } from './routes/api/public/health/db'
 
@@ -150,6 +151,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSelcomWebhookRoute = ApiPublicSelcomWebhookRouteImport.update({
+  id: '/api/public/selcom/webhook',
+  path: '/api/public/selcom/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicImagesIdRoute = ApiPublicImagesIdRouteImport.update({
   id: '/api/public/images/$id',
   path: '/api/public/images/$id',
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/topup': typeof TopupRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
+  '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/topup': typeof TopupRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
+  '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/topup': typeof TopupRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
+  '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/api/public/health/db'
     | '/api/public/images/$id'
+    | '/api/public/selcom/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/api/public/health/db'
     | '/api/public/images/$id'
+    | '/api/public/selcom/webhook'
   id:
     | '__root__'
     | '/'
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/api/public/health/db'
     | '/api/public/images/$id'
+    | '/api/public/selcom/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   TopupRoute: typeof TopupRoute
   ApiPublicHealthDbRoute: typeof ApiPublicHealthDbRoute
   ApiPublicImagesIdRoute: typeof ApiPublicImagesIdRoute
+  ApiPublicSelcomWebhookRoute: typeof ApiPublicSelcomWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -518,6 +531,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/selcom/webhook': {
+      id: '/api/public/selcom/webhook'
+      path: '/api/public/selcom/webhook'
+      fullPath: '/api/public/selcom/webhook'
+      preLoaderRoute: typeof ApiPublicSelcomWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/images/$id': {
       id: '/api/public/images/$id'
       path: '/api/public/images/$id'
@@ -561,6 +581,7 @@ const rootRouteChildren: RootRouteChildren = {
   TopupRoute: TopupRoute,
   ApiPublicHealthDbRoute: ApiPublicHealthDbRoute,
   ApiPublicImagesIdRoute: ApiPublicImagesIdRoute,
+  ApiPublicSelcomWebhookRoute: ApiPublicSelcomWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

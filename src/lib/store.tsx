@@ -638,6 +638,7 @@ type Ctx = {
   staffTopUp: (input: { customerId: string; amount: number; tender: "cash" | "mobile"; reference?: string; pin: string; requestId?: string }) => Ok | Fail;
   topUpRequests: TopUpRequest[];
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
+  creditMobileTopUp: (input: { order_id: string; amount: number; network: string }) => boolean;
   rejectTopUpRequest: (id: string, reason: string) => void;
   setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   /** Customer-set wallet PIN (guards wallet records + QR display + POS wallet charge). */
@@ -1579,6 +1580,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setTopUpRequests((prev) => [req, ...prev]);
       return req;
+    },
+    creditMobileTopUp({ order_id, amount, network }) {
+      if (!currentUser || currentUser.role !== "customer") return false;
+      const sid = activeStoreId;
+      if (!sid || amount <= 0) return false;
+      setWallet(currentUser.id, sid, amount);
+      setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via Selcom`, created_at: Date.now(), reference: order_id }, ...prev]);
+      setStores((prev) => prev.map((st) => st.id === sid && st.treasury ? { ...st, treasury: { ...st.treasury, bank: (st.treasury.bank ?? 0) + amount } } : st));
+      pushNotification({ store_id: sid, user_id: currentUser.id, title: "Wallet topped up", body: `TZS ${amount.toLocaleString()} added from ${network}.`, kind: "topup" });
+      return true;
     },
     rejectTopUpRequest(id, reason) {
       setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
