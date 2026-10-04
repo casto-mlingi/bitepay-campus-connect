@@ -9,9 +9,9 @@
 - [x] Verify responsive UI, types, app routes, and current build health.
 
 ## New requests (Oct 3)
-- [ ] Android install (home-screen app) that asks for notification permission
+- [x] Android install (home-screen app) that asks for notification permission
 - [ ] Publish app for phone install + alert test
-- [ ] Mobile staff layout: swipeable order board, cart, My performance
-- [ ] Automatic nightly commission payout (Labor expense + waiter balances)
-- [ ] Dish photos to file storage + rebuilt sync retry
-- [ ] Cooked-stock waste log reconciled per batch
+- [x] Mobile staff layout: swipeable order board, cart, My performance
+- [x] Automatic nightly commission payout (Labor expense + waiter balances)
+- [x] Dish photos to file storage + rebuilt sync retry
+- [x] Cooked-stock waste log reconciled per batch
