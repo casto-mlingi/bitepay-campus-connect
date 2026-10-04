@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { StoreProvider } from "@/lib/store";
 import { registerServiceWorker } from "@/lib/register-sw";
+import { InstallAlertsBanner } from "@/components/install-alerts-banner";
 
 
 function NotFoundComponent() {
@@ -85,6 +86,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <StoreProvider>
         <Outlet />
+        <InstallAlertsBanner />
         
       </StoreProvider>
     </QueryClientProvider>
