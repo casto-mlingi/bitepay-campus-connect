@@ -5,6 +5,7 @@ import { useStore, formatTZS } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MobileMoneyTopup } from "@/components/mobile-money-topup";
 
 export const Route = createFileRoute("/topup")({
   component: TopUpPage,
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/topup")({
 const presets = [5000, 10000, 20000, 50000];
 
 function TopUpPage() {
-  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest } = useStore();
+  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest, activeStoreId } = useStore();
   const navigate = useNavigate();
   const [amount, setAmount] = useState<number>(10000);
   const [reference, setReference] = useState("");
@@ -76,6 +77,8 @@ function TopUpPage() {
           />
         </div>
 
+        {activeStoreId && <MobileMoneyTopup storeId={activeStoreId} amount={amount} />}
+        <div className="mt-5 text-sm font-semibold">Or already paid? Send your reference to the cashier</div>
         <label className="block mt-4">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment reference / Confirmation code</span>
           <div className="mt-1 flex items-center border rounded-lg px-3">
