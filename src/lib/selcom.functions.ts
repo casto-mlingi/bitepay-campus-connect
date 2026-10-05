@@ -26,7 +26,7 @@ export const getSelcomStatus = createServerFn({ method: "GET" })
     try {
       const c = await loadCreds(getSql(), data.store_id);
       if (!c) return { configured: false as const };
-      return { configured: true as const, vendor: c.vendor, base_url: c.base_url, api_key_hint: `…${c.api_key.slice(-4)}` };
+      return { configured: true as const, vendor: c.vendor, base_url: c.base_url, api_key_hint: `…${c.api_key.slice(-4)}`, fee_percent: c.fee_percent, fee_flat: c.fee_flat };
     } catch {
       return { configured: false as const };
     }
@@ -39,6 +39,8 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     api_key: z.string().trim().min(8).max(300),
     api_secret: z.string().trim().min(8).max(300),
     vendor: z.string().trim().min(2).max(100),
+    fee_percent: z.number().min(0).max(20).default(0),
+    fee_flat: z.number().int().min(0).max(100_000).default(0),
     current_api_key: z.string().max(300).optional(),
   }).parse(raw))
   .handler(async ({ data }) => {
@@ -50,10 +52,11 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     if (existing && existing.api_key !== (data.current_api_key ?? "").trim()) {
       return { ok: false as const, reason: "Enter the current API key to replace the saved keys." };
     }
-    await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor)
-      values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor})
+    await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor, fee_percent, fee_flat)
+      values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor}, ${data.fee_percent}, ${data.fee_flat})
       on conflict (store_id) do update set base_url = excluded.base_url, api_key = excluded.api_key,
-        api_secret = excluded.api_secret, vendor = excluded.vendor, updated_at = now()`;
+        api_secret = excluded.api_secret, vendor = excluded.vendor, fee_percent = excluded.fee_percent,
+        fee_flat = excluded.fee_flat, updated_at = now()`;
     return { ok: true as const };
   });
 
@@ -69,7 +72,7 @@ export const startSelcomTopup = createServerFn({ method: "POST" })
   }).parse(raw))
   .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db.server");
-    const { loadCreds, selcomPost, ensureSelcomTables } = await import("@/lib/selcom.server");
+    const { loadCreds, selcomPost, ensureSelcomTables, computeFee } = await import("@/lib/selcom.server");
     const msisdn = normalizeMsisdn(data.phone);
     if (!msisdn) return { ok: false as const, reason: "Enter a valid phone number, e.g. 0712 345 678." };
     const prefix = msisdn.slice(3, 5);
@@ -82,17 +85,19 @@ export const startSelcomTopup = createServerFn({ method: "POST" })
     await ensureSelcomTables(sql);
 
     const orderId = `BP${Date.now()}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+    const fee = computeFee(data.amount, creds.fee_percent, creds.fee_flat);
+    const total = data.amount + fee;
     const webhook = Buffer.from(`${data.origin}/api/public/selcom/webhook`).toString("base64");
     const order = await selcomPost(creds, "/v1/checkout/create-order-minimal", {
       vendor: creds.vendor, order_id: orderId,
       buyer_email: "customer@bitepay.app", buyer_name: data.customer_name || "BitePay customer",
-      buyer_phone: msisdn, amount: data.amount, currency: "TZS",
+      buyer_phone: msisdn, amount: total, currency: "TZS",
       webhook, buyer_remarks: "Wallet top-up", merchant_remarks: "BitePay", no_of_items: 1,
     });
     if (order.resultcode !== "000") return { ok: false as const, reason: order.message || "Selcom could not create the payment." };
 
-    await sql`insert into selcom_payments (order_id, store_id, customer_id, amount, msisdn, network)
-      values (${orderId}, ${data.store_id}, ${data.customer_id}, ${data.amount}, ${msisdn}, ${data.network})`;
+    await sql`insert into selcom_payments (order_id, store_id, customer_id, amount, msisdn, network, fee)
+      values (${orderId}, ${data.store_id}, ${data.customer_id}, ${data.amount}, ${msisdn}, ${data.network}, ${fee})`;
 
     const push = await selcomPost(creds, "/v1/checkout/wallet-payment", { transid: orderId, order_id: orderId, msisdn });
     if (push.resultcode !== "000" && push.resultcode !== "111") {
