@@ -13,13 +13,14 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
   const check = useServerFn(checkSelcomTopup);
   const claim = useServerFn(claimSelcomTopup);
   const [enabled, setEnabled] = useState(false);
+  const [fee, setFee] = useState<{ percent: number; flat: number }>({ percent: 0, flat: 0 });
   const [network, setNetwork] = useState<SelcomNetwork>("mpesa");
   const [phone, setPhone] = useState(currentUser?.phone ?? "");
   const [stage, setStage] = useState<"idle" | "waiting" | "done">("idle");
   const [msg, setMsg] = useState("");
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { status({ data: { store_id: storeId } }).then((s) => setEnabled(s.configured)).catch(() => setEnabled(false)); }, [storeId, status]);
+  useEffect(() => { status({ data: { store_id: storeId } }).then((s) => { setEnabled(s.configured); if (s.configured) setFee({ percent: s.fee_percent ?? 0, flat: s.fee_flat ?? 0 }); }).catch(() => setEnabled(false)); }, [storeId, status]);
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
   if (!enabled || !currentUser) return null;
