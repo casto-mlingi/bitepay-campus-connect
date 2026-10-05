@@ -1587,7 +1587,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!sid || amount <= 0) return false;
       setWallet(currentUser.id, sid, amount);
       setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via Selcom`, created_at: Date.now(), reference: order_id }, ...prev]);
-      setStores((prev) => prev.map((st) => st.id === sid && st.treasury ? { ...st, treasury: { ...st.treasury, bank: (st.treasury.bank ?? 0) + amount } } : st));
+      adjustBank((b) => b + amount, sid);
       pushNotification({ store_id: sid, user_id: currentUser.id, title: "Wallet topped up", body: `TZS ${amount.toLocaleString()} added from ${network}.`, kind: "topup" });
       return true;
     },
