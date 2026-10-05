@@ -25,6 +25,9 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
 
   if (!enabled || !currentUser) return null;
 
+  const feeAmount = Math.round((amount * fee.percent) / 100 + fee.flat);
+  const total = amount + feeAmount;
+
   const pay = async () => {
     setMsg("");
     if (amount < 500) return setMsg("Minimum mobile top-up is TZS 500.");
@@ -64,10 +67,17 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
         ))}
       </div>
       <Input className="mt-3" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number, e.g. 0712 345 678" inputMode="tel" />
+      {feeAmount > 0 && (
+        <div className="mt-3 rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+          <div className="flex justify-between text-muted-foreground"><span>Wallet top-up</span><span>{formatTZS(amount)}</span></div>
+          <div className="flex justify-between text-muted-foreground"><span>Transaction fee{fee.percent > 0 ? ` (${fee.percent}%)` : ""}</span><span>{formatTZS(feeAmount)}</span></div>
+          <div className="flex justify-between font-bold border-t pt-1"><span>You pay</span><span>{formatTZS(total)}</span></div>
+        </div>
+      )}
       {msg && <div className="mt-3 text-sm text-destructive font-medium">{msg}</div>}
       {stage === "done" && <div className="mt-3 flex items-center gap-2 rounded-lg bg-success/10 text-success p-3 text-sm font-semibold"><CheckCircle2 className="w-5 h-5" /> Paid — your wallet has been topped up.</div>}
       <Button onClick={pay} disabled={stage === "waiting"} className="w-full mt-4 h-11 font-semibold">
-        {stage === "waiting" ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Check your phone and enter your PIN…</> : `Pay ${formatTZS(amount)}`}
+        {stage === "waiting" ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Check your phone and enter your PIN…</> : `Pay ${formatTZS(total)}`}
       </Button>
     </div>
   );
