@@ -15,7 +15,8 @@ export const Route = createFileRoute("/topup")({
 const presets = [5000, 10000, 20000, 50000];
 
 function TopUpPage() {
-  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest, activeStoreId } = useStore();
+  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest, store } = useStore();
+  const activeStoreId = store?.id ?? null;
   const navigate = useNavigate();
   const [amount, setAmount] = useState<number>(10000);
   const [reference, setReference] = useState("");
