@@ -7,6 +7,7 @@ import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelcomSettingsCard } from "@/components/selcom-settings-card";
 
 
 export const Route = createFileRoute("/settings")({
@@ -178,6 +179,8 @@ function SettingsPage() {
         </label>
         <Button type="submit" className="w-full h-11 rounded-xl"><Save className="w-4 h-4 mr-2" /> Save settings</Button>
       </form>
+
+      {store && <SelcomSettingsCard storeId={store.id} />}
 
       {payPlan && (
         <PaymentDialog
