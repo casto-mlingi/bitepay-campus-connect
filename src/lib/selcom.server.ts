@@ -17,8 +17,12 @@ export async function ensureSelcomTables(sql: Sql) {
     api_key text not null,
     api_secret text not null,
     vendor text not null,
+    fee_percent numeric not null default 0,
+    fee_flat numeric not null default 0,
     updated_at timestamptz not null default now()
   )`;
+  await sql`alter table selcom_settings add column if not exists fee_percent numeric not null default 0`;
+  await sql`alter table selcom_settings add column if not exists fee_flat numeric not null default 0`;
   await sql`create table if not exists selcom_payments (
     order_id text primary key,
     store_id text not null,
@@ -28,16 +32,24 @@ export async function ensureSelcomTables(sql: Sql) {
     network text not null,
     status text not null default 'PENDING',
     credited boolean not null default false,
+    fee numeric not null default 0,
     created_at timestamptz not null default now()
   )`;
+  await sql`alter table selcom_payments add column if not exists fee numeric not null default 0`;
 }
 
-export type SelcomCreds = { base_url: string; api_key: string; api_secret: string; vendor: string };
+/** Transaction fee the customer pays on top of the top-up amount. */
+export function computeFee(amount: number, feePercent: number, feeFlat: number) {
+  return Math.round((amount * feePercent) / 100 + feeFlat);
+}
+
+export type SelcomCreds = { base_url: string; api_key: string; api_secret: string; vendor: string; fee_percent: number; fee_flat: number };
 
 export async function loadCreds(sql: Sql, storeId: string): Promise<SelcomCreds | null> {
   await ensureSelcomTables(sql);
-  const rows = await sql<SelcomCreds[]>`select base_url, api_key, api_secret, vendor from selcom_settings where store_id = ${storeId}`;
-  return rows[0] ?? null;
+  const rows = await sql<SelcomCreds[]>`select base_url, api_key, api_secret, vendor, fee_percent, fee_flat from selcom_settings where store_id = ${storeId}`;
+  const r = rows[0];
+  return r ? { ...r, fee_percent: Number(r.fee_percent), fee_flat: Number(r.fee_flat) } : null;
 }
 
 function timestamp() {
