@@ -55,7 +55,7 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
   };
 
   return (
-    <div className="mt-6 bg-surface border rounded-2xl p-5">
+    <div className="mt-4">
       <div className="flex items-center gap-2 font-semibold"><Smartphone className="w-5 h-5 text-primary" /> Pay now with mobile money</div>
       <p className="text-xs text-muted-foreground mt-1">Instant — no cashier needed. You'll get a prompt on your phone to enter your PIN.</p>
       <div className="mt-3 grid grid-cols-2 gap-2">
