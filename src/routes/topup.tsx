@@ -79,42 +79,71 @@ function TopUpPage() {
           />
         </div>
 
-        {activeStoreId && <MobileMoneyTopup storeId={activeStoreId} amount={amount} />}
-        <div className="mt-5 text-sm font-semibold">Or already paid? Send your reference to the cashier</div>
-        <label className="block mt-4">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment reference / Confirmation code</span>
-          <div className="mt-1 flex items-center border rounded-lg px-3">
-            <Hash className="w-4 h-4 text-muted-foreground mr-1" />
-            <Input
-              value={reference}
-              onChange={(e) => setReference(e.target.value.toUpperCase())}
-              placeholder="e.g. QW12ABC345"
-              className="border-0 focus-visible:ring-0 px-1"
-            />
+        <div className="mt-5">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment method</span>
+          <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+            <button
+              type="button"
+              onClick={() => setMethod("mobile")}
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${method === "mobile" ? "bg-surface shadow text-primary" : "text-muted-foreground"}`}
+            >
+              <Smartphone className="w-4 h-4" /> Mobile money
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod("reference")}
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${method === "reference" ? "bg-surface shadow text-primary" : "text-muted-foreground"}`}
+            >
+              <ReceiptText className="w-4 h-4" /> Lipa Namba / cash
+            </button>
           </div>
-        </label>
-
-        <label className="block mt-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Note (optional)</span>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Sent via M-Pesa at 12:30" className="mt-1" />
-        </label>
-
-        <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-          <Info className="w-4 h-4 mt-0.5 shrink-0" />
-          Enter the reference exactly as it appears in the payment SMS. The cashier will verify it before crediting your wallet.
         </div>
 
-        {error && <div className="mt-3 text-sm text-destructive font-medium">{error}</div>}
-        {sent && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-success/10 text-success p-3">
-            <CheckCircle2 className="w-5 h-5" />
-            <span className="text-sm font-semibold">Request sent — waiting for cashier confirmation.</span>
-          </div>
-        )}
+        {method === "mobile" ? (
+          activeStoreId ? (
+            <MobileMoneyTopup storeId={activeStoreId} amount={amount} />
+          ) : (
+            <div className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Mobile money top-up is not available for this canteen yet.</div>
+          )
+        ) : (
+          <>
+            <div className="mt-5 text-sm font-semibold">Already paid? Send your reference to the cashier</div>
+            <label className="block mt-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment reference / Confirmation code</span>
+              <div className="mt-1 flex items-center border rounded-lg px-3">
+                <Hash className="w-4 h-4 text-muted-foreground mr-1" />
+                <Input
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value.toUpperCase())}
+                  placeholder="e.g. QW12ABC345"
+                  className="border-0 focus-visible:ring-0 px-1"
+                />
+              </div>
+            </label>
 
-        <Button onClick={submit} className="w-full mt-4 h-11 font-semibold">
-          Submit Top-Up Request
-        </Button>
+            <label className="block mt-3">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Note (optional)</span>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Sent via M-Pesa at 12:30" className="mt-1" />
+            </label>
+
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <Info className="w-4 h-4 mt-0.5 shrink-0" />
+              Enter the reference exactly as it appears in the payment SMS. The cashier will verify it before crediting your wallet.
+            </div>
+
+            {error && <div className="mt-3 text-sm text-destructive font-medium">{error}</div>}
+            {sent && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-success/10 text-success p-3">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="text-sm font-semibold">Request sent — waiting for cashier confirmation.</span>
+              </div>
+            )}
+
+            <Button onClick={submit} className="w-full mt-4 h-11 font-semibold">
+              Submit Top-Up Request
+            </Button>
+          </>
+        )}
       </div>
 
       <section className="mt-6">
