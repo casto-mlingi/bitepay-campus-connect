@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Info, Clock, XCircle, Hash } from "lucide-react";
+import { CheckCircle2, Info, Clock, XCircle, Hash, Smartphone, ReceiptText } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ function TopUpPage() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [method, setMethod] = useState<"mobile" | "reference">("mobile");
 
   useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
