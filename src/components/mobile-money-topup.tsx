@@ -6,7 +6,7 @@ import { useStore, formatTZS } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount: number }) {
+export function MobileMoneyTopup({ storeId, amount, onChange }: { storeId: string; amount: number; onChange?: () => void }) {
   const { currentUser, creditMobileTopUp } = useStore();
   const status = useServerFn(getSelcomStatus);
   const start = useServerFn(startSelcomTopup);
@@ -34,7 +34,8 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
     setStage("waiting");
     try {
       const r = await start({ data: { store_id: storeId, customer_id: currentUser.id, customer_name: currentUser.full_name, amount: Math.round(amount), network, phone, origin: window.location.origin } });
-      if (!r.ok) { setStage("idle"); return setMsg(r.reason); }
+      if (!r.ok) { setStage("idle"); onChange?.(); return setMsg(r.reason); }
+      onChange?.();
       let tries = 0;
       timer.current = setInterval(async () => {
         tries++;
@@ -44,11 +45,13 @@ export function MobileMoneyTopup({ storeId, amount }: { storeId: string; amount:
           const c = await claim({ data: { order_id: r.order_id, customer_id: currentUser.id } });
           if (c.ok) creditMobileTopUp({ order_id: r.order_id, amount: c.amount, network: SELCOM_NETWORKS[network].label });
           setStage("done");
+          onChange?.();
           setTimeout(() => setStage("idle"), 4000);
         } else if (["FAILED", "CANCELLED", "REJECTED"].includes(s.status) || tries > 40) {
           clearInterval(timer.current!);
           setStage("idle");
-          setMsg(tries > 40 ? "We did not get a confirmation in time. If money left your phone, tell the cashier." : "The payment was cancelled or failed.");
+          onChange?.();
+          setMsg(tries > 40 ? "Still pending — we did not get a confirmation in time. If money left your phone, tell the cashier." : "Payment failed or was cancelled. No money was added.");
         }
       }, 5000);
     } catch { setStage("idle"); setMsg("Could not reach the payment service. Try again."); }
