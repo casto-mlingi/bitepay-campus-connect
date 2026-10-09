@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/customer-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MobileMoneyTopup } from "@/components/mobile-money-topup";
+import { MobilePaymentsList, PayStateBadge, TopupHelp, useMyMobilePayments } from "@/components/topup-status";
 
 export const Route = createFileRoute("/topup")({
   component: TopUpPage,
@@ -24,6 +25,7 @@ function TopUpPage() {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [method, setMethod] = useState<"mobile" | "reference">("mobile");
+  const mobile = useMyMobilePayments(currentUser?.id);
 
   useEffect(() => { if (sessionReady && !currentUser) navigate({ to: "/" }); }, [currentUser, navigate]);
 
@@ -101,7 +103,7 @@ function TopUpPage() {
 
         {method === "mobile" ? (
           activeStoreId ? (
-            <MobileMoneyTopup storeId={activeStoreId} amount={amount} />
+            <MobileMoneyTopup storeId={activeStoreId} amount={amount} onChange={mobile.refresh} />
           ) : (
             <div className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Mobile money top-up is not available for this canteen yet.</div>
           )
@@ -146,8 +148,10 @@ function TopUpPage() {
         )}
       </div>
 
+      <MobilePaymentsList {...mobile} />
+
       <section className="mt-6">
-        <h2 className="text-lg font-bold mb-2">My requests</h2>
+        <h2 className="text-lg font-bold mb-2">Lipa Namba / cash requests</h2>
         {myRequests.length === 0 ? (
           <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
             No top-up requests yet.
@@ -160,6 +164,9 @@ function TopUpPage() {
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold">{formatTZS(r.amount)} <span className="text-xs text-muted-foreground font-normal">· ref {r.reference}</span></div>
                   <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {r.status === "approved" ? "Confirmed by the cashier — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : "Waiting for a cashier to check your reference."}
+                  </div>
                   {r.status === "rejected" && r.reject_reason && (
                     <div className="text-xs text-destructive mt-0.5">Reason: {r.reject_reason}</div>
                   )}
@@ -170,6 +177,8 @@ function TopUpPage() {
           </ul>
         )}
       </section>
+
+      <TopupHelp rows={mobile.rows} />
     </CustomerShell>
   );
 }
@@ -177,14 +186,9 @@ function TopUpPage() {
 function StatusIcon({ status }: { status: "pending" | "approved" | "rejected" }) {
   if (status === "approved") return <CheckCircle2 className="w-5 h-5 text-success shrink-0" />;
   if (status === "rejected") return <XCircle className="w-5 h-5 text-destructive shrink-0" />;
-  return <Clock className="w-5 h-5 text-amber-500 shrink-0" />;
+  return <Clock className="w-5 h-5 text-warning shrink-0" />;
 }
 
 function StatusBadge({ status }: { status: "pending" | "approved" | "rejected" }) {
-  const map = {
-    pending: "bg-amber-100 text-amber-700",
-    approved: "bg-emerald-100 text-emerald-700",
-    rejected: "bg-red-100 text-red-700",
-  } as const;
-  return <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full ${map[status]}`}>{status}</span>;
+  return <PayStateBadge state={status === "approved" ? "success" : status === "rejected" ? "failed" : "pending"} />;
 }

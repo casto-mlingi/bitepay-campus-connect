@@ -116,6 +116,21 @@ export const checkSelcomTopup = createServerFn({ method: "POST" })
     return { status: status ?? "UNKNOWN" };
   });
 
+export const listMySelcomPayments = createServerFn({ method: "POST" })
+  .inputValidator((raw: unknown) => z.object({ customer_id: z.string().min(1).max(100) }).parse(raw))
+  .handler(async ({ data }) => {
+    const { getSql } = await import("@/lib/db.server");
+    const { ensureSelcomTables } = await import("@/lib/selcom.server");
+    try {
+      const sql = getSql();
+      await ensureSelcomTables(sql);
+      const rows = await sql<{ order_id: string; amount: string; fee: string; network: string; status: string; credited: boolean; created_at: Date }[]>`
+        select order_id, amount, fee, network, status, credited, created_at from selcom_payments
+        where customer_id = ${data.customer_id} order by created_at desc limit 8`;
+      return rows.map((r) => ({ order_id: r.order_id, amount: Number(r.amount), fee: Number(r.fee), network: r.network, status: r.status, credited: r.credited, created_at: new Date(r.created_at).getTime() }));
+    } catch { return []; }
+  });
+
 /** Marks a COMPLETED payment as credited exactly once. */
 export const claimSelcomTopup = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => z.object({ order_id: z.string().min(4).max(60), customer_id: z.string().min(1).max(100) }).parse(raw))
