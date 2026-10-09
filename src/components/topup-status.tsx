@@ -6,6 +6,7 @@ import { diagnoseTopupIssue } from "@/lib/topup-help.functions";
 import { formatTZS } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { TopupReceiptButton } from "@/components/topup-receipt";
 
 export type PayState = "pending" | "success" | "failed";
 
@@ -69,7 +70,10 @@ export function MobilePaymentsList({ rows, loading, refresh }: { rows: Row[]; lo
                     {st === "success" ? "Confirmed — added to your wallet." : st === "failed" ? "Not paid. No money was added." : "Waiting for confirmation from your network."}
                   </div>
                 </div>
-                <PayStateBadge state={st} />
+                <div className="flex flex-col items-end gap-1">
+                  <PayStateBadge state={st} />
+                  {st === "success" && <TopupReceiptButton payment={r} network={netLabel(r.network)} />}
+                </div>
               </li>
             );
           })}
