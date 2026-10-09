@@ -1579,6 +1579,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         status: "pending", created_at: Date.now(),
       };
       setTopUpRequests((prev) => [req, ...prev]);
+      // Alert every staff member of this canteen so a cashier confirms promptly.
+      const staffIds = profiles.filter((p) => p.role === "staff" && p.store_id === sid).map((p) => p.id);
+      if (staffIds.length) {
+        const now = Date.now();
+        setNotifications((prev) => [
+          ...staffIds.map((uidStaff) => ({
+            id: uid("n"), store_id: sid, user_id: uidStaff,
+            title: "Top-up waiting for confirmation",
+            body: `${currentUser.full_name} sent TZS ${amount.toLocaleString()} · ref ${req.reference}. Check it and credit the wallet.`,
+            kind: "topup" as const, created_at: now, read: false,
+          })),
+          ...prev,
+        ]);
+      }
       return req;
     },
     creditMobileTopUp({ order_id, amount, network }) {
