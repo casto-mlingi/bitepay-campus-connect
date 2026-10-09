@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity, HandCoins, Grid2X2 } from "lucide-react";
+import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity, HandCoins, Grid2X2, ReceiptText } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
@@ -63,7 +63,8 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
               <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
-              <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} badge={pendingTopUps} />
+              <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
+              {can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
               {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
               {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
@@ -113,7 +114,8 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Orders" active={active === "orders"} />
           <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
           <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
-          <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} badge={pendingTopUps} />
+          <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />
+              {can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
           {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
           {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
           {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
