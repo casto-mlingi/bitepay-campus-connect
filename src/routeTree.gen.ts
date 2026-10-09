@@ -32,6 +32,7 @@ import { Route as SupportRouteImport } from './routes/support'
 import { Route as TablesRouteImport } from './routes/tables'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as TopupRouteImport } from './routes/topup'
+import { Route as TopupsRouteImport } from './routes/topups'
 import { Route as ApiPublicHealthDbRouteImport } from './routes/api/public/health/db'
 import { Route as ApiPublicImagesIdRouteImport } from './routes/api/public/images/$id'
 import { Route as ApiPublicSelcomWebhookRouteImport } from './routes/api/public/selcom/webhook'
@@ -151,6 +152,11 @@ const TopupRoute = TopupRouteImport.update({
   path: '/topup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TopupsRoute = TopupsRouteImport.update({
+  id: '/topups',
+  path: '/topups',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHealthDbRoute = ApiPublicHealthDbRouteImport.update({
   id: '/api/public/health/db',
   path: '/api/public/health/db',
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/tables': typeof TablesRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/topups': typeof TopupsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/tables': typeof TablesRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/topups': typeof TopupsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -248,6 +256,7 @@ export interface FileRoutesById {
   '/tables': typeof TablesRoute
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
+  '/topups': typeof TopupsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -278,6 +287,7 @@ export interface FileRouteTypes {
     | '/tables'
     | '/team'
     | '/topup'
+    | '/topups'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
     | '/tables'
     | '/team'
     | '/topup'
+    | '/topups'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '/tables'
     | '/team'
     | '/topup'
+    | '/topups'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -363,6 +375,7 @@ export interface RootRouteChildren {
   TablesRoute: typeof TablesRoute
   TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
+  TopupsRoute: typeof TopupsRoute
   ApiPublicHealthDbRoute: typeof ApiPublicHealthDbRoute
   ApiPublicImagesIdRoute: typeof ApiPublicImagesIdRoute
   ApiPublicSelcomWebhookRoute: typeof ApiPublicSelcomWebhookRoute
@@ -531,6 +544,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/topups': {
+      id: '/topups'
+      path: '/topups'
+      fullPath: '/topups'
+      preLoaderRoute: typeof TopupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/health/db': {
       id: '/api/public/health/db'
       path: '/api/public/health/db'
@@ -579,6 +599,7 @@ const rootRouteChildren: RootRouteChildren = {
   TablesRoute: TablesRoute,
   TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
+  TopupsRoute: TopupsRoute,
   ApiPublicHealthDbRoute: ApiPublicHealthDbRoute,
   ApiPublicImagesIdRoute: ApiPublicImagesIdRoute,
   ApiPublicSelcomWebhookRoute: ApiPublicSelcomWebhookRoute,
