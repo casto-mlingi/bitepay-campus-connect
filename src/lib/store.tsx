@@ -122,7 +122,7 @@ export type Ticket = {
   replies: TicketReply[];
 };
 
-export type SuperAdmin = { username: string; password: string; full_name: string };
+export type SuperAdmin = { username: string; full_name: string };
 export type AdminAuditLog = { id: string; action: string; detail: string; created_at: number };
 
 /** Mobile-money account subscriptions are paid into. */
@@ -868,7 +868,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
   const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
   const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([]);
-  const superAdmin: SuperAdmin = { username: "admin", password: "BitePAY@2026", full_name: "BitePay Admin" };
+  const superAdmin: SuperAdmin = { username: "admin", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
