@@ -2772,8 +2772,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     superAdmin,
     isAdminSignedIn: superAdminSignedIn,
-    adminLogin(username, password) {
-      if (username.trim().toLowerCase() === superAdmin.username && password === superAdmin.password) {
+    adminLogin(verified) {
+      if (verified === true) {
         setSuperAdminSignedIn(true);
         setAdminAuditLog((prev) => [{ id: uid("au"), action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
         return true;
