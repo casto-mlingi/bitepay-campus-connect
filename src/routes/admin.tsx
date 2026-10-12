@@ -76,7 +76,6 @@ function AdminLogin({ onLogin }: { onLogin: (u: string, p: string) => boolean })
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <Button type="submit" className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90">Sign in</Button>
-            <p className="text-[11px] text-slate-500 text-center pt-2">Demo credentials: <span className="text-slate-300">admin / bitepay2025</span></p>
           </form>
         </div>
       </div>
