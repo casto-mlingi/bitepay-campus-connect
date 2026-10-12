@@ -122,7 +122,7 @@ export type Ticket = {
   replies: TicketReply[];
 };
 
-export type SuperAdmin = { username: string; password: string; full_name: string };
+export type SuperAdmin = { username: string; full_name: string };
 export type AdminAuditLog = { id: string; action: string; detail: string; created_at: number };
 
 /** Mobile-money account subscriptions are paid into. */
@@ -786,7 +786,7 @@ type Ctx = {
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   superAdmin: SuperAdmin;
   isAdminSignedIn: boolean;
-  adminLogin: (username: string, password: string) => boolean;
+  adminLogin: (verified: boolean) => boolean;
   adminLogout: () => void;
   addSubscriptionDays: (days: number, storeId?: string) => void;
   changePlan: (plan: SubscriptionPlan, storeId?: string) => void;
@@ -868,7 +868,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
   const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
   const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([]);
-  const superAdmin: SuperAdmin = { username: "admin", password: "BitePAY@2026", full_name: "BitePay Admin" };
+  const superAdmin: SuperAdmin = { username: "admin", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
@@ -2772,8 +2772,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     superAdmin,
     isAdminSignedIn: superAdminSignedIn,
-    adminLogin(username, password) {
-      if (username.trim().toLowerCase() === superAdmin.username && password === superAdmin.password) {
+    adminLogin(verified) {
+      if (verified === true) {
         setSuperAdminSignedIn(true);
         setAdminAuditLog((prev) => [{ id: uid("au"), action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
         return true;

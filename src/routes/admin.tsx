@@ -9,6 +9,7 @@ import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, typ
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { verifyAdminLogin } from "@/lib/admin-auth.functions";
 import { VirtualList } from "@/components/admin/virtual-list";
 import { activeDbProfile, DB_PROFILE_KEY, type DbProfileId } from "@/lib/use-snapshot-sync";
 
@@ -45,14 +46,21 @@ const daysLeftOf = (expires: number) => Math.max(0, Math.ceil((expires - Date.no
 
 /* ------------------------------------------------------------------ login */
 
-function AdminLogin({ onLogin }: { onLogin: (u: string, p: string) => boolean }) {
+function AdminLogin({ onLogin }: { onLogin: (verified: boolean) => boolean }) {
+  const [busy, setBusy] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onLogin(username, password)) setError("Invalid admin credentials");
+    setBusy(true); setError("");
+    try {
+      const res = await verifyAdminLogin({ data: { username, password } });
+      if (!res.ok || !onLogin(true)) setError("Invalid admin credentials");
+    } catch {
+      setError("Could not reach the server. Check your connection.");
+    } finally { setBusy(false); }
   };
 
   return (
@@ -75,7 +83,7 @@ function AdminLogin({ onLogin }: { onLogin: (u: string, p: string) => boolean })
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="mt-1.5 h-12 rounded-xl bg-slate-800 border-slate-700 text-white" />
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
-            <Button type="submit" className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90">Sign in</Button>
+            <Button type="submit" className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90" disabled={busy}>{busy ? "Checking…" : "Sign in"}</Button>
           </form>
         </div>
       </div>
