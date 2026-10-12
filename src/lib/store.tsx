@@ -786,7 +786,7 @@ type Ctx = {
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   superAdmin: SuperAdmin;
   isAdminSignedIn: boolean;
-  adminLogin: (username: string, password: string) => boolean;
+  adminLogin: (verified: boolean) => boolean;
   adminLogout: () => void;
   addSubscriptionDays: (days: number, storeId?: string) => void;
   changePlan: (plan: SubscriptionPlan, storeId?: string) => void;
