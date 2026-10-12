@@ -868,7 +868,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [superAdminSignedIn, setSuperAdminSignedIn] = useState(false);
   const [adminAuditLog, setAdminAuditLog] = useState<AdminAuditLog[]>([]);
   const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([]);
-  const superAdmin: SuperAdmin = { username: "admin", password: "bitepay2025", full_name: "BitePay Admin" };
+  const superAdmin: SuperAdmin = { username: "admin", password: "BitePAY@2026", full_name: "BitePay Admin" };
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
