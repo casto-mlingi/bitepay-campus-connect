@@ -141,7 +141,7 @@ function AddStaffModal({ onClose, onSubmit, canManageAll }: { onClose: () => voi
                 <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => { setRole(r); setError(""); }}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
                   {r}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -169,10 +169,10 @@ function EditStaffModal({ p, onClose, onSubmit, canManageAll }: { p: Profile; on
             {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
               const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
               return (
-                <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => { setRole(r); setError(""); }}
+                <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => setRole(r)}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
                   {r}
-                </button>
+                </Button>
               );
             })}
           </div>
