@@ -3,7 +3,8 @@ import { uploadImage } from "@/lib/images.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type Role = "customer" | "staff";
-export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
+import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
+export type { StaffRole, Permission } from "@/lib/staff-rules";
 /** A staff member's role in one specific store (multi-store support). */
 export type StoreMembership = { store_id: string; staff_role: StaffRole };
 
@@ -152,30 +153,6 @@ export const PLAN_FEATURES: Record<SubscriptionPlan, string[]> = {
   starter: ["Up to 3 staff", "1,000 customers", "POS + Wallet + Inventory"],
   pro: ["Unlimited staff", "Unlimited customers", "Multi-tender + Analytics + Batch costing"],
   enterprise: ["Everything in Pro", "Priority support", "Custom onboarding & SLA"],
-};
-
-export type Permission =
-  | "pos.sell" | "pos.refund" | "shift.manage"
-  | "customers.view" | "customers.topup"
-  | "inventory.view" | "inventory.edit"
-  | "finance.view" | "finance.edit"
-  | "analytics.view"
-  | "team.view" | "team.manage_cashier" | "team.manage_all"
-  | "settings.manage";
-
-const PERMISSIONS: Record<StaffRole, Permission[]> = {
-  waiter: ["pos.sell", "shift.manage", "customers.view"],
-  cashier: ["pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view"],
-  supervisor: [
-    "pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup",
-    "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view",
-    "team.view", "team.manage_cashier",
-  ],
-  owner: [
-    "pos.sell", "pos.refund", "shift.manage", "customers.view", "customers.topup",
-    "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view",
-    "team.view", "team.manage_cashier", "team.manage_all", "settings.manage",
-  ],
 };
 
 export type TopUpRequestStatus = "pending" | "approved" | "rejected";
@@ -548,7 +525,7 @@ type Ok<T = undefined> = T extends undefined ? { ok: true } : { ok: true; value:
 type Fail = { ok: false; reason: string };
 
 export type AddStaffInput = {
-  full_name: string; phone: string; password: string; role: StaffRole; staff_pin: string;
+  full_name: string; phone: string; password: string; role: StaffRole; staff_pin?: string;
 };
 
 type Treasury = { cash: number; bank: number };
@@ -1328,6 +1305,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [tableAssignments, currentStoreId, stores]);
 
   const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
+    if (!can("pos.wallet")) return { ok: false, reason: "Wallet payments require a cashier" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
@@ -1368,10 +1346,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
+  }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
 
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
+    if (!can("pos.sell")) return { ok: false, reason: "Not allowed to sell" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     if (total <= 0) return { ok: false, reason: "Cart empty" };
@@ -1394,7 +1373,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
+  }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, sessionReady, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
@@ -1505,13 +1484,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addStaff({ full_name, phone, password, role, staff_pin }) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
       if (!currentStoreId) return { ok: false, reason: "No store context" };
-      if (role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can add supervisors or owners" };
-      if (!full_name.trim() || !phone.trim() || !password) return { ok: false, reason: "All fields are required" };
-      if (!/^\d{4,6}$/.test(staff_pin)) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
+      if (!canAssignStaffRole(role, can("team.manage_all"))) return { ok: false, reason: "Only the owner can add supervisors or owners" };
+      const error = validateStaffInput({ full_name, phone, password, role, staff_pin });
+      if (error) return { ok: false, reason: error };
       if (profiles.some((p) => p.phone === phone.trim())) return { ok: false, reason: "Phone already in use" };
       const p: Profile = {
         id: uid("u"), full_name: full_name.trim(), phone: phone.trim(), password,
-        wallet_balance: 0, role: "staff", staff_role: role, staff_pin, created_at: Date.now(),
+        wallet_balance: 0, role: "staff", staff_role: role, staff_pin: requiresStaffPin(role) ? staff_pin : undefined, created_at: Date.now(),
         store_id: currentStoreId,
         memberships: [{ store_id: currentStoreId, staff_role: role }],
       };
@@ -1524,9 +1503,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const target = profiles.find((p) => p.id === id && (p.store_id === currentStoreId || (p.memberships ?? []).some((m) => m.store_id === currentStoreId)));
       if (!target || target.role !== "staff") return { ok: false, reason: "Staff not found" };
       const targetRole = roleAt(target, currentStoreId) ?? target.staff_role;
-      if (patch.staff_role && patch.staff_role !== "cashier" && !can("team.manage_all")) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
+      if (patch.staff_role && !canAssignStaffRole(patch.staff_role, can("team.manage_all"))) return { ok: false, reason: "Only the owner can promote to supervisor or owner" };
       if (targetRole === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can edit an owner" };
-      if (patch.phone && profiles.some((p) => p.phone === patch.phone!.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
+      if (patch.phone && profiles.some((p) => p.phone === patch.phone?.trim() && p.id !== id)) return { ok: false, reason: "Phone already in use" };
       setProfiles((prev) => prev.map((p) => {
         if (p.id !== id) return p;
         const nextRole = patch.staff_role ?? targetRole;
@@ -1536,6 +1515,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           phone: patch.phone?.trim() || p.phone,
           staff_role: p.store_id === currentStoreId ? (nextRole ?? p.staff_role) : p.staff_role,
           memberships,
+          staff_pin: nextRole === "waiter" ? undefined : p.staff_pin,
         };
       }));
       return { ok: true };
@@ -1561,6 +1541,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const isSelf = currentUser?.id === id;
       if (!isSelf && !can("team.view")) return { ok: false, reason: "Not allowed" };
       if (!isSelf && target.staff_role === "owner" && !can("team.manage_all")) return { ok: false, reason: "Only an owner can reset an owner's credentials" };
+      if (kind === "pin" && roleAt(target, currentStoreId) === "waiter") return { ok: false, reason: "Waiters do not use staff PINs" };
       if (kind === "pin" && !/^\d{4,6}$/.test(value)) return { ok: false, reason: "PIN must be 4–6 digits" };
       if (kind === "password" && value.length < 4) return { ok: false, reason: "Password must be at least 4 characters" };
       setProfiles((prev) => prev.map((p) => p.id === id ? (kind === "pin" ? { ...p, staff_pin: value } : { ...p, password: value }) : p));
@@ -1612,6 +1593,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deliveryFee: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.delivery_fee ?? 0),
     setWalletPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
+      if (currentUser.staff_role === "waiter") return { ok: false, reason: "Waiters do not use staff PINs" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "Wallet PIN must be 4–6 digits" };
       if (currentUser.wallet_pin && currentUser.wallet_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
       setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, wallet_pin: newPin } : p));
@@ -1625,6 +1607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     setStaffPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
+      if (currentUser.staff_role === "waiter") return { ok: false, reason: "Waiters do not use staff PINs" };
       if (!/^\d{4,6}$/.test(newPin)) return { ok: false, reason: "PIN must be 4–6 digits" };
       if (currentUser.staff_pin && currentUser.staff_pin !== currentPin) return { ok: false, reason: "Current PIN is incorrect" };
       setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, staff_pin: newPin } : p));
@@ -1773,6 +1756,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
+      if (!can("customers.topup")) return;
       if (!currentStoreId) return;
       setWallet(customerId, currentStoreId, amount);
       const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
@@ -2085,6 +2069,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return closed;
     },
     enqueueSale(payload) {
+      if (!can("pos.sell") || (payload.kind === "wallet" && !can("pos.wallet"))) return;
       if (!currentStoreId) return;
       const p: PendingSale = { id: `PQ-${Date.now()}`, store_id: currentStoreId, queued_at: Date.now(), ...payload };
       setPendingSales((prev) => [p, ...prev]);
