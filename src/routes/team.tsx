@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { UserPlus, Users, Shield, ShieldCheck, Crown, KeyRound, Ban, CheckCircle2, X, Pencil, ConciergeBell, Activity } from "lucide-react";
-import { useStore, type Profile, type StaffRole } from "@/lib/store";
+import { useStore, type Profile, type StaffRole, type AddStaffInput } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { requiresStaffPin } from "@/lib/staff-rules";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/team")({
@@ -31,7 +32,7 @@ function TeamPage() {
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
-  }, [currentUser, navigate]);
+  }, [currentUser, sessionReady, navigate]);
 
   const staff = useMemo(() => profiles.filter((p) => p.role === "staff").sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0)), [profiles]);
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
@@ -46,7 +47,7 @@ function TeamPage() {
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><Users className="w-7 h-7 text-primary" /> Team</h1>
-          <p className="text-muted-foreground">{canManageAll ? "Add or remove members and set their role." : "You can add cashiers. Only the owner can add supervisors or owners."}</p>
+          <p className="text-muted-foreground">{canManageAll ? "Add or remove members and set their role." : "You can add cashiers or waiters. Only the owner can add supervisors or owners."}</p>
         </div>
         <Button onClick={() => setShowAdd(true)} className="rounded-xl"><UserPlus className="w-4 h-4 mr-2" /> Add member</Button>
       </div>
@@ -75,7 +76,7 @@ function TeamPage() {
               <button title="Performance & commission" onClick={() => navigate({ to: "/my-performance", search: { id: p.id, period: "month" } })} className="p-2 rounded-lg hover:bg-muted text-primary"><Activity className="w-4 h-4" /></button>
               <button title="Edit" onClick={() => setEdit(p)} className="p-2 rounded-lg hover:bg-muted"><Pencil className="w-4 h-4" /></button>
               <button title="Reset password" onClick={() => setReset({ p, kind: "password" })} className="p-2 rounded-lg hover:bg-muted"><KeyRound className="w-4 h-4" /></button>
-              <button title="Reset PIN" onClick={() => setReset({ p, kind: "pin" })} className="p-2 rounded-lg hover:bg-muted text-xs font-bold">PIN</button>
+              {requiresStaffPin(p.staff_role ?? "cashier") && <Button size="icon" variant="ghost" title="Reset PIN" onClick={() => setReset({ p, kind: "pin" })}>PIN</Button>}
               <button
                 title={p.disabled ? "Enable" : "Disable"}
                 onClick={() => { const r = disableStaff(p.id, !p.disabled); flash(r.ok ? (p.disabled ? "Enabled" : "Disabled") : r.reason); }}
@@ -90,7 +91,7 @@ function TeamPage() {
       </div>
 
       {showAdd && <AddStaffModal onClose={() => setShowAdd(false)} onSubmit={(input) => {
-        const r = addStaff(input); flash(r.ok ? "Member added" : r.reason); if (r.ok) setShowAdd(false);
+        const r = addStaff(input); if (r.ok) { flash("Member added"); setShowAdd(false); } return r;
       }} canManageAll={canManageAll} />}
 
       {edit && <EditStaffModal p={edit} onClose={() => setEdit(null)} onSubmit={(patch) => {
@@ -117,34 +118,36 @@ function RoleBadge({ role }: { role: StaffRole }) {
   return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${m.cls}`}>{m.icon}{m.label}</span>;
 }
 
-function AddStaffModal({ onClose, onSubmit, canManageAll }: { onClose: () => void; onSubmit: (input: { full_name: string; phone: string; password: string; role: StaffRole; staff_pin: string }) => void; canManageAll: boolean }) {
+function AddStaffModal({ onClose, onSubmit, canManageAll }: { onClose: () => void; onSubmit: (input: AddStaffInput) => { ok: true } | { ok: false; reason: string }; canManageAll: boolean }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState<StaffRole>("cashier");
+  const [error, setError] = useState("");
 
   return (
     <Modal title="Add team member" onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit({ full_name: name, phone, password, role, staff_pin: pin }); }} className="space-y-3">
-        <Field label="Full name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" /></Field>
-        <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 000 000" /></Field>
-        <Field label="Temporary password"><Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 4 characters" /></Field>
-        <Field label="Staff PIN (4–6 digits)"><Input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="1234" /></Field>
+      <form onSubmit={(e) => { e.preventDefault(); setError(""); const result = onSubmit({ full_name: name, phone, password, role, staff_pin: requiresStaffPin(role) ? pin : undefined }); if (!result.ok) setError(result.reason); }} className="space-y-3">
+        <Field label="Full name"><Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" /></Field>
+        <Field label="Phone"><Input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 000 000" /></Field>
+        <Field label="Temporary password"><Input required minLength={4} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 4 characters" /></Field>
+        {requiresStaffPin(role) && <Field label="Staff PIN (4–6 digits)"><Input required type="password" pattern="[0-9]{4,6}" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••" /></Field>}
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
             {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
               const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
               return (
-                <button key={r} type="button" disabled={disabled} onClick={() => setRole(r)}
+                <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => { setRole(r); setError(""); }}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
                   {r}
-                </button>
+                </Button>
               );
             })}
           </div>
           {!canManageAll && <p className="text-xs text-muted-foreground mt-1">Only the owner can create supervisors or owners.</p>}
         </Field>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <Button type="submit" className="w-full">Add member</Button>
       </form>
     </Modal>
@@ -159,17 +162,17 @@ function EditStaffModal({ p, onClose, onSubmit, canManageAll }: { p: Profile; on
   return (
     <Modal title={`Edit ${p.full_name}`} onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); onSubmit({ full_name: name, phone, staff_role: role }); }} className="space-y-3">
-        <Field label="Full name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        <Field label="Full name"><Input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Phone"><Input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
             {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
               const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
               return (
-                <button key={r} type="button" disabled={disabled} onClick={() => setRole(r)}
+                <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => setRole(r)}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
                   {r}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -197,9 +200,9 @@ function ResetModal({ p, kind, onClose, onSubmit }: { p: Profile; kind: "passwor
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-surface rounded-2xl w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
+    <div className="fixed inset-0 z-50 bg-foreground/50 grid place-items-center p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="bg-surface rounded-2xl w-full max-w-md max-h-[85dvh] overflow-y-auto p-6 relative" onClick={(e) => e.stopPropagation()}>
+        <Button type="button" size="icon" variant="ghost" aria-label="Close" onClick={onClose} className="absolute top-3 right-3"><X className="w-4 h-4" /></Button>
         <h3 className="font-bold text-lg mb-4">{title}</h3>
         {children}
       </div>

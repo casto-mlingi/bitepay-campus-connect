@@ -21,9 +21,10 @@ type Tender = "cash" | "mobile";
 function POS() {
   const { currentUser, sessionReady, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
-    waiterTablesEnabled, waiterForTable } = useStore();
+    waiterTablesEnabled, waiterForTable, can } = useStore();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode>("wallet");
+  const [selectedMode, setMode] = useState<Mode>("wallet");
+  const mode = can("pos.wallet") ? selectedMode : "cash";
   const [query, setQuery] = useState("");
   const [customer, setCustomer] = useState<Profile | null>(null);
   const [showScanner, setShowScanner] = useState(false);
@@ -97,7 +98,7 @@ function POS() {
   };
 
   const doWalletSale = () => {
-    if (!freshCustomer) return;
+    if (!can("pos.wallet") || !freshCustomer) return;
     if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
@@ -245,10 +246,10 @@ function POS() {
           <h2 className="font-bold text-lg">Current Receipt</h2>
 
           <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
-            <button onClick={() => setMode("wallet")}
+            {can("pos.wallet") && <Button variant="ghost" onClick={() => setMode("wallet")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "wallet" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
               <Wallet className="w-4 h-4" /> Wallet Customer
-            </button>
+            </Button>}
             <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
               <Banknote className="w-4 h-4" /> Walk-in
@@ -460,7 +461,7 @@ function POS() {
             </div>
           )}
 
-          {mode === "wallet" && (
+          {mode === "wallet" && can("customers.topup") && (
             <div className="mt-5 border-t pt-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Accept Top-Up</div>
               <TenderPicker tender={topupTender} onChange={setTopupTender} />

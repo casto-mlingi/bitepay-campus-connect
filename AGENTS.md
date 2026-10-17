@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Shared cooked-stock balances are derived from immutable per-order usage rows so offline device merges preserve every deduction.
+- Staff permissions and PIN requirements live in the shared staff-rules module; forms and store actions use it so waiter restrictions remain consistent.
