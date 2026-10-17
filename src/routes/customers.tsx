@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, ShieldAlert, RotateCcw, UserPlus, Wallet, ArrowUpCircle, X, QrCode, Printer, Users, TrendingUp, CheckCircle2, Phone, KeyRound, Hash, Inbox, Clock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useStore, formatTZS, type Profile, type TopUpRequest } from "@/lib/store";
+import { AccessDenied } from "@/components/access-denied";
 import { StaffShell } from "@/components/staff-shell";
 import { ListFilter, useListFilter } from "@/components/list-filter";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/customers")({
 
 function Customers() {
   const {
-    currentUser, sessionReady, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
+    currentUser, sessionReady, can, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
     resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf,
   } = useStore();
   const navigate = useNavigate();
@@ -71,7 +72,7 @@ function Customers() {
 
   // Only supervisors/owners may reveal a customer's wallet QR, and only after
   // re-entering their staff PIN. Cashiers never see the QR.
-  const canViewQR = (currentUser?.staff_role ?? "cashier") !== "cashier";
+  const canViewQR = currentUser?.staff_role === "supervisor" || currentUser?.staff_role === "owner";
   const openQR = (c: Profile) => {
     if (!canViewQR) { showToast("Only a supervisor or owner can view a customer's QR"); return; }
     requestPin("Enter your staff PIN to view the customer QR", (pin) => {
@@ -103,6 +104,7 @@ function Customers() {
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
+  if (!can("customers.view")) return <StaffShell><AccessDenied feature="Customer wallets" /></StaffShell>;
 
 
   return (
