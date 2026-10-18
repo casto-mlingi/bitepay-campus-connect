@@ -2,6 +2,8 @@ import type { Order } from "./store";
 import { formatTZS } from "./store";
 
 export type ReceiptExtras = {
+  bill?: boolean;
+  businessName?: string;
   paymentMode?: "wallet" | "cash";
   cashReceived?: number;
   change?: number;
@@ -12,16 +14,18 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
   const line = "--------------------------------";
   const date = new Date(order.created_at).toLocaleString();
   const lines: string[] = [];
-  lines.push("           BitePay");
-  lines.push("   College Canteen & Hotel");
+  lines.push(extras.businessName ?? "           BitePay");
+  lines.push(extras.bill ? "       BILL — NOT PAID" : "        PAYMENT RECEIPT");
   lines.push(line);
   lines.push(`Receipt : ${order.receipt_no ?? order.id}`);
   lines.push(`Order   : ${order.id}`);
   lines.push(`Date    : ${date}`);
   lines.push(`Customer: ${order.customer_name}`);
+  if (order.table_no) lines.push(`Table   : ${order.table_no}`);
+  if (order.kitchen_note) lines.push(`Notes   : ${order.kitchen_note}`);
   if (extras.cashierName) lines.push(`Cashier : ${extras.cashierName}`);
   const tenderLabel = order.tender === "mobile" ? "MOBILE MONEY" : (extras.paymentMode ?? "wallet").toUpperCase();
-  lines.push(`Payment : ${tenderLabel}`);
+  lines.push(`Payment : ${extras.bill ? "AWAITING PAYMENT" : tenderLabel}`);
   lines.push(line);
   lines.push("Item                 Qty   Amount");
   order.items.forEach((i) => {
@@ -74,4 +78,10 @@ export function printReceipt(order: Order, extras: ReceiptExtras = {}) {
   w.document.close();
   w.focus();
   setTimeout(() => { w.print(); }, 250);
+}
+
+/** Prints a quotation only: never creates an order, debits a wallet or consumes stock. */
+export function printBill(input: { items: Order["items"]; customerName?: string; tableNo?: string; kitchenNote?: string; businessName?: string }) {
+  const bill: Order = { id: "BILL", store_id: "", customer_id: "walkin", customer_name: input.customerName || "Walk-in", items: input.items, total_amount: input.items.reduce((n, i) => n + i.price * i.qty, 0), status: "new", delivery_type: "pickup", payment_status: "unpaid", created_at: Date.now(), table_no: input.tableNo, kitchen_note: input.kitchenNote };
+  printReceipt(bill, { bill: true, businessName: input.businessName });
 }

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelcomSettingsCard } from "@/components/selcom-settings-card";
+import { BUSINESS_LABELS, type BusinessType } from "@/lib/business-rules";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 export const Route = createFileRoute("/settings")({
@@ -45,6 +47,7 @@ function SettingsPage() {
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
+  const [businessType, setBusinessType] = useState<BusinessType>(store?.business_type ?? "canteen");
 
   useEffect(() => {
     if (!store) return;
@@ -54,6 +57,7 @@ function SettingsPage() {
     setCommissionRate(store.commission_rate ?? 0);
     setWaiterTables(store.enable_waiter_tables ?? false);
     setDeliveryFee(store.delivery_fee ?? 0);
+    setBusinessType(store.business_type ?? "canteen");
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -61,7 +65,7 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
+    updateStore({ business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -127,6 +131,12 @@ function SettingsPage() {
       <form onSubmit={save} className="max-w-2xl bg-surface border rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-2 mb-1"><StoreIcon className="w-5 h-5 text-primary" /><h2 className="font-bold">Profile</h2></div>
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
+        <Row label="Business type">
+          <Select value={businessType} onValueChange={(v) => setBusinessType(v as BusinessType)}>
+            <SelectTrigger aria-label="Business type"><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(BUSINESS_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+          </Select>
+        </Row>
         <Row label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Row>
         <Row label="Contact phone"><Input value={contact} onChange={(e) => setContact(e.target.value)} /></Row>
         <div className="grid grid-cols-2 gap-3">
