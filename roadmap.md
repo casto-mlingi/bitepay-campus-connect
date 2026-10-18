@@ -1,9 +1,9 @@
 # Roadmap
 
 ## Team and waiter access (Oct 17)
-- [ ] Fix team creation and show failed submissions inside the form.
-- [ ] Allow waiter creation and sales without a staff PIN; deny wallets and top-ups.
-- [ ] Test owner creation flow and waiter restrictions; suggest further waiter features.
+- [x] Fix team creation and show failed submissions inside the form.
+- [x] Allow waiter creation and sales without a staff PIN; deny wallets and top-ups.
+- [x] Test isolated owner creation flow and waiter restrictions; suggest table service, kitchen notes and ready-order alerts (live cross-device verification not performed).
 
 - [x] Finish delivery pricing, saved addresses, staff delivery details, notification text, and automatic sync recovery.
 - [x] Inspect current inventory, finished-goods batch, recipe, and POS deduction flows.
