@@ -7,8 +7,9 @@ describe("waiter access", () => {
     assert.equal(requiresStaffPin("waiter"), false);
     assert.equal(validateStaffInput({ full_name: "Test waiter", phone: "0700000001", password: "test-pass", role: "waiter" }), null);
   });
-  test("waiters can sell without wallet or top-up access", () => {
+  test("waiters can sell with QR-only wallet access and no top-ups or wallet browsing", () => {
     assert.ok(PERMISSIONS.waiter.includes("pos.sell"));
+    assert.ok(PERMISSIONS.waiter.includes("pos.wallet_qr"));
     assert.ok(!PERMISSIONS.waiter.includes("pos.wallet"));
     assert.ok(!PERMISSIONS.waiter.includes("customers.view"));
     assert.ok(!PERMISSIONS.waiter.includes("customers.topup"));

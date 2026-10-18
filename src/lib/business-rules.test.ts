@@ -1,0 +1,16 @@
+import { describe, it } from "node:test";
+import { strict as assert } from "node:assert";
+import { canApproveRefund, hasTableService, isBeverage, validScanGrant, type ScanGrant } from "./business-rules";
+describe("business and waiter payment rules", () => {
+  it("bar supports food and beverage categories", () => { assert.equal(isBeverage("Beer"), true); assert.equal(isBeverage("Food"), false); });
+  it("bar, hotel and restaurant activate table service without changing canteen defaults", () => {
+    assert.equal(hasTableService("bar"), true); assert.equal(hasTableService("hotel"), true); assert.equal(hasTableService("restaurant"), true); assert.equal(hasTableService("canteen"), false);
+  });
+  it("only managers approve refunds", () => { assert.equal(canApproveRefund("waiter"), false); assert.equal(canApproveRefund("cashier"), false); assert.equal(canApproveRefund("owner"), true); assert.equal(canApproveRefund("supervisor"), true); });
+  const grant: ScanGrant = { customerId: "c", staffId: "w", storeId: "s", expiresAt: 200, pinVerified: true };
+  it("waiter wallet payments require a scanned customer grant", () => { assert.equal(validScanGrant(undefined, "c", "w", "s", 100), false); assert.equal(validScanGrant(grant, "c", "w", "s", 100), true); });
+  it("scans cannot authorize a different customer or staff member or store", () => {
+    assert.equal(validScanGrant(grant, "other", "w", "s", 100), false); assert.equal(validScanGrant(grant, "c", "other", "s", 100), false); assert.equal(validScanGrant(grant, "c", "w", "other", 100), false);
+  });
+  it("expired scans or scans without the customer's PIN approval are denied", () => { assert.equal(validScanGrant(grant, "c", "w", "s", 200), false); assert.equal(validScanGrant({ ...grant, pinVerified: false }, "c", "w", "s", 100), false); });
+});
