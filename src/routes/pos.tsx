@@ -5,8 +5,9 @@ import { useStore, formatTZS, type Product, type Profile, type Order } from "@/l
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { downloadReceipt, printReceipt, type ReceiptExtras } from "@/lib/receipt";
+import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
+import { isBeverage } from "@/lib/business-rules";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/pos")({
@@ -21,10 +22,12 @@ type Tender = "cash" | "mobile";
 function POS() {
   const { currentUser, sessionReady, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
-    waiterTablesEnabled, waiterForTable, can } = useStore();
+    waiterTablesEnabled, waiterForTable, can, store, scanWalletCustomer, requestRefund, tableAssignments } = useStore();
   const navigate = useNavigate();
   const [selectedMode, setMode] = useState<Mode>("wallet");
-  const mode = can("pos.wallet") ? selectedMode : "cash";
+  const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
+  const walletAllowed = can("pos.wallet") || qrOnly;
+  const mode = walletAllowed ? selectedMode : "cash";
   const [query, setQuery] = useState("");
   const [customer, setCustomer] = useState<Profile | null>(null);
   const [showScanner, setShowScanner] = useState(false);
@@ -39,6 +42,9 @@ function POS() {
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
   const [mobileRef, setMobileRef] = useState<string>("");
+  const [kitchenNote, setKitchenNote] = useState("");
+  const [prepare, setPrepare] = useState(false);
+  const [productKind, setProductKind] = useState("all");
   const [tableNo, setTableNo] = useState<string>("");
   const [toast, setToast] = useState<string>("");
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
@@ -51,7 +57,7 @@ function POS() {
   const freshCustomer = customer ? profiles.find((p) => p.id === customer.id) ?? null : null;
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
-  const filtered = category === "All" ? products : products.filter((p) => p.category === category);
+  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")));
   const total = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
   const change = tender === "mobile" ? 0 : Math.max(0, cashReceived - total);
 
@@ -75,13 +81,13 @@ function POS() {
 
   const pickCustomer = (c: Profile) => {
     setQuery("");
-    if (c.wallet_pin && !walletUnlocked.includes(c.id)) { setPinCustomer(c); return; }
+    if (c.wallet_pin && (qrOnly || !walletUnlocked.includes(c.id))) { setPinCustomer(c); return; }
     setCustomer(c);
   };
 
   const onScan = (text: string) => {
     setShowScanner(false);
-    const c = findCustomer(text) ?? profiles.find((p) => p.role === "customer" && p.id === text) ?? null;
+    const c = qrOnly ? scanWalletCustomer(text) : findCustomer(text) ?? profiles.find((p) => p.role === "customer" && p.id === text) ?? null;
     if (c) { pickCustomer(c); showToast(`Loaded ${c.full_name}`); }
     else showToast("QR did not match a customer");
   };
@@ -98,22 +104,24 @@ function POS() {
   };
 
   const doWalletSale = () => {
-    if (!can("pos.wallet") || !freshCustomer) return;
+    if (!walletAllowed || !freshCustomer || !lines.length) return;
+    if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
     if (!isOnline) {
-      enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: mobileRef });
+      enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setSplitCash(0); setMobileRef("");
       return;
     }
-    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined });
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setSplitCash(0); setMobileRef("");
+    setLines([]); setSplitCash(0); setMobileRef(""); setKitchenNote("");
+    if (qrOnly) { setCustomer(null); setWalletUnlocked([]); }
     showToast(`Sale ${res.order.receipt_no ?? res.order.id} — receipt printed`);
   };
 
@@ -123,17 +131,17 @@ function POS() {
     const effectiveReceived = tender === "mobile" ? total : cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     if (!isOnline) {
-      enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: mobileRef });
+      enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
       return;
     }
-    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined });
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
+    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote("");
     showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${res.order.receipt_no ?? res.order.id}`);
   };
 
@@ -154,6 +162,14 @@ function POS() {
     printReceipt(res.order, { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name });
     setLastReceipt({ order: res.order, extras: { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name } });
     showToast(`Credit note ${res.order.receipt_no ?? res.order.id} issued`);
+  };
+
+  const doRequestRefund = () => {
+    if (!lastReceipt) return;
+    const reason = window.prompt("Reason for refund request?") ?? "";
+    if (!reason.trim()) return;
+    const result = requestRefund(lastReceipt.order.id, reason);
+    showToast(result.ok ? "Refund request sent to manager" : result.reason);
   };
 
   const doSendReceipt = (channel: "sms" | "whatsapp") => {
@@ -208,7 +224,8 @@ function POS() {
       )}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
         <section>
-          <h1 className="text-2xl font-bold">Walk-in POS</h1>
+          <h1 className="text-2xl font-bold">{store?.business_type === "bar" ? "Bar & Food POS" : "Walk-in POS"}</h1>
+          {store?.business_type === "bar" && <div className="mt-3 flex gap-2" role="group" aria-label="Product type">{["all", "food", "beverages"].map((kind) => <Button key={kind} size="sm" variant={productKind === kind ? "default" : "outline"} onClick={() => { setProductKind(kind); setCategory("All"); }}>{kind === "all" ? "All items" : kind === "food" ? "Food" : "Beverages"}</Button>)}</div>}
           <p className="text-muted-foreground text-sm">Tap products to add to receipt</p>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -246,9 +263,9 @@ function POS() {
           <h2 className="font-bold text-lg">Current Receipt</h2>
 
           <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
-            {can("pos.wallet") && <Button variant="ghost" onClick={() => setMode("wallet")}
+            {walletAllowed && <Button variant="ghost" onClick={() => setMode("wallet")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "wallet" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
-              <Wallet className="w-4 h-4" /> Wallet Customer
+              <Wallet className="w-4 h-4" /> {qrOnly ? "QR Payment" : "Wallet Customer"}
             </Button>}
             <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
@@ -260,15 +277,15 @@ function POS() {
             <>
               <div className="mt-3">
                 <div className="flex gap-2">
-                  <div className="relative flex-1">
+                  {!qrOnly && <div className="relative flex-1">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className="pl-9" />
-                  </div>
-                  <Button type="button" variant="outline" onClick={() => setShowScanner(true)} title="Scan QR ID">
-                    <QrCode className="w-4 h-4" />
+                  </div>}
+                  <Button type="button" variant="outline" onClick={() => setShowScanner(true)} title="Scan QR ID" aria-label="Scan customer QR">
+                    <QrCode className="w-4 h-4" />{qrOnly && <span className="ml-2">Scan customer QR</span>}
                   </Button>
                 </div>
-                {suggestions.length > 0 && (
+                {!qrOnly && suggestions.length > 0 && (
                   <ul className="mt-2 border rounded-xl overflow-hidden bg-background shadow-sm max-h-64 overflow-y-auto">
                     {suggestions.map((s) => (
                       <li key={s.id}>
@@ -294,14 +311,14 @@ function POS() {
                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center"><User className="w-5 h-5" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate">{freshCustomer.full_name}</div>
-                      <div className="text-xs text-muted-foreground">{freshCustomer.phone}</div>
+                      {!qrOnly && <div className="text-xs text-muted-foreground">{freshCustomer.phone}</div>}
                     </div>
                     <button onClick={() => { setCustomer(null); setQuery(""); }} className="p-1 hover:bg-background rounded"><X className="w-4 h-4" /></button>
                   </div>
-                  <div className="mt-3 rounded-xl bg-success/10 text-success p-3 flex items-center justify-between">
+                  {!qrOnly && <div className="mt-3 rounded-xl bg-success/10 text-success p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="w-4 h-4" /> Wallet</div>
                     <div className="font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>
-                  </div>
+                  </div>}
                   {walletShort > 0 && lines.length > 0 && (
                     <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
                       <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
@@ -332,7 +349,8 @@ function POS() {
           {waiterTablesEnabled && (
             <label className="block mt-3">
               <span className="text-xs text-muted-foreground">Table number (credits the waiter)</span>
-              <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. T4" className="mt-1" />
+              <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. T4" list="assigned-tables" className="mt-1" />
+              <datalist id="assigned-tables">{tableAssignments.filter((t) => !qrOnly || t.waiter_id === currentUser.id).map((t) => <option key={t.id} value={t.table_no}>{t.section}</option>)}</datalist>
               {tableNo.trim() && (
                 <span className="text-[11px] text-muted-foreground">
                   {waiterForTable(tableNo)?.waiter_name ?? "No waiter assigned to this table yet"}
@@ -342,6 +360,10 @@ function POS() {
           )}
 
 
+          <label className="block mt-3 text-xs text-muted-foreground">Kitchen / bar notes
+            <Input aria-label="Kitchen / bar notes" value={kitchenNote} onChange={(e) => setKitchenNote(e.target.value)} placeholder="No ice, no sugar, food allergies…" className="mt-1" />
+          </label>
+          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send paid order to kitchen / bar</label>
           <div className="mt-4 border-t pt-3">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Items</div>
             {lines.length === 0 ? (
@@ -372,6 +394,7 @@ function POS() {
             <span>Total</span><span>{formatTZS(total)}</span>
           </div>
 
+          <Button variant="outline" disabled={!lines.length} className="w-full mt-3" onClick={() => printBill({ items: lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty })), customerName: freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}><Printer className="w-4 h-4 mr-2" />Print bill · unpaid</Button>
           {mode === "cash" && (
             <div className="mt-3 space-y-2.5">
               <TenderPicker tender={tender} onChange={setTender} />
@@ -454,7 +477,7 @@ function POS() {
                       <RotateCcw className="w-3.5 h-3.5 mr-1" /> Refund
                     </Button>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground self-center">Refund requires supervisor</span>
+                    <Button size="sm" variant="outline" onClick={doRequestRefund}><RotateCcw className="w-3.5 h-3.5 mr-1" />Request refund</Button>
                   )
                 )}
               </div>

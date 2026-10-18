@@ -1,13 +1,13 @@
 export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
 export type Permission =
-  | "pos.sell" | "pos.wallet" | "pos.refund" | "shift.manage"
+  | "pos.sell" | "pos.wallet" | "pos.wallet_qr" | "pos.refund" | "shift.manage"
   | "customers.view" | "customers.topup"
   | "inventory.view" | "inventory.edit"
   | "finance.view" | "finance.edit" | "analytics.view"
   | "team.view" | "team.manage_cashier" | "team.manage_all" | "settings.manage";
 
 export const PERMISSIONS: Record<StaffRole, Permission[]> = {
-  waiter: ["pos.sell", "shift.manage"],
+  waiter: ["pos.sell", "pos.wallet_qr", "shift.manage"],
   cashier: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view"],
   supervisor: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier"],
   owner: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier", "team.manage_all", "settings.manage"],

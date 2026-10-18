@@ -4,6 +4,7 @@ import { Grid2X2, Trash2, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/tables")({
   component: TablesPage,
@@ -31,12 +32,13 @@ function TablesPage() {
   }, [currentUser, navigate]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
-  if (!can("team.view")) return <StaffShell><AccessDenied feature="Tables & sections" /></StaffShell>;
+  if (!can("pos.sell")) return <StaffShell><AccessDenied feature="Tables & sections" /></StaffShell>;
+  const manage = can("team.manage_cashier");
 
   const waiters = profiles.filter((p) => p.role === "staff" && (p.staff_role === "waiter" || p.staff_role === "cashier"));
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2600); };
   const grouped = Object.entries(
-    tableAssignments.reduce<Record<string, typeof tableAssignments>>((acc, t) => {
+    tableAssignments.filter((t) => manage || t.waiter_id === currentUser.id).reduce<Record<string, typeof tableAssignments>>((acc, t) => {
       (acc[t.section] ||= []).push(t);
       return acc;
     }, {}),
@@ -55,7 +57,7 @@ function TablesPage() {
         </div>
       )}
 
-      <section className="bg-surface border rounded-2xl p-4 mb-6 flex flex-wrap items-end gap-3">
+      {manage && <section className="bg-surface border rounded-2xl p-4 mb-6 flex flex-wrap items-end gap-3">
         <label className="text-xs font-semibold text-muted-foreground">
           Section
           <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="Main hall"
@@ -85,7 +87,7 @@ function TablesPage() {
         >
           <Plus className="w-4 h-4" /> Assign
         </button>
-      </section>
+      </section>}
 
       {grouped.length === 0 && (
         <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">No tables assigned yet.</div>
@@ -102,10 +104,10 @@ function TablesPage() {
                     <div className="font-semibold">Table {t.table_no}</div>
                     <div className="text-xs text-muted-foreground">{t.waiter_name}</div>
                   </div>
-                  <button onClick={() => { const r = removeTableAssignment(t.id); flash(r.ok ? "Assignment removed" : r.reason); }}
-                    className="p-2 rounded-lg hover:bg-rose-50 text-rose-600" title="Remove">
+                  {manage && <Button variant="ghost" size="icon" onClick={() => { const r = removeTableAssignment(t.id); flash(r.ok ? "Assignment removed" : r.reason); }}
+                    className="text-destructive" title="Remove">
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>}
                 </li>
               ))}
             </ul>

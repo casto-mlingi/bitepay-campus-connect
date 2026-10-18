@@ -2,6 +2,8 @@ import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { uploadImage } from "@/lib/images.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { hasTableService, canApproveRefund, validScanGrant, type ScanGrant, type BusinessType } from "@/lib/business-rules";
+
 export type Role = "customer" | "staff";
 import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
 export type { StaffRole, Permission } from "@/lib/staff-rules";
@@ -52,6 +54,8 @@ export type Store = {
   owner_user_id?: string; // billing owner — groups stores under one account
   name: string;
 
+  business_type?: BusinessType;
+  updated_at?: number;
   location: string;
   contact_phone: string;
   admin_email?: string; // billing/admin contact — must be unique across stores
@@ -321,6 +325,9 @@ export type Order = {
   waiter_id?: string;
   waiter_name?: string;
   table_no?: string;
+  kitchen_note?: string;
+  updated_at?: number;
+  refund_request?: { reason: string; by_id: string; by_name: string; at: number; status: "pending" | "approved" | "rejected"; reviewed_by?: string; reviewed_at?: number; decision_note?: string };
   /** Where the customer wants the food delivered (delivery orders only). */
   delivery_address?: string;
   delivery_note?: string;
@@ -487,6 +494,9 @@ export type PendingSale = {
   id: string;
   store_id: string;
   queued_at: number;
+  kitchen_note?: string;
+  prepare?: boolean;
+  table_no?: string;
   kind: PendingSaleKind;
   customer_id?: string;
   customer_name?: string;
@@ -621,11 +631,15 @@ type Ctx = {
   /** Customer-set wallet PIN (guards wallet records + QR display + POS wallet charge). */
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   verifyWalletPin: (customerId: string, pin: string) => boolean;
+  scanWalletCustomer: (qr: string) => Profile | null;
+  requestRefund: (orderId: string, reason: string) => Ok | Fail;
+  reviewRefund: (orderId: string, action: "approve" | "reject", note?: string) => Ok | Fail;
+  setKitchenNote: (orderId: string, note: string) => Ok | Fail;
   serviceRate: number;
   /** Flat delivery fee for the active canteen (set by staff in Settings). */
   deliveryFee: number;
-  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
-  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string }) => SaleResult;
+  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean }) => SaleResult;
+  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
@@ -1299,15 +1313,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const attributionFor = useCallback((table_no?: string) => {
     if (!table_no || !currentStoreId) return null;
     const s2 = stores.find((x) => x.id === currentStoreId);
-    if (!s2?.enable_waiter_tables) return null;
+    if (!s2?.enable_waiter_tables && !hasTableService(s2?.business_type)) return null;
     const t = tableAssignments.find((x) => x.store_id === currentStoreId && x.table_no.toLowerCase() === table_no.trim().toLowerCase());
     return t ?? null;
   }, [tableAssignments, currentStoreId, stores]);
 
-  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
-    if (!can("pos.wallet")) return { ok: false, reason: "Wallet payments require a cashier" };
+  const scanGrants = useRef(new Map<string, ScanGrant>());
+
+  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false): SaleResult => {
+    if (!currentStoreId) return { ok: false, reason: "No store context" };
+    if (!can("pos.wallet") && !(can("pos.wallet_qr") && validScanGrant(scanGrants.current.get(customerId), customerId, currentUser?.id ?? "", currentStoreId, Date.now()))) return { ok: false, reason: "Scan the customer QR and authorize this payment first" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+    if (!items.length || total <= 0 || items.some((i) => !Number.isFinite(i.qty) || i.qty <= 0 || !Number.isFinite(i.price) || i.price < 0)) return { ok: false, reason: "Invalid basket" };
     // Cross-canteen: any customer can be served at any canteen. Their wallet at THIS
     // canteen must cover the wallet portion (per-canteen balance).
     const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
@@ -1322,7 +1340,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const loyalty = Math.round(total * LOYALTY_RATE);
     const order: Order = {
       id, store_id: currentStoreId, customer_id: cust.id, customer_name: cust.full_name, items,
-      total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
+      total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, loyalty_earned: loyalty,
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
@@ -1330,6 +1348,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       waiter_id: attributionFor(table_no)?.waiter_id,
       waiter_name: attributionFor(table_no)?.waiter_name,
     };
+    scanGrants.current.delete(customerId);
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId, id);
     setWallet(cust.id, currentStoreId, -walletPart + loyalty);
@@ -1349,7 +1368,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
 
 
-  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string): SaleResult => {
+  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false): SaleResult => {
     if (!can("pos.sell")) return { ok: false, reason: "Not allowed to sell" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -1360,7 +1379,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const receipt_no = nextReceiptNo();
     const order: Order = {
       id, store_id: currentStoreId, customer_id: "walkin", customer_name: customerName, items,
-      total_amount: total, status: "completed", delivery_type: "pickup", payment_status: "paid",
+      total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: tender === "cash" ? cashReceived : total, wallet_paid: 0, tender,
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
@@ -1478,8 +1497,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     updateStore(patch) {
+      if (!can("settings.manage")) return;
       if (!currentStoreId) return;
-      setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, name: (patch.name ?? s.name).trim() || s.name } : s));
+      setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, updated_at: Date.now(), name: (patch.name ?? s.name).trim() || s.name } : s));
     },
     addStaff({ full_name, phone, password, role, staff_pin }) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
@@ -1599,11 +1619,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProfiles((prev) => prev.map((p) => p.id === currentUser.id ? { ...p, wallet_pin: newPin } : p));
       return { ok: true };
     },
+    scanWalletCustomer(qr) {
+      if ((!can("pos.wallet") && !can("pos.wallet_qr")) || !currentUser || !currentStoreId) return null;
+      const c = scopedProfiles.find((p) => p.role === "customer" && !p.disabled && p.id === qr.trim());
+      if (!c) return null;
+      scanGrants.current.set(c.id, { customerId: c.id, staffId: currentUser.id, storeId: currentStoreId, expiresAt: Date.now() + 120000, pinVerified: !c.wallet_pin });
+      return c;
+    },
     verifyWalletPin(customerId, pin) {
       const c = profiles.find((p) => p.id === customerId);
       if (!c) return false;
       if (!c.wallet_pin) return true; // not set yet — no gate
-      return c.wallet_pin === pin;
+      const valid = c.wallet_pin === pin;
+      const grant = scanGrants.current.get(customerId);
+      if (valid && grant) scanGrants.current.set(customerId, { ...grant, pinVerified: true });
+      return valid;
     },
     setStaffPin(currentPin, newPin) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not staff" };
@@ -1717,6 +1747,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     advanceOrder(id) {
+      if (!can("pos.sell")) return { ok: false, reason: "Staff only" };
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       const current = orders.find((o) => o.id === id);
       if (current && current.status === "ready" && current.payment_status === "unpaid" && !current.closed_out) {
@@ -1728,11 +1759,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (o.id !== id) return o;
         const next = flow[o.status];
         if (next === "completed" && o.status !== "completed") becameCompleted = true;
-        return { ...o, status: next };
+        return { ...o, status: next, updated_at: Date.now() };
       }));
       if (becameCompleted) {
         setCustomDishRequests((prev) => prev.map((r) => r.order_id === id && r.status === "in_kitchen"
           ? { ...r, status: "fulfilled", resolved_at: Date.now() } : r));
+      }
+      if (current?.status === "in-progress") {
+        const waiterId = current.waiter_id ?? current.cashier_id;
+        if (waiterId) pushNotification({ store_id: current.store_id, user_id: waiterId, kind: "order", title: "Order ready to serve", body: `${current.customer_name} · ${current.items.map((i) => `${i.qty}× ${i.name}`).join(", ")} · ${current.table_no ? `Table ${current.table_no}` : current.delivery_type}` });
       }
       // Notify the customer at every step — delivery orders get courier wording.
       const target = orders.find((o) => o.id === id);
@@ -1765,13 +1800,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else adjustCash((c) => c + amount);
     },
 
-    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no }) {
-      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no);
+    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no, kitchen_note, prepare }) {
+      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no, kitchen_note, prepare);
     },
-    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no }) {
-      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no);
+    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no, kitchen_note, prepare }) {
+      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no, kitchen_note, prepare);
+    },
+    setKitchenNote(orderId, note) {
+      if (!can("pos.sell")) return { ok: false, reason: "Staff only" };
+      const order = scopedOrders.find((o) => o.id === orderId);
+      if (!order || order.status === "completed") return { ok: false, reason: "Order is not active" };
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, kitchen_note: note.trim(), updated_at: Date.now() } : o));
+      return { ok: true };
+    },
+    requestRefund(orderId, reason) {
+      if (!can("pos.sell") || !currentUser) return { ok: false, reason: "Staff only" };
+      const order = scopedOrders.find((o) => o.id === orderId);
+      if (!order || order.reversed || order.is_reversal || order.payment_status !== "paid") return { ok: false, reason: "This order cannot be refunded" };
+      if (!reason.trim()) return { ok: false, reason: "Enter a refund reason" };
+      if (order.refund_request?.status === "pending") return { ok: false, reason: "Already awaiting manager approval" };
+      const now = Date.now();
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, updated_at: now, refund_request: { reason: reason.trim(), by_id: currentUser.id, by_name: currentUser.full_name, at: now, status: "pending" } } : o));
+      for (const manager of scopedProfiles.filter((p) => p.role === "staff" && canApproveRefund(p.staff_role))) pushNotification({ store_id: order.store_id, user_id: manager.id, kind: "info", title: "Refund approval requested", body: `${currentUser.full_name} · ${order.receipt_no ?? order.id} · ${reason.trim()}` });
+      return { ok: true };
+    },
+    reviewRefund(orderId, action, note) {
+      if (!currentUser || currentUser.role !== "staff" || !canApproveRefund(currentUser.staff_role)) return { ok: false, reason: "Manager approval required" };
+      const order = scopedOrders.find((o) => o.id === orderId);
+      if (!order?.refund_request || order.refund_request.status !== "pending") return { ok: false, reason: "No pending refund request" };
+      if (action === "approve") {
+        const result = valueRef.current.reverseSale(orderId, order.refund_request.reason);
+        if (!result.ok) return result;
+      }
+      const now = Date.now();
+      setOrders((prev) => prev.map((o) => o.id === orderId && o.refund_request ? { ...o, updated_at: now, refund_request: { ...o.refund_request, status: action === "approve" ? "approved" : "rejected", reviewed_by: currentUser.full_name, reviewed_at: now, decision_note: note?.trim() } } : o));
+      pushNotification({ store_id: order.store_id, user_id: order.refund_request.by_id, kind: "info", title: `Refund ${action === "approve" ? "approved" : "rejected"}`, body: `${order.receipt_no ?? order.id} · ${currentUser.full_name}${note ? ` · ${note}` : ""}` });
+      return { ok: true };
     },
     reverseSale(orderId, reason) {
+      if (!currentUser || currentUser.role !== "staff" || !canApproveRefund(currentUser.staff_role)) return { ok: false, reason: "Manager approval required" };
+      if (!currentStoreId || !reason.trim()) return { ok: false, reason: "Store and refund reason required" };
       const original = orders.find((o) => o.id === orderId && o.store_id === currentStoreId);
       if (!original) return { ok: false, reason: "Order not found" };
       if (original.reversed || original.is_reversal) return { ok: false, reason: "Already reversed" };
@@ -1787,11 +1855,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         created_at: Date.now(), status: "completed",
         is_reversal: true, reversal_of: original.id,
       };
-      setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
+      setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true, updated_at: Date.now() } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
       if ((original.wallet_paid ?? 0) > 0 && original.customer_id !== "walkin") {
         const refund = (original.wallet_paid ?? 0) - (original.loyalty_earned ?? 0);
-        setWallet(original.customer_id, currentStoreId!, refund);
-        setTransactions((prev) => [{ id: uid("tr"), store_id: currentStoreId!, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
+        setWallet(original.customer_id, currentStoreId, refund);
+        setTransactions((prev) => [{ id: uid("tr"), store_id: currentStoreId, customer_id: original.customer_id, order_id: id, type: "topup", amount: original.wallet_paid ?? 0, description: `Refund ${original.receipt_no ?? original.id} · ${reason}`, created_at: Date.now() }, ...prev]);
       }
 
       const cashPart = original.cash_paid ?? 0;
@@ -2401,7 +2469,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     // ---- Waiter tables & sections ----
-    waiterTablesEnabled: !!store?.enable_waiter_tables,
+    waiterTablesEnabled: !!store?.enable_waiter_tables || hasTableService(store?.business_type),
     tableAssignments: scopedTables,
     assignTable({ section, table_no, waiter_id }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
@@ -2705,9 +2773,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (const p of [...pendingSales].filter((x) => x.store_id === currentStoreId).reverse()) {
         let res: SaleResult;
         if (p.kind === "wallet" && p.customer_id) {
-          res = _executePosSale(p.customer_id, p.items, p.cash_portion ?? 0, p.tender, p.reference);
+          res = _executePosSale(p.customer_id, p.items, p.cash_portion ?? 0, p.tender, p.reference, p.table_no, p.kitchen_note, p.prepare);
         } else {
-          res = _executeCashSale(p.items, p.cash_received ?? p.items.reduce((s, i) => s + i.price * i.qty, 0), p.customer_name ?? "Walk-in", p.tender, p.reference);
+          res = _executeCashSale(p.items, p.cash_received ?? p.items.reduce((s, i) => s + i.price * i.qty, 0), p.customer_name ?? "Walk-in", p.tender, p.reference, p.table_no, p.kitchen_note, p.prepare);
         }
         if (res.ok) synced++; else { failed++; rem.push(p); }
       }
