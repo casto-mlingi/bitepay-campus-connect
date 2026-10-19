@@ -11,5 +11,7 @@ COPY --from=build /app/.output ./.output
 COPY --from=build /app/package.json ./
 ENV NODE_ENV=production
 ENV PORT=3000
+NV HOST=0.0.0.0
+ENV NITRO_HOST=0.0.0.0
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]
