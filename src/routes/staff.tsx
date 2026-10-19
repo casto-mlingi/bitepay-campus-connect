@@ -127,7 +127,7 @@ function OrderCard({ order, nextLabel, onAdvance }: { order: Order; nextLabel: s
     <div className="bg-background rounded-xl border p-3">
       <div className="flex items-start justify-between">
         <div>
-          <div className="font-bold">{order.id}</div>
+          <div className="font-bold break-words">{order.receipt_no ?? order.id}</div>
           <div className="text-xs text-muted-foreground">{order.customer_name}</div>
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">

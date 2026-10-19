@@ -1,10 +1,10 @@
 # Roadmap
 
 ## Business modes and waiter service (Oct 18)
-- [ ] Add unpaid POS bill printing and additive business-type settings with food/beverage service tools.
-- [ ] Enable single-sale QR-only waiter wallet payments without wallet browsing or top-ups.
-- [ ] Add assigned-table access, preparation notes, ready alerts and manager-approved refund requests with a decision log.
-- [ ] Test business rules and exercise owner/waiter POS flows; report deployment limitations and further suggestions.
+- [x] Add unpaid POS bill printing and additive business-type settings with food/beverage service tools.
+- [x] Enable single-sale QR-only waiter wallet payments without wallet browsing or top-ups.
+- [x] Add assigned-table access, preparation notes, ready alerts and manager-approved refund requests with a decision log.
+- [x] Test rules and isolated owner/waiter POS flows, including actual camera decoding and refund approval. Live cross-device/payment verification requires redeployment and real accounts.
 
 ## Team and waiter access (Oct 17)
 - [x] Fix team creation and show failed submissions inside the form.
