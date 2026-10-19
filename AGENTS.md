@@ -14,3 +14,4 @@
 - Business modes add service tools without removing existing workflows; business-rules centralizes mode and payment/refund checks.
 - Waiter wallet sales require an expiring, one-use in-memory scan grant scoped to customer, staff and store, including customer PIN verification when set; never queue these grants offline.
 - Refund requests and decisions live on their order with updated timestamps for snapshot merging; only manager actions execute reversals.
+- Order identifiers use UUIDs rather than per-session counters so refunds and cross-device orders cannot overwrite original sales.
