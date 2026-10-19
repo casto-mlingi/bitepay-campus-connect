@@ -2,7 +2,7 @@ import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { uploadImage } from "@/lib/images.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { hasTableService, canApproveRefund, validScanGrant, type ScanGrant, type BusinessType } from "@/lib/business-rules";
+import { hasTableService, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
 
 export type Role = "customer" | "staff";
 import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
@@ -813,8 +813,7 @@ const RAW_TEMPLATE: Omit<RawMaterial, "id" | "store_id">[] = [
   { name: "Onions", category: "Vegetables", unit: "kg", stock: 22, avg_cost: 1800, low_threshold: 10 },
 ];
 
-let counter = 1043;
-const nextOrderId = () => `O-${counter++}`;
+const nextOrderId = newOrderId;
 const pad = (n: number, w = 3) => String(n).padStart(w, "0");
 const todayKey = () => {
   const d = new Date();

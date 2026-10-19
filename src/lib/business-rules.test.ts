@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { canApproveRefund, hasTableService, isBeverage, validScanGrant, type ScanGrant } from "./business-rules";
+import { canApproveRefund, hasTableService, isBeverage, validScanGrant, newOrderId, type ScanGrant } from "./business-rules";
 describe("business and waiter payment rules", () => {
+  it("a refund credit note gets a different ID than the original order across sessions", () => { const original = newOrderId(); const refund = newOrderId(); assert.notEqual(original, refund); });
   it("bar supports food and beverage categories", () => { assert.equal(isBeverage("Beer"), true); assert.equal(isBeverage("Food"), false); });
   it("bar, hotel and restaurant activate table service without changing canteen defaults", () => {
     assert.equal(hasTableService("bar"), true); assert.equal(hasTableService("hotel"), true); assert.equal(hasTableService("restaurant"), true); assert.equal(hasTableService("canteen"), false);

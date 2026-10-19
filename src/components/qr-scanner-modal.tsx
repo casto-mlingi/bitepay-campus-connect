@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Camera } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onScan: (text: string) => void }) {
   const containerId = "bitepay-qr-reader";
@@ -12,6 +13,7 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
   useEffect(() => {
     let scanner: any;
     let cancelled = false;
+    stoppedRef.current = false;
 
     // html5-qrcode throws synchronously when the scanner isn't running,
     // so stop() must be wrapped in try/catch, not just .catch().
@@ -29,6 +31,7 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
     (async () => {
       try {
         const mod: any = await import("html5-qrcode");
+        if (cancelled) return;
         const { Html5Qrcode } = mod;
         scanner = new Html5Qrcode(containerId);
         await scanner.start(
@@ -43,7 +46,7 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
             },
           },
           (decoded: string) => {
-            if (stoppedRef.current) return;
+            if (cancelled || stoppedRef.current) return;
             stoppedRef.current = true;
             onScanRef.current(decoded);
             void safeStop(scanner);
@@ -52,6 +55,7 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
         );
         if (cancelled) await safeStop(scanner);
       } catch (e: any) {
+        if (cancelled) return;
         setError(e?.message ?? "Camera unavailable. Grant camera permission or use manual search.");
       }
     })();
@@ -64,11 +68,11 @@ export function QRScannerModal({ onClose, onScan }: { onClose: () => void; onSca
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-foreground/70 grid place-items-center p-4" onClick={onClose}>
       <div className="bg-background rounded-2xl w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold flex items-center gap-2"><Camera className="w-4 h-4 text-primary" /> Scan Customer QR</h3>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+          <Button variant="ghost" size="icon" aria-label="Close QR scanner" onClick={onClose}><X className="w-4 h-4" /></Button>
         </div>
         <div id={containerId} className="w-full aspect-square bg-muted rounded-xl overflow-hidden" />
         {error ? (

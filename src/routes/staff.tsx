@@ -4,6 +4,9 @@ import { Clock, ChefHat, PackageCheck, CheckCircle2, MapPin, ShoppingBag, ArrowR
 import { useStore, formatTZS, type Order, type OrderStatus, type CustomDishRequest } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { ReceivablesCard } from "@/components/receivables-card";
+import { RefundRequests } from "@/components/refund-requests";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/staff")({
   component: StaffDashboard,
@@ -25,11 +28,13 @@ const nextLabel: Record<OrderStatus, string | null> = {
 };
 
 function StaffDashboard() {
-  const { currentUser, sessionReady, orders, advanceOrder } = useStore();
+  const { currentUser, sessionReady, orders, advanceOrder, tableAssignments, waiterTablesEnabled } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const boardRef = useRef<HTMLDivElement>(null);
   const [activeCol, setActiveCol] = useState(0);
+  const [mineOnly, setMineOnly] = useState(false);
+  const visibleOrders = orders.filter((o) => !mineOnly || (o.waiter_id ?? o.cashier_id) === currentUser?.id);
   const jumpTo = (i: number) => {
     const el = boardRef.current?.children[i] as HTMLElement | undefined;
     el?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
@@ -61,6 +66,15 @@ function StaffDashboard() {
 
       <ReceivablesCard />
 
+      {waiterTablesEnabled && <section className="mb-4 border-y py-3">
+        <h2 className="font-semibold mb-2">My assigned tables</h2>
+        <div className="flex gap-2 flex-wrap">{tableAssignments.filter((t) => t.waiter_id === currentUser.id).map((t) => <span key={t.id} className="text-sm bg-muted px-3 py-2 rounded-md">{t.section} · Table {t.table_no}</span>)}</div>
+        {!tableAssignments.some((t) => t.waiter_id === currentUser.id) && <p className="text-sm text-muted-foreground">No assigned tables</p>}
+        <div className="flex gap-2 mt-3"><Button size="sm" variant={mineOnly ? "outline" : "default"} onClick={() => setMineOnly(false)}>All orders</Button><Button size="sm" variant={mineOnly ? "default" : "outline"} onClick={() => setMineOnly(true)}>My orders</Button></div>
+      </section>}
+
+      <RefundRequests />
+
       <CustomDishRequestsPanel />
 
       <div className="md:hidden sticky top-[104px] z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur flex gap-1.5 overflow-x-auto">
@@ -76,7 +90,7 @@ function StaffDashboard() {
         className="-mx-4 px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-4 md:gap-4 md:overflow-visible"
       >
         {columns.map((col) => {
-          const list = orders.filter((o) => o.status === col.key);
+          const list = visibleOrders.filter((o) => o.status === col.key);
           return (
             <div key={col.key} className={`bg-surface rounded-2xl border border-t-4 ${col.accent} flex flex-col shrink-0 w-[88%] snap-start md:w-auto`}>
               <div className="p-4 border-b">
@@ -104,12 +118,16 @@ function StaffDashboard() {
 }
 
 function OrderCard({ order, nextLabel, onAdvance }: { order: Order; nextLabel: string | null; onAdvance: () => void }) {
+  const { setKitchenNote, requestRefund } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState(order.kitchen_note ?? "");
+  const [message, setMessage] = useState("");
   const mins = Math.max(0, Math.round((Date.now() - order.created_at) / 60000));
   return (
     <div className="bg-background rounded-xl border p-3">
       <div className="flex items-start justify-between">
         <div>
-          <div className="font-bold">{order.id}</div>
+          <div className="font-bold break-words">{order.receipt_no ?? order.id}</div>
           <div className="text-xs text-muted-foreground">{order.customer_name}</div>
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -124,6 +142,17 @@ function OrderCard({ order, nextLabel, onAdvance }: { order: Order; nextLabel: s
           </li>
         ))}
       </ul>
+      {order.table_no && <p className="mt-2 text-xs font-semibold text-primary">Table {order.table_no}{order.waiter_name && ` · ${order.waiter_name}`}</p>}
+      {order.kitchen_note && <p className="mt-2 bg-muted rounded-md p-2 text-xs break-words">Kitchen / bar: {order.kitchen_note}</p>}
+      {order.status !== "completed" && <Button size="sm" variant="ghost" onClick={() => { setNote(order.kitchen_note ?? ""); setEditing((v) => !v); }}>Kitchen / bar notes</Button>}
+      {editing && <div className="space-y-2 mt-2"><Input aria-label={`Kitchen note ${order.id}`} value={note} onChange={(e) => setNote(e.target.value)} /><Button size="sm" onClick={() => { const r = setKitchenNote(order.id, note); if (r.ok) setEditing(false); else setMessage(r.reason); }}>Save note</Button></div>}
+      {order.payment_status === "paid" && !order.reversed && !order.is_reversal && !order.refund_request && <Button size="sm" variant="ghost" onClick={() => {
+        const reason = window.prompt("Reason for refund request?") ?? "";
+        if (!reason.trim()) return;
+        const r = requestRefund(order.id, reason);
+        setMessage(r.ok ? "Awaiting manager approval" : r.reason);
+      }}>Request refund</Button>}
+      {message && <p role="status" className="text-xs text-primary mt-2">{message}</p>}
       <div className="mt-3 flex items-center justify-between border-t pt-2">
         <div className="flex items-center gap-1 text-xs">
           {order.delivery_type === "delivery" ? <MapPin className="w-3 h-3 text-primary" /> : <ShoppingBag className="w-3 h-3 text-primary" />}
