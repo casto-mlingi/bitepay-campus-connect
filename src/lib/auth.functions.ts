@@ -149,6 +149,16 @@ export const loginUser = createServerFn({ method: "POST" })
       limit 1
     `;
     const u = rows[0];
+    if (!u) {
+      // Legacy staff/customer records live in the shared snapshot. Verify them
+      // on the server; never trust a browser's localStorage as authorization.
+      const [saved] = await sql`select payload from app_snapshots where key='global'`;
+      const snapshot = saved ? JSON.parse(String(saved.payload)) : null;
+      const p = snapshot?.profiles?.find((p: { phone: string; password?: string; disabled?: boolean }) => p.phone === data.phone && p.password && p.password === data.password && !p.disabled);
+      if (!p) return { ok: false as const, error: "Invalid phone or password" };
+      writeSessionCookie({ uid: p.id, sid: p.store_id ?? null, role: p.role, staffRole: p.staff_role ?? null });
+      return { ok: true as const, user: { id: String(p.id), full_name: String(p.full_name), role: p.role, staff_role: p.staff_role ?? null }, store_id: p.store_id ?? null };
+    }
     if (!u || u.is_disabled || !verifyPassword(data.password, u.password_hash)) {
       // Return a soft failure instead of throwing: the client mirrors local
       // sign-in to the DB and a missing/mismatched row must not surface as a

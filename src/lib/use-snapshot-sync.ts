@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pushSnapshot, pullSnapshot } from "@/lib/sync.functions";
 import { mergeSnapshots } from "@/lib/snapshot-merge";
+import { isLocalSyncHost } from "@/lib/snapshot-safety";
 
 export const SNAPSHOT_KEY = "bitepay.snapshot.v1";
 const DIRTY_KEY = `${SNAPSHOT_KEY}.dirty`;
@@ -72,6 +73,9 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     conflict: null,
   });
   const revisionRef = useRef(0);
+  const baseRevisionRef = useRef(0);
+  const changeRef = useRef(0);
+  const readyRef = useRef(false);
   const dirtyRef = useRef(false);
   const applyRef = useRef(apply);
   applyRef.current = apply;
@@ -105,6 +109,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
 
   const markClean = useCallback((rev: number) => {
     revisionRef.current = rev;
+    baseRevisionRef.current = rev;
     dirtyRef.current = false;
     try {
       localStorage.setItem(`${SNAPSHOT_KEY}.rev`, String(rev));
@@ -116,7 +121,9 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   /** Adopt a payload as the new local truth without re-triggering a push. */
   const adopt = useCallback((payload: string, revision: number) => {
     suppressRef.current = true;
-    applyRef.current(JSON.parse(payload) as T);
+    const parsed = JSON.parse(payload) as T;
+    snapshotRef.current = parsed;
+    applyRef.current(parsed);
     try { localStorage.setItem(SNAPSHOT_KEY, payload); } catch { /* ignore */ }
     markClean(revision);
   }, [markClean]);
@@ -132,14 +139,19 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     }
     const payload = JSON.stringify(merged);
     const revision = remoteRevision + 1;
+    const sentChange = changeRef.current;
+    dirtyRef.current = true;
+    baseRevisionRef.current = remoteRevision;
     suppressRef.current = true;
+    snapshotRef.current = merged;
     applyRef.current(merged);
     try { localStorage.setItem(SNAPSHOT_KEY, payload); } catch { /* ignore */ }
     try {
-      const res = await withTimeout(pushSnapshot({ data: { key, revision, payload } }), "Database upload");
+      const res = await withTimeout(pushSnapshot({ data: { key, revision, baseRevision: remoteRevision, payload } }), "Database upload");
       if (res.ok) {
-        markClean(res.revision ?? revision);
-        setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
+        baseRevisionRef.current = res.revision;
+        if (changeRef.current === sentChange) adopt(res.payload, res.revision);
+        setState((s) => ({ ...s, status: "synced", pendingPush: dirtyRef.current, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
         return;
       }
     } catch (err) {
@@ -150,7 +162,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     revisionRef.current = revision;
     dirtyRef.current = true;
     setState((s) => ({ ...s, status: "pushing", pendingPush: true, revision }));
-  }, [key, markClean, noteFailure]);
+  }, [key, adopt, noteFailure]);
 
   const remotePull = useCallback(async (force = false) => {
     if (activeDbProfile() !== "postgres") return;
@@ -159,8 +171,13 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     setState((s) => ({ ...s, status: "pulling", error: null }));
     try {
       const res = await withTimeout(pullSnapshot({ data: { key } }), "Database refresh");
-      if (res.found && (force || res.revision > revisionRef.current)) {
-        if (dirtyRef.current && !force) {
+      readyRef.current = true;
+      if (res.found && (force || res.revision > baseRevisionRef.current)) {
+        if (dirtyRef.current) {
+          if (isLocalSyncHost(window.location.host)) {
+            // Keep test/offline data local, never publish it during a refresh.
+            return;
+          }
           await mergeAndPublish(res.payload, res.revision);
           return;
         }
@@ -183,6 +200,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
 
   const remotePush = useCallback(async () => {
     if (activeDbProfile() !== "postgres") return;
+    if (!readyRef.current || isLocalSyncHost(window.location.host)) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setState((s) => ({ ...s, status: "offline", pendingPush: true }));
       return;
@@ -193,22 +211,24 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     try {
       const payload = JSON.stringify(snapshotRef.current);
       const revision = revisionRef.current;
-      const res = await withTimeout(pushSnapshot({ data: { key, revision, payload } }), "Database upload");
+      const sentChange = changeRef.current;
+      const res = await withTimeout(pushSnapshot({ data: { key, revision, baseRevision: baseRevisionRef.current, payload } }), "Database upload");
       if (!res.ok && res.stale) {
         // The server holds a newer snapshot — merge both sides, then republish.
         const remote = await withTimeout(pullSnapshot({ data: { key } }), "Database recovery");
         if (remote.found) await mergeAndPublish(remote.payload, remote.revision);
         return;
       }
-      markClean(res.revision ?? revision);
+      baseRevisionRef.current = res.revision;
+      if (changeRef.current === sentChange) adopt(res.payload, res.revision);
       noteSuccess();
-      setState((s) => ({ ...s, status: "synced", pendingPush: false, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
+      setState((s) => ({ ...s, status: "synced", pendingPush: dirtyRef.current, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
     } catch (err) {
       noteFailure(err, true);
     } finally {
       busyRef.current = false;
     }
-  }, [key, markClean, mergeAndPublish, noteFailure, noteSuccess]);
+  }, [key, adopt, mergeAndPublish, noteFailure, noteSuccess]);
 
   /** Retained for API compatibility: merging happens automatically. */
   const resolveConflict = useCallback(async (_choice: "local" | "remote") => {
@@ -225,6 +245,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
         applyRef.current(JSON.parse(raw) as T);
       }
       revisionRef.current = Number(localStorage.getItem(`${SNAPSHOT_KEY}.rev`) ?? 0);
+      baseRevisionRef.current = Number(localStorage.getItem(BASE_KEY) ?? 0);
       dirtyRef.current = localStorage.getItem(DIRTY_KEY) === "1";
     } catch {
       /* corrupt snapshot — start fresh */
@@ -244,6 +265,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       return;
     }
     revisionRef.current += 1;
+    changeRef.current += 1;
     const rev = revisionRef.current;
     dirtyRef.current = true;
     try {
