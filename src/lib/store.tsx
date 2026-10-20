@@ -1,6 +1,7 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { uploadImage } from "@/lib/images.functions";
-import { loginUser, logoutSession } from "@/lib/auth.functions";
+import { loginUser, logoutSession, renewSession } from "@/lib/auth.functions";
+import { saveSessionToken, getSessionToken } from "@/lib/session-token";
 import { savePassword, registerCustomer } from "@/lib/password.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -898,6 +899,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore corrupt storage */ }
     sessionRestored.current = true;
     setRestoreDone(true);
+    // Refresh the 30-day sign-in key on every launch so uploads never lapse.
+    void renewSession().then((r) => {
+      if (r.ok) saveSessionToken(r.token);
+      else if (getSessionToken()) saveSessionToken(null);
+    }).catch(() => { /* offline: keep the saved key */ });
     const t = window.setTimeout(() => setRestoreTimedOut(true), 6000);
     return () => window.clearTimeout(t);
   }, []);
@@ -1678,6 +1684,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async login(phone, password) {
       const result = await loginUser({ data: { phone, password } });
       if (!result.ok) return null;
+      saveSessionToken(result.token);
       let u = profiles.find((p) => p.id === result.user.id);
       if (!u) {
         // Created on another device: fetch the latest records, then continue.
@@ -1708,12 +1715,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentUserId(u.id);
       setSelectedCanteenId(home);
       // Save the account in the database right away so it can sign in anywhere.
-      void registerCustomer({ data: { id: u.id, full_name: name, phone, password, store_id: home } }).catch(() => {});
+      void registerCustomer({ data: { id: u.id, full_name: name, phone, password, store_id: home } }).then((r) => { if (r && "token" in r) saveSessionToken(r.token); }).catch(() => {});
       return u;
     },
 
 
-    logout() { void logoutSession(); setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
+    logout() { saveSessionToken(null); void logoutSession(); setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { registerOwnerAndStore } from "@/lib/auth.functions";
+import { saveSessionToken } from "@/lib/session-token";
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
@@ -83,6 +84,7 @@ function SetupWizard() {
         owner: { full_name: ownerName.trim(), phone: ownerPhone.trim(), password: ownerPassword, staff_pin: ownerPin },
         opening_cash: openingCash, opening_bank: openingBank,
       }});
+      saveSessionToken(canonicalIds.token);
     } catch (err) {
       setSubmitting(false);
       return setError(err instanceof Error && err.message.includes("already exists") ? err.message : "Could not confirm your store. Check your connection and retry with the same details.");
