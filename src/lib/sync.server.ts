@@ -10,6 +10,12 @@ export async function ensureSnapshotTable(sql: Sql): Promise<void> {
       updated_at timestamptz not null default now()
     )
   `;
+  await sql`
+    create table if not exists app_snapshot_versions (
+      id bigserial primary key, key text not null, revision bigint not null,
+      payload text not null, saved_at timestamptz not null default now()
+    )
+  `;
 }
 
 /**

@@ -8,10 +8,13 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getRequest } from "@tanstack/react-start/server";
+import { isLocalSyncHost, scopedSnapshotUpdate } from "@/lib/snapshot-safety";
 
 const PushInput = z.object({
   key: z.string().min(1).max(120),
   revision: z.number().int().nonnegative(),
+  baseRevision: z.number().int().nonnegative(),
   payload: z.string().max(20_000_000),
 });
 type PushInputT = z.infer<typeof PushInput>;
@@ -22,31 +25,30 @@ type PullInputT = z.infer<typeof PullInput>;
 export const pushSnapshot = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown): PushInputT => PushInput.parse(raw))
   .handler(async ({ data }) => {
+    if (isLocalSyncHost(new URL(getRequest().url).host)) throw new Error("Local testing cannot upload to shared customer data");
+    if (data.key !== "global") throw new Error("Invalid sync key");
+    const { readSessionCookie } = await import("@/lib/auth/session.server");
+    const session = readSessionCookie();
+    if (!session) throw new Error("Sign in again before uploading changes");
     const { getSql } = await import("@/lib/db.server");
     const { ensureSnapshotTable, withRetry } = await import("@/lib/sync.server");
     const sql = getSql();
     await ensureSnapshotTable(sql);
 
-    const [row] = await withRetry(() => sql<{ revision: number; updated_at: Date }[]>`
-      insert into app_snapshots (key, revision, payload, updated_at)
-      values (${data.key}, ${data.revision}, ${data.payload}, now())
-      on conflict (key) do update
-        set revision = excluded.revision,
-            payload = excluded.payload,
-            updated_at = now()
-        where app_snapshots.revision <= excluded.revision
-      returning revision, updated_at
-    `);
-
-    if (!row) {
-      // A newer revision already exists on the server — tell the client to pull.
-      const [current] = await sql<{ revision: number; updated_at: Date }[]>`
-        select revision, updated_at from app_snapshots where key = ${data.key}
-      `;
-      return { ok: false as const, stale: true as const, revision: Number(current?.revision ?? 0), updated_at: current?.updated_at?.toISOString() ?? null };
-    }
-
-    return { ok: true as const, stale: false as const, revision: Number(row.revision), updated_at: row.updated_at.toISOString() };
+    return withRetry(() => sql.begin(async (tx) => {
+      const [current] = await tx`select revision, payload, updated_at from app_snapshots where key = ${data.key} for update`;
+      if (!current || Number(current.revision) !== data.baseRevision) return { ok: false as const, stale: true as const, revision: Number(current?.revision ?? 0), updated_at: current?.updated_at?.toISOString() ?? null };
+      const previous = JSON.parse(String(current.payload));
+      const profile = previous.profiles?.find((p: { id: string; disabled?: boolean }) => p.id === session.uid && !p.disabled);
+      if (!profile) throw new Error("Account is unavailable; please sign in again");
+      const storeIds = new Set<string>();
+      if (profile.store_id) storeIds.add(profile.store_id);
+      for (const m of profile.memberships ?? []) storeIds.add(m.store_id);
+      const payload = JSON.stringify(scopedSnapshotUpdate(previous, JSON.parse(data.payload), session.uid, storeIds));
+      const revision = Number(current.revision) + 1;
+      const [row] = await tx`update app_snapshots set revision=${revision}, payload=${payload}, updated_at=now() where key=${data.key} returning updated_at`;
+      return { ok: true as const, stale: false as const, revision, updated_at: row.updated_at.toISOString(), payload };
+    }));
   });
 
 export const pullSnapshot = createServerFn({ method: "POST" })
