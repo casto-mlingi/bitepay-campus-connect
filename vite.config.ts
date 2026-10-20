@@ -39,7 +39,7 @@ export default defineConfig({
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
-          navigateFallback: "/",
+          navigateFallback: null,
           navigateFallbackDenylist: [/^\/~oauth/, /^\/api\//],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
@@ -58,7 +58,8 @@ export default defineConfig({
             {
               urlPattern: ({ request, sameOrigin }) =>
                 sameOrigin &&
-                ["style", "script", "worker", "font", "image"].includes(request.destination),
+                ["style", "script", "worker", "font", "image"].includes(request.destination) &&
+                /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(request.url),
               handler: "CacheFirst",
               options: {
                 cacheName: "bitepay-assets",
