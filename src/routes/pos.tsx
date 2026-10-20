@@ -517,7 +517,7 @@ function POS() {
       </div>
 
       {/* Phone: bottom bar + bill sheet */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t p-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] grid grid-cols-[auto_minmax(0,1fr)] gap-2">
         <Button variant="outline" onClick={() => setShowTabs(true)} className="h-14 px-4 relative">
           <ListOrdered className="w-5 h-5" />
           {openBills.length > 0 && <span className="ml-1 font-bold">{openBills.length}</span>}

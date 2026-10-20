@@ -127,13 +127,15 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
         </div>
       </header>
       <SubscriptionBanner daysLeft={subscriptionDaysLeft()} blocked={isSubscriptionBlocked()} status={store?.subscription.status} />
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-4 md:py-6 pb-24 md:pb-6">{children}</main>
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
-        <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label="Orders" active={active === "orders"} />
-        <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label="Cart" active={active === "pos"} />
-        <BottomLink to="/my-performance" icon={<Activity className="w-5 h-5" />} label="My stats" active={active === "me"} />
-        <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label="Shift" active={active === "shift"} />
-      </nav>
+      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-4 md:py-6 pb-28 md:pb-6">{children}</main>
+      {active !== "pos" && (
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+          <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label="Orders" active={active === "orders"} />
+          <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label="POS" active={false} />
+          <BottomLink to="/my-performance" icon={<Activity className="w-5 h-5" />} label="My stats" active={active === "me"} />
+          <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label="Shift" active={active === "shift"} />
+        </nav>
+      )}
     </div>
   );
 }
