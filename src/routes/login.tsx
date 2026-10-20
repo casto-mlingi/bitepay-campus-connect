@@ -63,12 +63,23 @@ function LoginPage() {
       navigate({ to: customerLanding(u.wallet_balance) });
     } else {
       if (!name || !phone || !password) return setError("All fields required");
+      if (phone.replace(/\D/g, "").length < 9) return setError("Enter a valid WhatsApp number (e.g. 0712 345 678)");
       const targetStore = canteenGroups.length === 1 ? canteenGroups[0].orgId : signupStoreId;
       if (!targetStore) return setError("Choose which store to sign up for");
       const u = signup(name, phone, password, targetStore);
       if (!u) return setError("Phone already registered");
       navigate({ to: customerLanding(u.wallet_balance) });
     }
+  };
+
+  /** Ask the store on WhatsApp for a temporary password (the counter resets it). */
+  const forgotPassword = () => {
+    if (phone.replace(/\D/g, "").length < 9) return setError("Enter your registered WhatsApp number first, then tap Forgot password.");
+    const contact = (store?.contact_phone ?? stores.find((s) => s.contact_phone)?.contact_phone ?? "").replace(/\D/g, "").replace(/^0/, "255");
+    if (!contact) return setError("Store contact not available. Ask the counter to reset your password.");
+    const msg = `Hello, I forgot my BitePay password. Please reset it and send me a temporary password on WhatsApp. My number: ${phone.trim()}`;
+    window.open(`https://wa.me/${contact}?text=${encodeURIComponent(msg)}`, "_blank");
+    setError("");
   };
 
 
@@ -185,8 +196,11 @@ function LoginPage() {
             )}
 
             <div>
-              <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phone number</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" className="mt-1.5 h-12 rounded-xl" />
+              <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{mode === "signup" ? "WhatsApp number" : "Phone number"}</Label>
+              <Input id="phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" className="mt-1.5 h-12 rounded-xl" />
+              {mode === "signup" && tab === "customer" && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">Use a valid WhatsApp number — password resets are sent there.</p>
+              )}
             </div>
             <div>
               <Label htmlFor="pw" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Password</Label>
@@ -196,6 +210,9 @@ function LoginPage() {
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {mode === "login" && (
+                <button type="button" onClick={forgotPassword} className="mt-2 text-xs font-semibold text-primary">Forgot password?</button>
+              )}
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90">

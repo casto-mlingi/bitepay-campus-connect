@@ -243,9 +243,11 @@ function POS() {
                 <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
                   className={`bg-surface border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition active:scale-[0.98] ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
                   {p.image ? (
-                    <img src={p.image} alt={p.name} className="h-20 w-full object-cover rounded-lg mb-2" />
+                    <div className="aspect-square w-full rounded-lg mb-2 bg-muted overflow-hidden grid place-items-center">
+                      <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-contain" />
+                    </div>
                   ) : (
-                    <div className={`h-20 rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-4xl mb-2`}>{p.emoji}</div>
+                    <div className={`aspect-square w-full rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl mb-2`}>{p.emoji}</div>
                   )}
                   <div className="font-semibold text-sm leading-tight">{p.name}</div>
                   <div className="text-xs text-muted-foreground flex items-center justify-between">
