@@ -172,21 +172,17 @@ export const loginUser = createServerFn({ method: "POST" })
       limit 1
     `;
     const u = rows[0];
-    if (!u) {
-      // Legacy staff/customer records live in the shared snapshot. Verify them
-      // on the server; never trust a browser's localStorage as authorization.
+    if (!u || u.is_disabled || !verifyPassword(data.password, u.password_hash)) {
+      // Legacy/owner-managed accounts live in the shared snapshot; a password
+      // set or reset there is authoritative too. Verified on the server only.
+      if (u?.is_disabled) return { ok: false as const, error: "Invalid phone or password" };
       const [saved] = await sql`select payload from app_snapshots where key='global'`;
       const snapshot = saved ? JSON.parse(String(saved.payload)) : null;
-      const p = snapshot?.profiles?.find((p: { phone: string; password?: string; disabled?: boolean }) => p.phone === data.phone && p.password && p.password === data.password && !p.disabled);
+      const digits = (s: string) => String(s ?? "").replace(/\D/g, "");
+      const p = snapshot?.profiles?.find((p: { phone: string; password?: string; disabled?: boolean }) => (p.phone === data.phone || (digits(p.phone).length >= 9 && digits(p.phone) === digits(data.phone))) && p.password && p.password === data.password && !p.disabled);
       if (!p) return { ok: false as const, error: "Invalid phone or password" };
       writeSessionCookie({ uid: p.id, sid: p.store_id ?? null, role: p.role, staffRole: p.staff_role ?? null });
       return { ok: true as const, user: { id: String(p.id), full_name: String(p.full_name), role: p.role, staff_role: p.staff_role ?? null }, store_id: p.store_id ?? null };
-    }
-    if (!u || u.is_disabled || !verifyPassword(data.password, u.password_hash)) {
-      // Return a soft failure instead of throwing: the client mirrors local
-      // sign-in to the DB and a missing/mismatched row must not surface as a
-      // runtime error overlay.
-      return { ok: false as const, error: "Invalid phone or password" };
     }
 
     await sql`update profiles set last_signin_at = now() where id = ${u.id}`;
