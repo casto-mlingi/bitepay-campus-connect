@@ -1,5 +1,10 @@
 # Roadmap
 
+## Store signup and silent offline saving
+- [ ] Fix new-store signup without affecting existing canteens.
+- [ ] Save changes on the device first; automatically retry uploads and downloads after internet returns.
+- [ ] Verify signup and offline/reconnect saving safely without uploading test records to customer data.
+
 ## Current sales and historical recovery
 - [x] Archive current sales, payments, inventory and balances and verify the saved copy.
 - [x] Inspect available snapshot versions, recovery archives and audit evidence; archived sales belong only to quarantined test fixtures.
