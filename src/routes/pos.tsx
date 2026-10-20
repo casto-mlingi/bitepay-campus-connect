@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck } from "lucide-react";
+import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered } from "lucide-react";
 import { useStore, formatTZS, type Product, type Profile, type Order } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ type Tender = "cash" | "mobile";
 function POS() {
   const { currentUser, sessionReady, products, profiles, findCustomer, posSale, posCashSale, topUp, reverseSale, sendReceiptMessage,
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
-    waiterTablesEnabled, waiterForTable, can, store, scanWalletCustomer, requestRefund, tableAssignments } = useStore();
+    waiterTablesEnabled, waiterForTable, can, store, scanWalletCustomer, requestRefund, tableAssignments, openBills, saveBill, closeBill } = useStore();
   const navigate = useNavigate();
   const [selectedMode, setMode] = useState<Mode>("wallet");
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
@@ -48,6 +48,12 @@ function POS() {
   const [tableNo, setTableNo] = useState<string>("");
   const [toast, setToast] = useState<string>("");
   const [lastReceipt, setLastReceipt] = useState<{ order: Order; extras: ReceiptExtras } | null>(null);
+  const [billId, setBillId] = useState<string | null>(null);
+  const [billLabel, setBillLabel] = useState("");
+  const [waiterId, setWaiterId] = useState("");
+  const [showBill, setShowBill] = useState(false);
+  const [showTabs, setShowTabs] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
@@ -57,7 +63,40 @@ function POS() {
   const freshCustomer = customer ? profiles.find((p) => p.id === customer.id) ?? null : null;
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
-  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")));
+  const [itemSearch, setItemSearch] = useState("");
+  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")) && (!itemSearch.trim() || p.name.toLowerCase().includes(itemSearch.trim().toLowerCase())));
+  const isWaiter = currentUser?.staff_role === "waiter";
+  const servers = profiles.filter((p) => p.role === "staff" && !p.disabled);
+  const itemCount = lines.reduce((n, l) => n + l.qty, 0);
+  const toItems = () => lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
+  const resetBill = (orderId?: string) => {
+    if (billId) closeBill(billId, "paid", orderId);
+    setBillId(null); setBillLabel(""); setTableNo(""); setWaiterId(""); setPayOpen(false); setShowBill(false);
+  };
+  const doSaveBill = () => {
+    if (!lines.length) return;
+    const res = saveBill({ id: billId ?? undefined, label: billLabel, table_no: tableNo, waiter_id: waiterId || (isWaiter ? currentUser?.id : waiterForTable(tableNo)?.waiter_id), items: toItems(), kitchen_note: kitchenNote });
+    if (!res.ok) { showToast(res.reason); return; }
+    showToast(`Bill saved · ${res.bill.label}`);
+    setLines([]); setKitchenNote(""); setBillId(null); setBillLabel(""); setTableNo(""); setWaiterId(""); setPayOpen(false); setShowBill(false);
+  };
+  const openSavedBill = (id: string) => {
+    const b = openBills.find((x) => x.id === id);
+    if (!b) return;
+    const next: Line[] = [];
+    for (const it of b.items) {
+      const prod = products.find((p) => p.id === it.product_id) ?? { id: it.product_id, store_id: b.store_id, name: it.name, description: "", price: it.price, category: "", emoji: "🍽️", gradient: "" };
+      next.push({ product: { ...prod, price: it.price }, qty: it.qty });
+    }
+    setLines(next); setBillId(b.id); setBillLabel(b.label); setTableNo(b.table_no ?? ""); setWaiterId(b.waiter_id ?? ""); setKitchenNote(b.kitchen_note ?? "");
+    setShowTabs(false); setShowBill(true);
+  };
+  const cancelSavedBill = (id: string) => {
+    if (!window.confirm("Remove this saved bill? Use this only if the customer left without ordering.")) return;
+    closeBill(id, "cancelled");
+    if (id === billId) { setLines([]); setBillId(null); setBillLabel(""); }
+    showToast("Saved bill removed");
+  };
   const total = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
   const change = tender === "mobile" ? 0 : Math.max(0, cashReceived - total);
 
@@ -115,12 +154,12 @@ function POS() {
       setLines([]); setSplitCash(0); setMobileRef("");
       return;
     }
-    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setSplitCash(0); setMobileRef(""); setKitchenNote("");
+    setLines([]); setSplitCash(0); setMobileRef(""); setKitchenNote(""); resetBill(res.order.id);
     if (qrOnly) { setCustomer(null); setWalletUnlocked([]); }
     showToast(`Sale ${res.order.receipt_no ?? res.order.id} — receipt printed`);
   };
@@ -136,12 +175,12 @@ function POS() {
       setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
       return;
     }
-    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote("");
+    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); resetBill(res.order.id);
     showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${res.order.receipt_no ?? res.order.id}`);
   };
 
@@ -188,325 +227,355 @@ function POS() {
 
   const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
   const canCash = lines.length > 0 && total > 0 && (tender === "mobile" ? mobileRef.trim().length > 0 : cashReceived >= total);
+  const creditedWaiter = waiterId ? servers.find((s) => s.id === waiterId)?.full_name : (tableNo.trim() ? waiterForTable(tableNo)?.waiter_name : undefined);
 
-  return (
-    <StaffShell active="pos">
-      {!activeShift && (
-        <div className="mb-4 rounded-2xl border border-amber-400/60 bg-amber-50 p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <ClipboardCheck className="w-4 h-4" />
-            <span>No shift is open. Sales are disabled until you open one.</span>
-          </div>
-          <Link to="/shift" className="text-sm font-bold text-amber-900 underline">Open shift →</Link>
-        </div>
-      )}
-      {!isOnline && (
-        <div className="mb-4 rounded-2xl border border-red-300 bg-red-50 p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-red-700">
-            <WifiOff className="w-4 h-4" /> You're offline — sales go to the outbox ({pendingSales.length} queued).
-          </div>
-        </div>
-      )}
-      {isOnline && pendingSales.length > 0 && (
-        <div className="mb-4 rounded-2xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-primary">
-            <CloudUpload className="w-4 h-4" /> {pendingSales.length} queued sale{pendingSales.length === 1 ? "" : "s"} ready to sync.
-          </div>
-          <Button size="sm" onClick={doSync}>Sync now</Button>
-        </div>
+  const billPanel = (
+    <div className="flex flex-col gap-4">
+      {/* 1. Who is this bill for */}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-bold text-xl truncate">{billId ? `Bill · ${billLabel}` : "New bill"}</h2>
+        {billId && <span className="shrink-0 text-xs font-bold uppercase bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Saved</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-sm font-medium">Table
+          <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. 4" list="assigned-tables" className="mt-1 h-12 text-base" />
+          <datalist id="assigned-tables">{tableAssignments.filter((t) => !qrOnly || t.waiter_id === currentUser.id).map((t) => <option key={t.id} value={t.table_no}>{t.section}</option>)}</datalist>
+        </label>
+        <label className="block text-sm font-medium">Customer name
+          <Input value={billLabel} onChange={(e) => setBillLabel(e.target.value)} placeholder="Optional" className="mt-1 h-12 text-base" />
+        </label>
+      </div>
+      {!isWaiter && (
+        <label className="block text-sm font-medium">Waiter who served
+          <select value={waiterId} onChange={(e) => setWaiterId(e.target.value)} className="mt-1 w-full h-12 rounded-md border bg-background px-3 text-base">
+            <option value="">{tableNo.trim() && waiterForTable(tableNo) ? `Table waiter · ${waiterForTable(tableNo)?.waiter_name}` : "No waiter (counter sale)"}</option>
+            {servers.map((s) => <option key={s.id} value={s.id}>{s.full_name}{s.staff_role ? ` · ${s.staff_role}` : ""}</option>)}
+          </select>
+        </label>
       )}
 
-      {lines.length > 0 && (
-        <button type="button" onClick={() => document.getElementById("pos-receipt")?.scrollIntoView({ behavior: "smooth" })}
-          className="lg:hidden fixed bottom-20 inset-x-4 z-40 h-12 rounded-xl bg-primary text-primary-foreground font-semibold shadow-xl flex items-center justify-between px-4">
-          <span>View cart · {lines.reduce((n, l) => n + l.qty, 0)} item(s)</span><span>{formatTZS(total)}</span>
-        </button>
-      )}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
-        <section>
-          <h1 className="text-2xl font-bold">{store?.business_type === "bar" ? "Bar & Food POS" : "Walk-in POS"}</h1>
-          {store?.business_type === "bar" && <div className="mt-3 flex gap-2" role="group" aria-label="Product type">{["all", "food", "beverages"].map((kind) => <Button key={kind} size="sm" variant={productKind === kind ? "default" : "outline"} onClick={() => { setProductKind(kind); setCategory("All"); }}>{kind === "all" ? "All items" : kind === "food" ? "Food" : "Beverages"}</Button>)}</div>}
-          <p className="text-muted-foreground text-sm">Tap products to add to receipt</p>
-
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {categories.map((c) => (
-              <button key={c} onClick={() => setCategory(c)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border ${category === c ? "bg-foreground text-background border-foreground" : "bg-surface border-border"}`}>{c}</button>
+      {/* 2. Items */}
+      <div className="border-t pt-3">
+        {lines.length === 0 ? (
+          <div className="text-base text-muted-foreground py-8 text-center">Tap a drink or dish to add it</div>
+        ) : (
+          <ul className="divide-y max-h-[40vh] overflow-y-auto">
+            {lines.map((l) => (
+              <li key={l.product.id} className="flex items-center gap-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate">{l.product.name}</div>
+                  <div className="text-sm text-muted-foreground">{formatTZS(l.product.price * l.qty)}</div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button aria-label="Less" onClick={() => setLineQty(l.product.id, l.qty - 1)} className="w-11 h-11 rounded-full bg-muted grid place-items-center active:scale-95">
+                    {l.qty === 1 ? <Trash2 className="w-5 h-5 text-destructive" /> : <Minus className="w-5 h-5" />}
+                  </button>
+                  <span className="w-8 text-center font-bold text-lg">{l.qty}</span>
+                  <button aria-label="More" onClick={() => setLineQty(l.product.id, l.qty + 1)} className="w-11 h-11 rounded-full bg-primary/10 text-primary grid place-items-center active:scale-95"><Plus className="w-5 h-5" /></button>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
+        )}
+      </div>
+      <Input aria-label="Kitchen / bar notes" value={kitchenNote} onChange={(e) => setKitchenNote(e.target.value)} placeholder="Note for kitchen / bar (optional)" className="h-11" />
 
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            {filtered.map((p) => {
-              const plates = availablePlates(p.id);
-              const soldOut = plates !== null && plates <= 0;
-              return (
-                <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
-                  className={`bg-surface border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition active:scale-[0.98] ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
-                  {p.image ? (
-                    <div className="aspect-square w-full rounded-lg mb-2 bg-muted overflow-hidden grid place-items-center">
-                      <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-contain" />
-                    </div>
-                  ) : (
-                    <div className={`aspect-square w-full rounded-lg bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl mb-2`}>{p.emoji}</div>
-                  )}
-                  <div className="font-semibold text-sm leading-tight">{p.name}</div>
-                  <div className="text-xs text-muted-foreground flex items-center justify-between">
-                    <span>{p.category}</span>
-                    {plates !== null && <span className={`font-semibold ${soldOut ? "text-red-500" : "text-emerald-600"}`}>{plates} left</span>}
-                  </div>
-                  <div className="mt-1 font-bold text-primary text-sm">{formatTZS(p.price)}</div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+      <div className="flex items-center justify-between text-2xl font-bold border-t pt-3">
+        <span>Total</span><span>{formatTZS(total)}</span>
+      </div>
 
-        <aside id="pos-receipt" className="bg-surface border rounded-2xl p-5 h-fit lg:sticky lg:top-24 scroll-mt-28">
-          <h2 className="font-bold text-lg">Current Receipt</h2>
+      {/* 3. Big simple actions */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button disabled={!lines.length} onClick={doSaveBill} className="h-14 text-base font-bold col-span-2 sm:col-span-1">
+          <Save className="w-5 h-5 mr-2" /> Save bill
+        </Button>
+        <Button disabled={!lines.length} variant="outline" className="h-14 text-base font-semibold col-span-2 sm:col-span-1" onClick={() => printBill({ items: toItems(), customerName: billLabel || freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}>
+          <Printer className="w-5 h-5 mr-2" /> Print bill
+        </Button>
+        <Button disabled={!lines.length} onClick={() => setPayOpen((v) => !v)} className="h-14 text-base font-bold col-span-2 bg-success hover:bg-success/90 text-success-foreground">
+          <Banknote className="w-5 h-5 mr-2" /> {payOpen ? "Hide payment" : `Take payment · ${formatTZS(total)}`}
+        </Button>
+      </div>
+      {creditedWaiter && <p className="text-sm text-muted-foreground -mt-2">Credited to <b>{creditedWaiter}</b></p>}
 
-          <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
-            {walletAllowed && <Button variant="ghost" onClick={() => setMode("wallet")}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "wallet" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
-              <Wallet className="w-4 h-4" /> {qrOnly ? "QR Payment" : "Wallet Customer"}
-            </Button>}
+      {payOpen && lines.length > 0 && (
+        <div className="rounded-2xl border-2 border-success/40 p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
+            {walletAllowed && <button onClick={() => setMode("wallet")}
+              className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+              <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : "Wallet"}
+            </button>}
             <button onClick={() => setMode("cash")}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition ${mode === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
-              <Banknote className="w-4 h-4" /> Walk-in
+              className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "cash" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletAllowed ? "" : "col-span-2"}`}>
+              <Banknote className="w-4 h-4" /> Cash / Lipa Namba
             </button>
           </div>
 
           {mode === "wallet" ? (
             <>
-              <div className="mt-3">
-                <div className="flex gap-2">
-                  {!qrOnly && <div className="relative flex-1">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className="pl-9" />
-                  </div>}
-                  <Button type="button" variant="outline" onClick={() => setShowScanner(true)} title="Scan QR ID" aria-label="Scan customer QR">
-                    <QrCode className="w-4 h-4" />{qrOnly && <span className="ml-2">Scan customer QR</span>}
-                  </Button>
-                </div>
-                {!qrOnly && suggestions.length > 0 && (
-                  <ul className="mt-2 border rounded-xl overflow-hidden bg-background shadow-sm max-h-64 overflow-y-auto">
-                    {suggestions.map((s) => (
-                      <li key={s.id}>
-                        <button onClick={() => pickCustomer(s)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary grid place-items-center text-xs font-bold">
-                            {s.full_name.split(" ").map((x) => x[0]).slice(0, 2).join("")}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm leading-tight truncate">{s.full_name}</div>
-                            <div className="text-xs text-muted-foreground">{s.phone}</div>
-                          </div>
-                          <div className="text-xs font-bold text-success">{formatTZS(s.wallet_balance)}</div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <div className="flex gap-2">
+                {!qrOnly && <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name or phone" className="pl-9 h-11" />
+                </div>}
+                <Button type="button" variant="outline" className={`h-11 ${qrOnly ? "flex-1" : ""}`} onClick={() => setShowScanner(true)} aria-label="Scan customer QR">
+                  <QrCode className="w-5 h-5" />{qrOnly && <span className="ml-2">Scan customer QR</span>}
+                </Button>
               </div>
-
-              {freshCustomer && (
-                <>
-                  <div className="mt-3 rounded-xl border p-3 flex items-center gap-3 bg-muted/40">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center"><User className="w-5 h-5" /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{freshCustomer.full_name}</div>
-                      {!qrOnly && <div className="text-xs text-muted-foreground">{freshCustomer.phone}</div>}
-                    </div>
-                    <button onClick={() => { setCustomer(null); setQuery(""); }} className="p-1 hover:bg-background rounded"><X className="w-4 h-4" /></button>
-                  </div>
-                  {!qrOnly && <div className="mt-3 rounded-xl bg-success/10 text-success p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="w-4 h-4" /> Wallet</div>
-                    <div className="font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>
-                  </div>}
-                  {walletShort > 0 && lines.length > 0 && (
-                    <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
-                      <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
-                        <Banknote className="w-3.5 h-3.5" /> Split payment — wallet short by {formatTZS(walletShort)}
-                      </div>
-                      <label className="block">
-                        <span className="text-xs text-muted-foreground">Extra pay for this sale (TZS)</span>
-                        <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)} className="mt-1 font-semibold bg-background" />
-                      </label>
-                      <TenderPicker tender={tender} onChange={setTender} />
-                      {tender === "mobile" && (
-                        <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba / confirmation code" className="bg-background" />
-                      )}
-                    </div>
-                  )}
-                </>
+              {!qrOnly && suggestions.length > 0 && (
+                <ul className="border rounded-xl overflow-hidden bg-background max-h-56 overflow-y-auto">
+                  {suggestions.map((s) => (
+                    <li key={s.id}>
+                      <button onClick={() => pickCustomer(s)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm truncate">{s.full_name}</div>
+                          <div className="text-xs text-muted-foreground">{s.phone}</div>
+                        </div>
+                        <div className="text-xs font-bold text-success">{formatTZS(s.wallet_balance)}</div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
+              {freshCustomer && (
+                <div className="rounded-xl border p-3 flex items-center gap-3 bg-muted/40">
+                  <User className="w-5 h-5 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate">{freshCustomer.full_name}</div>
+                    {!qrOnly && <div className="text-xs text-success font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>}
+                  </div>
+                  <button onClick={() => { setCustomer(null); setQuery(""); }} className="p-2 hover:bg-background rounded" aria-label="Remove customer"><X className="w-4 h-4" /></button>
+                </div>
+              )}
+              {freshCustomer && walletShort > 0 && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                  <div className="text-sm font-semibold text-amber-800">Wallet short by {formatTZS(walletShort)} — collect the rest</div>
+                  <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)} className="h-11 font-semibold bg-background" />
+                  <TenderPicker tender={tender} onChange={setTender} />
+                  {tender === "mobile" && <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba code" className="h-11 bg-background" />}
+                </div>
+              )}
+              <Button disabled={!canWallet || !activeShift} onClick={doWalletSale} className="w-full h-14 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
+                <CheckCircle2 className="w-5 h-5 mr-2" /> Pay from wallet & print
+              </Button>
             </>
           ) : (
-            <div className="mt-3 space-y-2">
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Customer Name (optional)</span>
-                <Input value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder={tender === "mobile" ? "Mobile Money" : "Walk-in Cash"} className="mt-1" />
-              </label>
-            </div>
-          )}
-
-          {waiterTablesEnabled && (
-            <label className="block mt-3">
-              <span className="text-xs text-muted-foreground">Table number (credits the waiter)</span>
-              <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. T4" list="assigned-tables" className="mt-1" />
-              <datalist id="assigned-tables">{tableAssignments.filter((t) => !qrOnly || t.waiter_id === currentUser.id).map((t) => <option key={t.id} value={t.table_no}>{t.section}</option>)}</datalist>
-              {tableNo.trim() && (
-                <span className="text-[11px] text-muted-foreground">
-                  {waiterForTable(tableNo)?.waiter_name ?? "No waiter assigned to this table yet"}
-                </span>
-              )}
-            </label>
-          )}
-
-
-          <label className="block mt-3 text-xs text-muted-foreground">Kitchen / bar notes
-            <Input aria-label="Kitchen / bar notes" value={kitchenNote} onChange={(e) => setKitchenNote(e.target.value)} placeholder="No ice, no sugar, food allergies…" className="mt-1" />
-          </label>
-          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send paid order to kitchen / bar</label>
-          <div className="mt-4 border-t pt-3">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Items</div>
-            {lines.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-6 text-center">Tap products on the left</div>
-            ) : (
-              <ul className="space-y-1.5 max-h-56 overflow-y-auto">
-                {lines.map((l) => (
-                  <li key={l.product.id} className="flex items-center gap-2 text-sm">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{l.product.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatTZS(l.product.price)}</div>
-                    </div>
-                    <div className="flex items-center gap-1 bg-muted rounded-md">
-                      <button onClick={() => setLineQty(l.product.id, l.qty - 1)} className="w-7 h-7 grid place-items-center">
-                        {l.qty === 1 ? <Trash2 className="w-3.5 h-3.5 text-destructive" /> : <Minus className="w-3.5 h-3.5" />}
-                      </button>
-                      <span className="w-5 text-center font-semibold text-xs">{l.qty}</span>
-                      <button onClick={() => setLineQty(l.product.id, l.qty + 1)} className="w-7 h-7 grid place-items-center"><Plus className="w-3.5 h-3.5" /></button>
-                    </div>
-                    <div className="w-16 text-right font-semibold text-sm">{formatTZS(l.product.price * l.qty)}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-4 border-t pt-3 flex items-center justify-between text-lg font-bold">
-            <span>Total</span><span>{formatTZS(total)}</span>
-          </div>
-
-          <Button variant="outline" disabled={!lines.length} className="w-full mt-3" onClick={() => printBill({ items: lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty })), customerName: freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}><Printer className="w-4 h-4 mr-2" />Print bill · unpaid</Button>
-          {mode === "cash" && (
-            <div className="mt-3 space-y-2.5">
+            <>
               <TenderPicker tender={tender} onChange={setTender} />
               {tender === "cash" ? (
                 <>
-                  <label className="block">
-                    <span className="text-xs text-muted-foreground">Cash Received (TZS)</span>
-                    <Input type="number" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)} placeholder="0" className="mt-1 font-semibold" />
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
+                  <Input type="number" inputMode="numeric" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)} placeholder="Cash received" className="h-12 text-lg font-semibold" />
+                  <div className="grid grid-cols-3 gap-1.5">
                     {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
-                      <button key={v} onClick={() => setCashReceived(v)} className="px-2.5 py-1 rounded-md bg-muted text-xs font-semibold hover:bg-muted/70">
-                        {formatTZS(v)}
-                      </button>
+                      <button key={v} onClick={() => setCashReceived(v)} className="h-11 rounded-lg bg-muted text-sm font-semibold active:scale-95">{v === total ? "Exact" : formatTZS(v)}</button>
                     ))}
                   </div>
-                  <div className={`flex items-center justify-between text-sm rounded-lg p-2.5 ${change >= 0 && cashReceived >= total && total > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                    <span className="font-medium">Change</span>
-                    <span className="font-bold">{formatTZS(change)}</span>
+                  <div className={`flex items-center justify-between rounded-lg p-3 text-lg ${cashReceived >= total ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                    <span className="font-medium">Change</span><span className="font-bold">{formatTZS(change)}</span>
                   </div>
                 </>
               ) : (
-                <>
-                  <label className="block">
-                    <span className="text-xs text-muted-foreground">Lipa Namba / confirmation code</span>
-                    <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="e.g. CFT8H9K12L" className="mt-1 font-mono" />
-                  </label>
-                  <div className="rounded-lg bg-primary/5 text-primary p-2.5 text-xs">
-                    Charge <span className="font-bold">{formatTZS(total)}</span> via mobile money (Lipa Namba). Amount will be credited to the Bank account.
-                  </div>
-                </>
+                <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba confirmation code" className="h-12 font-mono" />
               )}
+              <Button disabled={!canCash || !activeShift} onClick={doCashSale} className="w-full h-14 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
+                <CheckCircle2 className="w-5 h-5 mr-2" /> {tender === "mobile" ? "Confirm Lipa Namba & print" : "Paid in cash & print"}
+              </Button>
+            </>
+          )}
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send to kitchen / bar after payment</label>
+          {!activeShift && <p className="text-sm text-amber-800">Open a shift before taking payment.</p>}
+        </div>
+      )}
+
+      {lastReceipt && (
+        <div className="rounded-xl border bg-muted/30 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold flex-wrap">
+            <Receipt className="w-4 h-4 text-primary" /> Last receipt {lastReceipt.order.receipt_no ?? ""}
+            {lastReceipt.order.is_reversal && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase font-bold">Credit note</span>}
+            {lastReceipt.order.reversed && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded uppercase font-bold">Reversed</span>}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
+            {lastReceipt.order.waiter_name && <span> · {lastReceipt.order.waiter_name}</span>}
+            {lastReceipt.order.reference && <span className="font-mono"> · ref {lastReceipt.order.reference}</span>}
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}><Printer className="w-3.5 h-3.5 mr-1" /> Reprint</Button>
+            <Button size="sm" variant="outline" onClick={() => downloadReceipt(lastReceipt.order, lastReceipt.extras)}><Download className="w-3.5 h-3.5 mr-1" /> Download</Button>
+            {lastReceipt.order.customer_id !== "walkin" && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => doSendReceipt("sms")}><MessageSquare className="w-3.5 h-3.5 mr-1" /> SMS</Button>
+                <Button size="sm" variant="outline" onClick={() => doSendReceipt("whatsapp")}><MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp</Button>
+              </>
+            )}
+            {!lastReceipt.order.is_reversal && !lastReceipt.order.reversed && (
+              hasStaffRole("supervisor")
+                ? <Button size="sm" variant="outline" onClick={doRefund} className="text-destructive"><RotateCcw className="w-3.5 h-3.5 mr-1" /> Refund</Button>
+                : <Button size="sm" variant="outline" onClick={doRequestRefund}><RotateCcw className="w-3.5 h-3.5 mr-1" />Request refund</Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {can("customers.topup") && freshCustomer && !qrOnly && (
+        <details className="rounded-xl border p-3">
+          <summary className="text-sm font-semibold cursor-pointer">Top up {freshCustomer.full_name}'s wallet</summary>
+          <div className="mt-2 space-y-2">
+            <TenderPicker tender={topupTender} onChange={setTopupTender} />
+            {topupTender === "mobile" && <Input value={topupRef} onChange={(e) => setTopupRef(e.target.value)} placeholder="Lipa Namba code" className="font-mono" />}
+            <div className="flex gap-2">
+              <Input type="number" value={topupAmt} onChange={(e) => setTopupAmt(Number(e.target.value) || 0)} className="h-11 font-semibold" />
+              <Button disabled={topupAmt <= 0} onClick={doTopUp} variant="outline" className="h-11"><ArrowUpCircle className="w-4 h-4 mr-1.5" /> Top up</Button>
+            </div>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+
+  return (
+    <StaffShell active="pos">
+      {!activeShift && (
+        <div className="mb-3 rounded-2xl border border-amber-400/60 bg-amber-50 p-3 flex items-center justify-between gap-3 text-amber-900">
+          <span className="flex items-center gap-2 text-sm"><ClipboardCheck className="w-4 h-4 shrink-0" /> No shift open. You can save bills; payments need a shift.</span>
+          <Link to="/shift" className="text-sm font-bold underline shrink-0">Open shift</Link>
+        </div>
+      )}
+      {!isOnline && (
+        <div className="mb-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
+          <WifiOff className="w-4 h-4" /> Offline — everything is saved on this device ({pendingSales.length} waiting).
+        </div>
+      )}
+      {isOnline && pendingSales.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm text-primary"><CloudUpload className="w-4 h-4" /> {pendingSales.length} sale(s) ready to send.</span>
+          <Button size="sm" onClick={doSync}>Send now</Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_400px] gap-4 lg:gap-6 pb-28 md:pb-0">
+        <section className="min-w-0">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder="Find a drink or dish" className="pl-10 h-12 text-base" />
+            </div>
+            <Button variant="outline" onClick={() => setShowTabs(true)} className="h-12 px-4 text-base font-semibold relative">
+              <ListOrdered className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Saved bills</span>
+              {openBills.length > 0 && <span className="ml-1.5 min-w-6 h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold grid place-items-center">{openBills.length}</span>}
+            </Button>
+          </div>
+
+          {store?.business_type === "bar" && (
+            <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Product type">
+              {["all", "beverages", "food"].map((kind) => (
+                <Button key={kind} variant={productKind === kind ? "default" : "outline"} className="h-11 text-base" onClick={() => { setProductKind(kind); setCategory("All"); }}>
+                  {kind === "all" ? "All" : kind === "food" ? "Food" : "Drinks"}
+                </Button>
+              ))}
             </div>
           )}
 
-          {mode === "wallet" ? (
-            <Button disabled={!canWallet || !activeShift} onClick={doWalletSale} className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
-              <Printer className="w-4 h-4 mr-2" /> Deduct Balance & Print
-            </Button>
-          ) : (
-            <Button disabled={!canCash || !activeShift} onClick={doCashSale} className="w-full mt-3 h-11 font-bold bg-success hover:bg-success/90 text-success-foreground disabled:opacity-50">
-              <Printer className="w-4 h-4 mr-2" />
-              {tender === "mobile" ? "Confirm Mobile Payment & Print" : "Collect Cash & Print"}
-            </Button>
-          )}
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {categories.map((c) => (
+              <button key={c} onClick={() => setCategory(c)}
+                className={`h-10 px-4 rounded-full text-sm font-semibold whitespace-nowrap border ${category === c ? "bg-foreground text-background border-foreground" : "bg-surface border-border"}`}>{c}</button>
+            ))}
+          </div>
 
-          {lastReceipt && (
-            <div className="mt-4 rounded-xl border bg-muted/30 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Receipt className="w-4 h-4 text-primary" /> Last receipt: {lastReceipt.order.receipt_no ?? lastReceipt.order.id}
-                {lastReceipt.order.is_reversal && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase font-bold">Credit note</span>}
-                {lastReceipt.order.reversed && <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded uppercase font-bold">Reversed</span>}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {lastReceipt.order.customer_name} · {formatTZS(lastReceipt.order.total_amount)}
-                {lastReceipt.order.tender && <span> · {lastReceipt.order.tender === "mobile" ? "Mobile" : "Cash"}</span>}
-                {lastReceipt.order.reference && <span className="font-mono"> · ref {lastReceipt.order.reference}</span>}
-                {(lastReceipt.order.loyalty_earned ?? 0) > 0 && <span className="text-success"> · +{formatTZS(lastReceipt.order.loyalty_earned ?? 0)} loyalty</span>}
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}>
-                  <Printer className="w-3.5 h-3.5 mr-1" /> Reprint
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => downloadReceipt(lastReceipt.order, lastReceipt.extras)}>
-                  <Download className="w-3.5 h-3.5 mr-1" /> Download
-                </Button>
-                {lastReceipt.order.customer_id !== "walkin" && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => doSendReceipt("sms")}>
-                      <MessageSquare className="w-3.5 h-3.5 mr-1" /> SMS
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => doSendReceipt("whatsapp")}>
-                      <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp
-                    </Button>
-                  </>
-                )}
-                {!lastReceipt.order.is_reversal && !lastReceipt.order.reversed && (
-                  hasStaffRole("supervisor") ? (
-                    <Button size="sm" variant="outline" onClick={doRefund} className="text-red-600 border-red-300 hover:bg-red-50">
-                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Refund
-                    </Button>
+          <div className="mt-3 grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
+            {filtered.map((p) => {
+              const plates = availablePlates(p.id);
+              const soldOut = plates !== null && plates <= 0;
+              const inBill = lines.find((l) => l.product.id === p.id)?.qty ?? 0;
+              return (
+                <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
+                  className={`relative bg-surface border-2 rounded-2xl p-2 text-left transition active:scale-[0.97] ${inBill ? "border-primary" : "border-border hover:border-primary/50"} ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
+                  {inBill > 0 && <span className="absolute top-1 right-1 z-10 min-w-7 h-7 px-1.5 rounded-full bg-primary text-primary-foreground text-sm font-bold grid place-items-center">{inBill}</span>}
+                  {p.image ? (
+                    <div className="aspect-square w-full rounded-xl bg-muted overflow-hidden grid place-items-center">
+                      <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-contain" />
+                    </div>
                   ) : (
-                    <Button size="sm" variant="outline" onClick={doRequestRefund}><RotateCcw className="w-3.5 h-3.5 mr-1" />Request refund</Button>
-                  )
-                )}
-              </div>
-            </div>
-          )}
+                    <div className={`aspect-square w-full rounded-xl bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl`}>{p.emoji}</div>
+                  )}
+                  <div className="mt-2 font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="font-bold text-primary text-sm">{formatTZS(p.price)}</span>
+                    {plates !== null && <span className={`text-xs font-semibold ${soldOut ? "text-destructive" : "text-muted-foreground"}`}>{soldOut ? "Sold out" : `${plates} left`}</span>}
+                  </div>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && <div className="col-span-full text-center text-muted-foreground py-10">No items found</div>}
+          </div>
+        </section>
 
-          {mode === "wallet" && can("customers.topup") && (
-            <div className="mt-5 border-t pt-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Accept Top-Up</div>
-              <TenderPicker tender={topupTender} onChange={setTopupTender} />
-              {topupTender === "mobile" && (
-                <Input value={topupRef} onChange={(e) => setTopupRef(e.target.value)} placeholder="Lipa Namba / confirmation code" className="mt-2 font-mono" />
-              )}
-              <div className="flex gap-2 mt-2">
-                <div className="flex-1 flex items-center border rounded-lg px-3">
-                  <span className="text-xs text-muted-foreground mr-2">TZS</span>
-                  <input type="number" value={topupAmt} onChange={(e) => setTopupAmt(Number(e.target.value) || 0)}
-                    className="flex-1 py-2 bg-transparent outline-none font-semibold text-sm" />
-                </div>
-                <Button disabled={!freshCustomer || topupAmt <= 0} onClick={doTopUp} variant="outline" className="whitespace-nowrap">
-                  <ArrowUpCircle className="w-4 h-4 mr-1.5" /> Top-Up
-                </Button>
-              </div>
-            </div>
-          )}
+        <aside className="hidden md:block bg-surface border rounded-2xl p-4 lg:p-5 h-fit md:sticky md:top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
+          {billPanel}
         </aside>
       </div>
+
+      {/* Phone: bottom bar + bill sheet */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t p-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+        <Button variant="outline" onClick={() => setShowTabs(true)} className="h-14 px-4 relative">
+          <ListOrdered className="w-5 h-5" />
+          {openBills.length > 0 && <span className="ml-1 font-bold">{openBills.length}</span>}
+        </Button>
+        <Button onClick={() => setShowBill(true)} className="h-14 text-base font-bold justify-between px-4">
+          <span>Bill · {itemCount} item{itemCount === 1 ? "" : "s"}</span><span>{formatTZS(total)}</span>
+        </Button>
+      </div>
+      {showBill && (
+        <div className="md:hidden fixed inset-0 z-50 bg-foreground/40" onClick={() => setShowBill(false)}>
+          <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-y-auto rounded-t-3xl bg-surface p-4 pb-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end -mt-1 mb-1">
+              <button onClick={() => setShowBill(false)} className="p-2 rounded-full bg-muted" aria-label="Close bill"><X className="w-5 h-5" /></button>
+            </div>
+            {billPanel}
+          </div>
+        </div>
+      )}
+
+      {/* Saved bills drawer */}
+      {showTabs && (
+        <div className="fixed inset-0 z-50 bg-foreground/40" onClick={() => setShowTabs(false)}>
+          <div className="absolute right-0 inset-y-0 w-full sm:w-[420px] bg-surface p-4 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold">Saved bills ({openBills.length})</h2>
+              <button onClick={() => setShowTabs(false)} className="p-2 rounded-full bg-muted" aria-label="Close"><X className="w-5 h-5" /></button>
+            </div>
+            {lines.length > 0 && !billId && <p className="mb-3 text-sm rounded-lg bg-amber-50 text-amber-900 p-2">You have an unsaved bill. Save it first or it will be replaced when you open another.</p>}
+            {openBills.length === 0 ? (
+              <p className="text-muted-foreground text-center py-10">No saved bills. Add items and tap <b>Save bill</b>.</p>
+            ) : (
+              <ul className="space-y-2">
+                {openBills.map((b) => {
+                  const sum = b.items.reduce((s, i) => s + i.price * i.qty, 0);
+                  const count = b.items.reduce((s, i) => s + i.qty, 0);
+                  const mins = Math.max(0, Math.round((Date.now() - b.created_at) / 60000));
+                  return (
+                    <li key={b.id} className={`rounded-2xl border-2 ${b.id === billId ? "border-primary" : "border-border"}`}>
+                      <button onClick={() => openSavedBill(b.id)} className="w-full text-left p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-lg truncate">{b.label}</span>
+                          <span className="font-bold shrink-0">{formatTZS(sum)}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">{count} item{count === 1 ? "" : "s"} · {b.waiter_name ?? "—"} · {mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h`} ago</div>
+                      </button>
+                      {(!isWaiter || b.created_by_id === currentUser.id) && (
+                        <div className="px-3 pb-2 flex justify-end">
+                          <button onClick={() => cancelSavedBill(b.id)} className="text-xs text-destructive font-semibold">Remove</button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={onScan} />}
 
@@ -527,7 +596,7 @@ function POS() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
           <CheckCircle2 className="w-4 h-4 text-success" /> {toast}
         </div>
       )}
@@ -539,11 +608,11 @@ function TenderPicker({ tender, onChange }: { tender: Tender; onChange: (t: Tend
   return (
     <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg">
       <button type="button" onClick={() => onChange("cash")}
-        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${tender === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
+        className={`flex items-center justify-center gap-1.5 h-11 rounded-md text-sm font-semibold transition ${tender === "cash" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
         <Banknote className="w-3.5 h-3.5" /> Cash
       </button>
       <button type="button" onClick={() => onChange("mobile")}
-        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${tender === "mobile" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
+        className={`flex items-center justify-center gap-1.5 h-11 rounded-md text-sm font-semibold transition ${tender === "mobile" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}>
         <Smartphone className="w-3.5 h-3.5" /> Mobile · Lipa Namba
       </button>
     </div>
