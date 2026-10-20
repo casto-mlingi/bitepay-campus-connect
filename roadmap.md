@@ -1,9 +1,10 @@
 # Roadmap
 
 ## Store signup and silent offline saving
-- [ ] Fix new-store signup without affecting existing canteens.
-- [ ] Save changes on the device first; automatically retry uploads and downloads after internet returns.
-- [ ] Verify signup and offline/reconnect saving safely without uploading test records to customer data.
+- [x] Remove global-owner signup blocking, validate inputs before registration, and commit canonical onboarding records with the account.
+- [x] Save changes on the device before network initialization; retry prerequisite downloads and queued uploads automatically, preserving edits made during uploads and device-local shift state.
+- [x] Verify signup validation, database connectivity, local settings saving and reload, plus preservation tests without uploading fixtures.
+- [ ] Verify completed account creation and reconnect upload on the live site (blocked: requires redeployment and a real signup; localhost uploads remain deliberately prohibited).
 
 ## Current sales and historical recovery
 - [x] Archive current sales, payments, inventory and balances and verify the saved copy.
