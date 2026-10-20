@@ -13,6 +13,17 @@ try {
   assert.ok(archive.n >= 1);
   const [versions] = await sql`select count(*)::int as n from app_snapshot_versions`;
   assert.ok(versions.n >= 1);
+  try {
+    await sql.begin(async (tx) => {
+      await tx`update app_snapshots set revision=revision+1,updated_at=now() where key='global'`;
+      const [savedVersions] = await tx`select count(*)::int as n from app_snapshot_versions`;
+      assert.equal(savedVersions.n, versions.n + 2);
+      throw new Error("Verified valid update and automatic versioning; roll back test");
+    });
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.startsWith("Verified valid update")) throw err;
+    console.log("Verified protection: valid update keeps automatic before/after backups");
+  }
   for (const operation of ["delete-records", "stale-revision", "delete-snapshot"]) {
     let blocked = false;
     try {

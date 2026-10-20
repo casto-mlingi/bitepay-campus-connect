@@ -1,9 +1,10 @@
 # Roadmap
 
 ## Data recovery and protection
-- [ ] Back up shared records and recover evidenced stores and owner accounts.
-- [ ] Block local-test uploads, destructive replacement and concurrent overwrites; retain database versions.
-- [ ] Verify recovered login and data protection with isolated tests.
+- [x] Archive shared records and recover six evidenced stores, owner accounts and treasury balances.
+- [x] Block local-test uploads, destructive replacement and stale revisions; retain database versions.
+- [x] Verify database protections and recovered browser data persistence with isolated tests.
+- [ ] Verify recovered owner sign-in end to end (requires the owner to sign in with their existing password).
 - [ ] Recover unavailable history (requires an older backup or an unaffected device).
 - [ ] Apply updated application protections on the self-hosted site (requires redeployment).
 
