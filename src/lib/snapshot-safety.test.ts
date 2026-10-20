@@ -19,4 +19,15 @@ describe("customer data preservation", () => {
   it("preserves treasury balances when an incoming snapshot omits them", () => {
     assert.throws(() => assertPreservesRecords({ treasuries: { a: { cash: 12000 } } }, { treasuries: {} }));
   });
+  it("customers cannot replace another wallet or treasury", () => {
+    const previous = { profiles: [{ id: "other", store_id: "a", wallet_balance: 12000 }], treasuries: { a: { cash: 25000 } } };
+    const updated = scopedSnapshotUpdate(previous, { profiles: [{ id: "other", store_id: "a", wallet_balance: 0 }], treasuries: { a: { cash: 0 } } }, "customer", new Set(["a"]), "customer");
+    assert.deepEqual(updated, previous);
+  });
+  it("a snapshot cannot promote its own staff identity", () => {
+    const previous = { profiles: [{ id: "cashier", role: "staff", staff_role: "cashier", store_id: "a" }] };
+    const updated = scopedSnapshotUpdate(previous, { profiles: [{ id: "cashier", role: "staff", staff_role: "owner", store_id: "b" }] }, "cashier", new Set(["a"]));
+    assert.equal((updated.profiles as typeof previous.profiles)[0]?.staff_role, "cashier");
+    assert.equal((updated.profiles as typeof previous.profiles)[0]?.store_id, "a");
+  });
 });

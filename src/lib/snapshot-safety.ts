@@ -26,7 +26,7 @@ export function assertPreservesRecords(previous: SnapshotData, next: SnapshotDat
 }
 
 /** Ignore stale copies belonging to other stores; clients cannot replace them. */
-export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotData, userId: string, storeIds: Set<string>): SnapshotData {
+export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotData, userId: string, storeIds: Set<string>, role = "staff"): SnapshotData {
   const result = { ...previous };
   for (const [field, value] of Object.entries(incoming)) {
     if (Array.isArray(value)) {
@@ -35,13 +35,20 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
       for (const row of value) {
         if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error("Invalid snapshot record");
         const existing = rows.get(row.id);
-        const allowed = (r: Record<string, unknown>) => field === "stores" ? storeIds.has(String(r.id))
+        const allowed = (r: Record<string, unknown>) => role === "customer"
+          ? field === "profiles" ? r.id === userId : ["orders", "topUpRequests", "notifications", "payLaterRequests"].includes(field) && (r.customer_id === userId || r.user_id === userId)
+          : field === "stores" ? storeIds.has(String(r.id))
           : field === "profiles" ? r.id === userId || storeIds.has(String(r.store_id))
           : storeIds.has(String(r.store_id));
-        if (allowed(row) && (!existing || allowed(existing))) rows.set(row.id, row);
+        if (allowed(row) && (!existing || allowed(existing))) {
+          const next = field === "profiles" && existing
+            ? { ...row, role: existing.role, store_id: existing.store_id, memberships: existing.memberships, staff_role: existing.staff_role }
+            : row;
+          rows.set(row.id, next);
+        }
       }
       result[field] = [...rows.values()];
-    } else if (field === "treasuries" && value && typeof value === "object") {
+    } else if (field === "treasuries" && role !== "customer" && value && typeof value === "object") {
       const treasury = { ...(previous.treasuries as Record<string, unknown> ?? {}) };
       for (const [id, balance] of Object.entries(value)) if (storeIds.has(id)) treasury[id] = balance;
       result.treasuries = treasury;

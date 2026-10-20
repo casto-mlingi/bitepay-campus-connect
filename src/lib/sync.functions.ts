@@ -48,7 +48,7 @@ export const pushSnapshot = createServerFn({ method: "POST" })
       const storeIds = new Set<string>();
       if (profile.store_id) storeIds.add(profile.store_id);
       for (const m of profile.memberships ?? []) storeIds.add(m.store_id);
-      const payload = JSON.stringify(scopedSnapshotUpdate(previous, JSON.parse(data.payload), session.uid, storeIds));
+      const payload = JSON.stringify(scopedSnapshotUpdate(previous, JSON.parse(data.payload), session.uid, storeIds, session.role));
       const revision = Number(current.revision) + 1;
       const [row] = await tx`update app_snapshots set revision=${revision}, payload=${payload}, updated_at=now() where key=${data.key} returning updated_at`;
       return { ok: true as const, stale: false as const, revision, updated_at: row.updated_at.toISOString(), payload };
