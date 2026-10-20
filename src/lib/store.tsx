@@ -337,6 +337,24 @@ export type Order = {
   delivery_fee?: number;
 };
 
+/** A saved, unpaid bill (open tab) a waiter keeps adding to until the cashier takes payment. */
+export type OpenBill = {
+  id: string;
+  store_id: string;
+  label: string;
+  table_no?: string;
+  waiter_id?: string;
+  waiter_name?: string;
+  items: OrderItem[];
+  kitchen_note?: string;
+  status: "open" | "paid" | "cancelled";
+  order_id?: string;
+  created_at: number;
+  updated_at: number;
+  created_by_id: string;
+  created_by_name: string;
+};
+
 /** A table (inside a section) served by one waiter. */
 export type TableAssignment = {
   id: string;
@@ -641,8 +659,8 @@ type Ctx = {
   serviceRate: number;
   /** Flat delivery fee for the active canteen (set by staff in Settings). */
   deliveryFee: number;
-  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean }) => SaleResult;
-  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean }) => SaleResult;
+  posSale: (input: { customerId: string; items: OrderItem[]; cashPortion?: number; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean; waiter_id?: string }) => SaleResult;
+  posCashSale: (input: { items: OrderItem[]; cashReceived: number; customerName?: string; tender?: "cash" | "mobile"; reference?: string; table_no?: string; kitchen_note?: string; prepare?: boolean; waiter_id?: string }) => SaleResult;
   reverseSale: (orderId: string, reason: string) => SaleResult;
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
@@ -721,6 +739,9 @@ type Ctx = {
   // ---- Waiter tables & sections ----
   waiterTablesEnabled: boolean;
   tableAssignments: TableAssignment[];
+  openBills: OpenBill[];
+  saveBill: (input: { id?: string; label: string; table_no?: string; waiter_id?: string; items: OrderItem[]; kitchen_note?: string }) => { ok: true; bill: OpenBill } | Fail;
+  closeBill: (id: string, status: "paid" | "cancelled", order_id?: string) => Ok | Fail;
   assignTable: (input: { section: string; table_no: string; waiter_id: string }) => Ok | Fail;
   removeTableAssignment: (id: string) => Ok | Fail;
   waiterForTable: (table_no: string) => TableAssignment | null;
@@ -859,6 +880,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [payLaterRequests, setPayLaterRequests] = useState<PayLaterRequest[]>([]);
   const [menuAudits, setMenuAudits] = useState<MenuRequestAudit[]>([]);
   const [tableAssignments, setTableAssignments] = useState<TableAssignment[]>([]);
+  const [openBills, setOpenBills] = useState<OpenBill[]>([]);
   const [commissionPayouts, setCommissionPayouts] = useState<CommissionPayout[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -925,13 +947,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-      tableAssignments, commissionPayouts,
+      tableAssignments, commissionPayouts, openBills,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-     tableAssignments, commissionPayouts,
+     tableAssignments, commissionPayouts, openBills,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -961,6 +983,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.payLaterRequests) setPayLaterRequests(s.payLaterRequests);
     if (s.menuAudits) setMenuAudits(s.menuAudits);
     if (s.tableAssignments) setTableAssignments(s.tableAssignments);
+    if (s.openBills) setOpenBills(s.openBills);
     if (s.commissionPayouts) setCommissionPayouts(s.commissionPayouts);
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
@@ -1329,9 +1352,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return t ?? null;
   }, [tableAssignments, currentStoreId, stores]);
 
+  /** Waiter credited on a sale: an explicit pick (cashier selector / saved bill) wins over the table assignment. */
+  const waiterFor = useCallback((table_no?: string, waiterId?: string) => {
+    const picked = waiterId ? profiles.find((p) => p.id === waiterId && p.role === "staff") : null;
+    if (picked) return { waiter_id: picked.id, waiter_name: picked.full_name };
+    const t = attributionFor(table_no);
+    return { waiter_id: t?.waiter_id, waiter_name: t?.waiter_name };
+  }, [profiles, attributionFor]);
+
   const scanGrants = useRef(new Map<string, ScanGrant>());
 
-  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false): SaleResult => {
+  const _executePosSale = useCallback((customerId: string, items: OrderItem[], cashPortion: number, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false, waiterId?: string): SaleResult => {
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     if (!can("pos.wallet") && !(can("pos.wallet_qr") && validScanGrant(scanGrants.current.get(customerId), customerId, currentUser?.id ?? "", currentStoreId, Date.now()))) return { ok: false, reason: "Scan the customer QR and authorize this payment first" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
@@ -1356,8 +1387,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
       table_no: table_no?.trim() || undefined,
-      waiter_id: attributionFor(table_no)?.waiter_id,
-      waiter_name: attributionFor(table_no)?.waiter_name,
+      ...waiterFor(table_no, waiterId),
     };
     scanGrants.current.delete(customerId);
     setOrders((prev) => [order, ...prev]);
@@ -1379,7 +1409,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
 
 
-  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false): SaleResult => {
+  const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false, waiterId?: string): SaleResult => {
     if (!can("pos.sell")) return { ok: false, reason: "Not allowed to sell" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -1395,8 +1425,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
       table_no: table_no?.trim() || undefined,
-      waiter_id: attributionFor(table_no)?.waiter_id,
-      waiter_name: attributionFor(table_no)?.waiter_name,
+      ...waiterFor(table_no, waiterId),
     };
     setOrders((prev) => [order, ...prev]);
     consumePlates(items, currentStoreId, id);
@@ -1821,11 +1850,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else adjustCash((c) => c + amount);
     },
 
-    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no, kitchen_note, prepare }) {
-      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no, kitchen_note, prepare);
+    posSale({ customerId, items, cashPortion = 0, tender = "cash", reference, table_no, kitchen_note, prepare, waiter_id }) {
+      return _executePosSale(customerId, items, cashPortion, tender, reference, table_no, kitchen_note, prepare, waiter_id);
     },
-    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no, kitchen_note, prepare }) {
-      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no, kitchen_note, prepare);
+    posCashSale({ items, cashReceived, customerName = "Walk-in", tender = "cash", reference, table_no, kitchen_note, prepare, waiter_id }) {
+      return _executeCashSale(items, cashReceived, customerName || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference, table_no, kitchen_note, prepare, waiter_id);
     },
     setKitchenNote(orderId, note) {
       if (!can("pos.sell")) return { ok: false, reason: "Staff only" };
@@ -2490,6 +2519,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     },
 
+    // ---- Saved (open) bills — kept as status rows so device merges never revive closed ones ----
+    openBills: currentStoreId ? openBills.filter((b) => b.store_id === currentStoreId && b.status === "open").sort((a, b) => b.updated_at - a.updated_at) : [],
+    saveBill({ id, label, table_no, waiter_id, items, kitchen_note }) {
+      if (!currentUser || currentUser.role !== "staff" || !can("pos.sell")) return { ok: false, reason: "Staff only" };
+      if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!items.length) return { ok: false, reason: "Add at least one item" };
+      const name = label.trim() || (table_no?.trim() ? `Table ${table_no.trim()}` : "");
+      if (!name) return { ok: false, reason: "Enter a table number or customer name" };
+      const waiter = waiter_id ? scopedProfiles.find((p) => p.id === waiter_id && p.role === "staff") : null;
+      const now = Date.now();
+      const existing = id ? openBills.find((b) => b.id === id && b.status === "open") : undefined;
+      const bill: OpenBill = {
+        id: existing?.id ?? uid("bill"), store_id: currentStoreId, label: name, table_no: table_no?.trim() || undefined,
+        waiter_id: waiter?.id ?? existing?.waiter_id ?? currentUser.id, waiter_name: waiter?.full_name ?? existing?.waiter_name ?? currentUser.full_name,
+        items, kitchen_note: kitchen_note?.trim() || undefined, status: "open",
+        created_at: existing?.created_at ?? now, updated_at: now,
+        created_by_id: existing?.created_by_id ?? currentUser.id, created_by_name: existing?.created_by_name ?? currentUser.full_name,
+      };
+      setOpenBills((prev) => [bill, ...prev.filter((b) => b.id !== bill.id)]);
+      return { ok: true, bill };
+    },
+    closeBill(id, status, order_id) {
+      if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
+      const now = Date.now();
+      setOpenBills((prev) => prev.map((b) => b.id === id ? { ...b, status, order_id, updated_at: now } : b));
+      return { ok: true };
+    },
+
     // ---- Waiter tables & sections ----
     waiterTablesEnabled: !!store?.enable_waiter_tables || hasTableService(store?.business_type),
     tableAssignments: scopedTables,
@@ -2929,7 +2986,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is
