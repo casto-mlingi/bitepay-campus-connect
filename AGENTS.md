@@ -17,4 +17,5 @@
 - Order identifiers use UUIDs rather than per-session counters so refunds and cross-device orders cannot overwrite original sales.
 - Snapshot writes require a verified server session, reject local-development requests, use exact base-revision checks, and retain immutable database versions; this prevents test and stale-device replacement of customer data.
 - Recovery only reconstructs evidenced records and preserves the pre-recovery payload; missing historical transactions must never be fabricated.
+- Operational backups use a verified, repeatable-read internal archive of the current snapshot and requested business tables before any recovery; this protects current records without exposing private data in exports or logs.
 - Owner onboarding persists canonical database IDs before creating local state, so reloads and recovery cannot split one owner into unrelated accounts.
