@@ -791,7 +791,11 @@ type Ctx = {
   isSubscriptionBlocked: () => boolean;
 };
 
-const StoreContext = createContext<Ctx | null>(null);
+// Keep provider/consumer identity stable when this mixed hook/provider module
+// is replaced during preview updates. Never cache user state globally in SSR.
+const StoreContext: ReturnType<typeof createContext<Ctx | null>> =
+  import.meta.hot?.data.bitepayStoreContext ?? createContext<Ctx | null>(null);
+if (import.meta.hot) import.meta.hot.data.bitepayStoreContext = StoreContext;
 
 const PRODUCT_TEMPLATE: Omit<Product, "id" | "store_id">[] = [
   { name: "Chicken Burger", description: "Crispy chicken, lettuce, house sauce", price: 4500, category: "Meals", emoji: "🍔", gradient: "from-orange-400 to-red-500" },

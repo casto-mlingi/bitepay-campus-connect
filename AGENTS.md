@@ -21,3 +21,4 @@
 - Owner onboarding persists canonical database IDs before creating local state, so reloads and recovery cannot split one owner into unrelated accounts.
 - Owner registration commits its visible snapshot records in the same database transaction as the canonical account; interrupted onboarding must not strand an account without a store in the app.
 - Snapshot acknowledgements compare the exact sent payload to current device state, and local hydration never waits for network initialization; this keeps later offline edits queued and prevents upload replies from clearing them.
+- Preserve store context identity in Vite hot-module data during preview edits, never in an SSR global; provider and split-route consumers must keep the same context without sharing user state between requests.
