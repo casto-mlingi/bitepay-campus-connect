@@ -21,7 +21,7 @@ export const Route = createFileRoute("/setup")({
 });
 
 function SetupWizard() {
-  const { hasOwner, completeSetup, stores } = useStore();
+  const { completeSetup, stores, allProfiles, currentUser } = useStore();
   const registerFn = useServerFn(registerOwnerAndStore);
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -46,8 +46,8 @@ function SetupWizard() {
   const [ownerPin, setOwnerPin] = useState("");
 
   useEffect(() => {
-    if (hasOwner) navigate({ to: "/" });
-  }, [hasOwner, navigate]);
+    if (currentUser?.role === "staff") navigate({ to: "/staff" });
+  }, [currentUser, navigate]);
 
   const goStep2 = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,17 +70,22 @@ function SetupWizard() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (ownerName.trim().length < 2 || ownerPhone.trim().length < 4 || ownerPassword.length < 4) return setError("Enter your name, phone and a password of at least 4 characters.");
+    if (!/^\d{4,6}$/.test(ownerPin)) return setError("Staff PIN must be 4–6 digits.");
+    if (allProfiles.some((p) => p.phone.replace(/\D/g, "") === ownerPhone.replace(/\D/g, ""))) return setError("That owner phone is already registered. Sign in instead.");
+    const duplicate = duplicateStoreReason(stores, { contact_phone: contactPhone, admin_email: adminEmail });
+    if (duplicate) return setError(duplicate);
     setSubmitting(true);
     let canonicalIds;
     try {
       canonicalIds = await registerFn({ data: {
-        store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold },
-        owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
+        store: { name: storeName.trim(), location: location.trim(), contact_phone: contactPhone.trim(), admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold },
+        owner: { full_name: ownerName.trim(), phone: ownerPhone.trim(), password: ownerPassword, staff_pin: ownerPin },
         opening_cash: openingCash, opening_bank: openingBank,
       }});
-    } catch {
+    } catch (err) {
       setSubmitting(false);
-      return setError("Your store could not be saved. Please retry; no local account was created.");
+      return setError(err instanceof Error && err.message.includes("already exists") ? err.message : "Could not confirm your store. Check your connection and retry with the same details.");
     }
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },

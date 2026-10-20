@@ -1428,9 +1428,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin ?? "")) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
-      if (profiles.some((p) => normPhone(p.phone) === normPhone(owner.phone))) return { ok: false, reason: "That owner phone is already registered. Sign in instead." };
+      if (!canonicalIds && profiles.some((p) => normPhone(p.phone) === normPhone(owner.phone))) return { ok: false, reason: "That owner phone is already registered. Sign in instead." };
       const dup = duplicateStoreReason(stores, s);
-      if (dup) return { ok: false, reason: dup };
+      if (dup && !canonicalIds) return { ok: false, reason: dup };
 
       const now = Date.now();
       const trialDays = 14;
@@ -1447,10 +1447,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         memberships: [{ store_id: storeId, staff_role: "owner" }],
       };
       // New stores start empty — no seeded products, raw materials, customers, or transactions.
-      setStores((prev) => [...prev, newStore]);
-      setProfiles((prev) => [...prev, ownerProfile]);
+      setStores((prev) => prev.some((s) => s.id === storeId) ? prev : [...prev, newStore]);
+      setProfiles((prev) => prev.some((p) => p.id === ownerId) ? prev : [...prev, ownerProfile]);
 
-      setTreasuries((prev) => ({ ...prev, [storeId]: { cash: opening_cash, bank: opening_bank } }));
+      setTreasuries((prev) => ({ [storeId]: { cash: opening_cash, bank: opening_bank }, ...prev }));
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },

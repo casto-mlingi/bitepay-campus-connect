@@ -20,6 +20,7 @@ const StoreInput = z.object({
   name: z.string().min(2).max(80),
   location: z.string().max(120).optional().default(""),
   contact_phone: z.string().min(4).max(40),
+  admin_email: z.string().email().optional(),
   currency: z.string().min(1).max(8).default("TZS"),
   low_balance_threshold: z.number().nonnegative().default(2000),
 });
@@ -51,16 +52,29 @@ export const registerOwnerAndStore = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown): RegisterInputT => RegisterInput.parse(raw))
   .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db.server");
-    const { hashPassword, hashPin } = await import("@/lib/auth/password.server");
-    const { writeSessionCookie } = await import("@/lib/auth/session.server");
+    const { hashPassword, hashPin, verifyPassword } = await import("@/lib/auth/password.server");
+    const { writeSessionCookie, signSession } = await import("@/lib/auth/session.server");
+    const { addCanonicalOnboarding } = await import("@/lib/onboarding");
+    const { ensureSnapshotTable } = await import("@/lib/sync.server");
 
     const sql = getSql();
+    // Validate session signing before any account is committed.
+    signSession({ uid: "configuration-check", sid: null, role: "staff" });
+    await ensureSnapshotTable(sql);
 
     // Uniqueness check outside the tx for a friendlier error.
-    const existing = await sql<{ id: string }[]>`
-      select id from profiles where phone = ${data.owner.phone} limit 1
+    const existing = await sql<{ id: string; home_store_id: string; password_hash: string; staff_role: string; is_disabled: boolean }[]>`
+      select id,home_store_id,password_hash,staff_role,is_disabled from profiles where phone = ${data.owner.phone} limit 1
     `;
-    if (existing.length) throw new Error("An account with that phone already exists");
+    const registered = existing[0];
+    if (registered) {
+      const [store] = await sql`select name,contact_phone from stores where id=${registered.home_store_id}`;
+      if (!registered.is_disabled && registered.staff_role === "owner" && store?.name === data.store.name && store?.contact_phone === data.store.contact_phone && verifyPassword(data.owner.password, registered.password_hash)) {
+        writeSessionCookie({ uid: registered.id, sid: registered.home_store_id, role: "staff", staffRole: "owner" });
+        return { ok: true as const, storeId: registered.home_store_id, ownerId: registered.id };
+      }
+      throw new Error("An account with that phone already exists. Sign in instead.");
+    }
 
     const passwordHash = hashPassword(data.owner.password);
     const pinHash = hashPin(data.owner.staff_pin);
@@ -78,13 +92,14 @@ export const registerOwnerAndStore = createServerFn({ method: "POST" })
 
     const result = await sql.begin(async (tx) => {
       const [store] = await tx<{ id: string }[]>`
-        insert into stores (name, slug, location, contact_phone, currency_label, low_balance_nudge)
+        insert into stores (name, slug, location, contact_phone, currency_label, low_balance_nudge, features)
         values (${data.store.name}, ${slug}, ${data.store.location || null},
                 ${data.store.contact_phone}, ${data.store.currency},
-                ${data.store.low_balance_threshold})
+                ${data.store.low_balance_threshold}, ${JSON.stringify({ admin_email: data.store.admin_email })}::jsonb)
         returning id
       `;
 
+      if (!store) throw new Error("Store creation failed");
       const trialEnds = new Date(Date.now() + 14 * 86400 * 1000);
       await tx`
         insert into subscriptions (store_id, plan, status, trial_ends_at, current_period_end)
@@ -99,17 +114,25 @@ export const registerOwnerAndStore = createServerFn({ method: "POST" })
         returning id
       `;
 
+      if (!owner) throw new Error("Owner creation failed");
       await tx`
         insert into treasury_balances (store_id, cash, bank)
         values (${store.id}, ${data.opening_cash}, ${data.opening_bank})
       `;
 
       // Seed default chart of accounts if the DB provides it.
-      try {
+      const [seeding] = await tx`select to_regprocedure('seed_default_accounts(uuid)') is not null as available`;
+      if (seeding?.available) {
         await tx`select seed_default_accounts(${store.id}::uuid)`;
-      } catch {
-        /* function may not exist in some environments; ignore */
       }
+
+      // Registration and its visible records succeed or roll back together.
+      await tx`select pg_advisory_xact_lock(179237)`;
+      const [saved] = await tx`select revision,payload from app_snapshots where key='global' for update`;
+      const previous = saved ? JSON.parse(String(saved.payload)) : {};
+      const payload = JSON.stringify(addCanonicalOnboarding(previous, data, { storeId: store.id, ownerId: owner.id }, Date.now()));
+      if (saved) await tx`update app_snapshots set payload=${payload},revision=${Number(saved.revision) + 1},updated_at=now() where key='global'`;
+      else await tx`insert into app_snapshots(key,revision,payload) values ('global',1,${payload})`;
 
       return { storeId: store.id, ownerId: owner.id };
     });
