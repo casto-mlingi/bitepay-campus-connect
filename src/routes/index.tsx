@@ -42,8 +42,8 @@ function HomePage() {
           </nav>
           <div className="flex items-center gap-2">
             <Link to="/login" className="text-sm font-semibold px-3 py-2 rounded-lg hover:bg-muted">Sign in</Link>
-            <Link to={hasOwner ? "/login" : "/setup"} className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">
-              {hasOwner ? "Get started" : "Create store"}
+            <Link to="/setup" className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">
+              Create store
             </Link>
           </div>
         </div>
