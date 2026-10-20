@@ -1406,7 +1406,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletPart + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor]);
+  }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor, waiterFor]);
 
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false, waiterId?: string): SaleResult => {
@@ -1432,7 +1432,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (tender === "mobile") adjustBank((b) => b + total);
     else adjustCash((c) => c + total);
     return { ok: true, order };
-  }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor]);
+  }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor, waiterFor]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, sessionReady, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
