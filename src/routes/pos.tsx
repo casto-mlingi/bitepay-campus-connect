@@ -236,15 +236,35 @@ function POS() {
         <h2 className="font-bold text-xl truncate">{billId ? `Bill · ${billLabel}` : "New bill"}</h2>
         {billId && <span className="shrink-0 text-xs font-bold uppercase bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Saved</span>}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-sm font-medium">Table
-          <Input value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="e.g. 4" list="assigned-tables" className="mt-1 h-12 text-base" />
-          <datalist id="assigned-tables">{tableAssignments.filter((t) => !qrOnly || t.waiter_id === currentUser.id).map((t) => <option key={t.id} value={t.table_no}>{t.section}</option>)}</datalist>
-        </label>
-        <label className="block text-sm font-medium">Customer name
-          <Input value={billLabel} onChange={(e) => setBillLabel(e.target.value)} placeholder="Optional" className="mt-1 h-12 text-base" />
-        </label>
+      <div className="block text-sm font-medium">Table
+        <div className="mt-1 grid grid-cols-2 gap-2">
+          <select
+            aria-label="Choose a table"
+            value={tableAssignments.find((t) => t.table_no.toLowerCase() === tableNo.trim().toLowerCase())?.id ?? ""}
+            onChange={(e) => {
+              const t = tableAssignments.find((x) => x.id === e.target.value);
+              if (!t) { setTableNo(""); setWaiterId(""); return; }
+              setTableNo(t.table_no);
+              setWaiterId(t.waiter_id);
+            }}
+            className="h-12 w-full rounded-md border bg-background px-3 text-base"
+          >
+            <option value="">Choose table…</option>
+            {tableAssignments.filter((t) => !qrOnly || t.waiter_id === currentUser.id).map((t) => (
+              <option key={t.id} value={t.id}>{t.table_no} · {t.waiter_name}{t.section ? ` (${t.section})` : ""}</option>
+            ))}
+          </select>
+          <Input aria-label="Or type table name" value={tableNo} onChange={(e) => {
+            const v = e.target.value;
+            setTableNo(v);
+            const t = tableAssignments.find((x) => x.table_no.toLowerCase() === v.trim().toLowerCase());
+            if (t) setWaiterId(t.waiter_id);
+          }} placeholder="Or type e.g. 4" className="h-12 text-base" />
+        </div>
       </div>
+      <label className="block text-sm font-medium">Customer name
+        <Input value={billLabel} onChange={(e) => setBillLabel(e.target.value)} placeholder="Optional" className="mt-1 h-12 text-base" />
+      </label>
       {!isWaiter && (
         <label className="block text-sm font-medium">Waiter who served
           <select value={waiterId} onChange={(e) => setWaiterId(e.target.value)} className="mt-1 w-full h-12 rounded-md border bg-background px-3 text-base">
