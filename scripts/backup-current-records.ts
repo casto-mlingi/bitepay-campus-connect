@@ -9,7 +9,7 @@ const tables = [
   "topup_requests", "products", "raw_materials", "cooking_batches",
   "batch_ingredients", "wastage_logs", "purchases", "purchase_items",
   "treasury_balances", "treasury_transfers", "journal_entries", "journal_lines",
-  "accounts", "expenses", "shifts", "pending_sales",
+  "accounts", "expenses", "shifts", "pending_sales", "selcom_payments", "audit_log",
 ];
 function counts(payload: string) {
   const data = JSON.parse(payload) as Record<string, unknown>;

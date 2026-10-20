@@ -1,9 +1,9 @@
 # Roadmap
 
 ## Current sales and historical recovery
-- [ ] Archive current sales, payments, inventory and balances and verify the saved copy.
-- [ ] Inspect all available snapshot versions and recovery archives for historical records.
-- [ ] Restore evidenced missing history without replacing current records (requires a usable historical source).
+- [x] Archive current sales, payments, inventory and balances and verify the saved copy.
+- [x] Inspect available snapshot versions, recovery archives and audit evidence; archived sales belong only to quarantined test fixtures.
+- [ ] Restore evidenced missing history without replacing current records (blocked: available archives contain no real historical sales; needs an older hosting backup or unaffected device copy).
 
 ## Data recovery and protection
 - [x] Archive shared records and recover six evidenced stores, owner accounts and treasury balances.
