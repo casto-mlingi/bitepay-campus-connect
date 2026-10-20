@@ -295,11 +295,14 @@ function Customers() {
               </div>
 
               <button
-                onClick={() => requestPin(`Reset ${selected.full_name}'s password to the system default`, (pin) => {
+                onClick={() => requestPin(`Reset ${selected.full_name}'s password to the last 4 digits of their phone`, (pin) => {
                   const res = resetCustomerPassword(selected.id, pin);
                   if (!res.ok) { showToast(res.reason); return; }
                   setPinPrompt(null);
                   showToast(`Password reset to “${res.password}” — they must change it at next sign-in`);
+                  const digits = selected.phone.replace(/\D/g, "").replace(/^0/, "255");
+                  const msg = `Hello ${selected.full_name}, your BitePay temporary password is ${res.password}. Sign in with your phone number and you'll be asked to set a new password.`;
+                  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, "_blank");
                 })}
                 className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border text-sm font-semibold hover:bg-muted"
               >

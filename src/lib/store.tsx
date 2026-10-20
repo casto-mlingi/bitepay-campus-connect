@@ -1,6 +1,7 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { uploadImage } from "@/lib/images.functions";
 import { loginUser, logoutSession } from "@/lib/auth.functions";
+import { savePassword, registerCustomer } from "@/lib/password.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { hasTableService, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
@@ -1677,8 +1678,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async login(phone, password) {
       const result = await loginUser({ data: { phone, password } });
       if (!result.ok) return null;
-      const u = profiles.find((p) => p.id === result.user.id);
-      if (!u || u.disabled) return null;
+      let u = profiles.find((p) => p.id === result.user.id);
+      if (!u) {
+        // Created on another device: fetch the latest records, then continue.
+        try { await sync.pullNow(); } catch { /* fall back below */ }
+        u = { id: result.user.id, full_name: result.user.full_name, phone, password, wallet_balance: 0, role: result.user.role as Profile["role"], staff_role: (result.user.staff_role ?? undefined) as Profile["staff_role"], store_id: result.store_id ?? undefined, created_at: Date.now() } as Profile;
+      }
+      if (u.disabled) return null;
       setCurrentUserId(u.id);
       setProfiles((prev) => prev.map((p) => p.id === u.id ? { ...p, last_login: Date.now() } : p));
       if (u.role === "customer") {
@@ -1701,6 +1707,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProfiles((prev) => [...prev, u]);
       setCurrentUserId(u.id);
       setSelectedCanteenId(home);
+      // Save the account in the database right away so it can sign in anywhere.
+      void registerCustomer({ data: { id: u.id, full_name: name, phone, password, store_id: home } }).catch(() => {});
       return u;
     },
 
@@ -1903,6 +1911,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         wallet_balance: initial_balance, role: "customer", created_at: Date.now(), store_id: currentStoreId,
       };
       setProfiles((prev) => [...prev, u]);
+      void savePassword({ data: { targetId: u.id, password: pw, mustChange: true, newCustomer: { id: u.id, full_name: name, phone: ph, store_id: currentStoreId } } }).catch(() => {});
       if (initial_balance > 0) {
         setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: u.id, type: "topup", amount: initial_balance, description: "Opening balance", created_at: Date.now() }, ...prev]);
         adjustCash((c) => c + initial_balance);
@@ -2753,6 +2762,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setProfiles((prev) => prev.map((p) => p.id === currentUser.id
         ? { ...p, password: newPassword, must_change_password: false } : p));
+      void savePassword({ data: { targetId: currentUser.id, password: newPassword, mustChange: false } }).catch(() => {});
       return { ok: true };
     },
     resetCustomerPassword(customerId, pin) {
@@ -2762,9 +2772,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
       const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
       if (!cust) return { ok: false, reason: "Customer not found" };
-      const pw = cust.default_password || defaultPasswordFor(cust.phone);
+      const pw = defaultPasswordFor(cust.phone);
       setProfiles((prev) => prev.map((p) => p.id === customerId
         ? { ...p, password: pw, default_password: pw, must_change_password: true } : p));
+      void savePassword({ data: { targetId: customerId, password: pw, mustChange: true, newCustomer: { id: cust.id, full_name: cust.full_name, phone: cust.phone, store_id: cust.store_id ?? currentStoreId ?? "" } } }).catch(() => {});
       pushNotification({
         store_id: currentStoreId ?? cust.store_id ?? "", user_id: customerId, kind: "info",
         title: "Password reset", body: `${currentUser.full_name} reset your password to the default. You'll be asked to set a new one at your next sign-in.`,
