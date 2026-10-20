@@ -70,8 +70,8 @@ export const registerOwnerAndStore = createServerFn({ method: "POST" })
     if (registered) {
       const [store] = await sql`select name,contact_phone from stores where id=${registered.home_store_id}`;
       if (!registered.is_disabled && registered.staff_role === "owner" && store?.name === data.store.name && store?.contact_phone === data.store.contact_phone && verifyPassword(data.owner.password, registered.password_hash)) {
-        writeSessionCookie({ uid: registered.id, sid: registered.home_store_id, role: "staff", staffRole: "owner" });
-        return { ok: true as const, storeId: registered.home_store_id, ownerId: registered.id };
+        const token = writeSessionCookie({ uid: registered.id, sid: registered.home_store_id, role: "staff", staffRole: "owner" });
+        return { ok: true as const, storeId: registered.home_store_id, ownerId: registered.id, token };
       }
       throw new Error("An account with that phone already exists. Sign in instead.");
     }
@@ -137,14 +137,14 @@ export const registerOwnerAndStore = createServerFn({ method: "POST" })
       return { storeId: store.id, ownerId: owner.id };
     });
 
-    writeSessionCookie({
+    const token = writeSessionCookie({
       uid: result.ownerId,
       sid: result.storeId,
       role: "staff",
       staffRole: "owner",
     });
 
-    return { ok: true as const, storeId: result.storeId, ownerId: result.ownerId };
+    return { ok: true as const, storeId: result.storeId, ownerId: result.ownerId, token };
   });
 
 export const loginUser = createServerFn({ method: "POST" })
@@ -181,13 +181,13 @@ export const loginUser = createServerFn({ method: "POST" })
       const digits = (s: string) => String(s ?? "").replace(/\D/g, "");
       const p = snapshot?.profiles?.find((p: { phone: string; password?: string; disabled?: boolean }) => (p.phone === data.phone || (digits(p.phone).length >= 9 && digits(p.phone) === digits(data.phone))) && p.password && p.password === data.password && !p.disabled);
       if (!p) return { ok: false as const, error: "Invalid phone or password" };
-      writeSessionCookie({ uid: p.id, sid: p.store_id ?? null, role: p.role, staffRole: p.staff_role ?? null });
-      return { ok: true as const, user: { id: String(p.id), full_name: String(p.full_name), role: p.role, staff_role: p.staff_role ?? null }, store_id: p.store_id ?? null };
+      const token = writeSessionCookie({ uid: p.id, sid: p.store_id ?? null, role: p.role, staffRole: p.staff_role ?? null });
+      return { ok: true as const, token, user: { id: String(p.id), full_name: String(p.full_name), role: p.role, staff_role: p.staff_role ?? null }, store_id: p.store_id ?? null };
     }
 
     await sql`update profiles set last_signin_at = now() where id = ${u.id}`;
 
-    writeSessionCookie({
+    const token = writeSessionCookie({
       uid: u.id,
       sid: u.home_store_id,
       role: u.role,
@@ -196,6 +196,7 @@ export const loginUser = createServerFn({ method: "POST" })
 
     return {
       ok: true as const,
+      token,
       user: { id: u.id, full_name: u.full_name, role: u.role, staff_role: u.staff_role },
       store_id: u.home_store_id,
     };
@@ -230,4 +231,13 @@ export const getCurrentSession = createServerFn({ method: "GET" }).handler(async
     : [];
 
   return { user, store: store ?? null };
+});
+
+/** Sliding renewal: a valid session (cookie or header) gets a fresh 30-day token. */
+export const renewSession = createServerFn({ method: "POST" }).handler(async () => {
+  const { readSessionCookie, writeSessionCookie } = await import("@/lib/auth/session.server");
+  const s = readSessionCookie();
+  if (!s) return { ok: false as const };
+  const token = writeSessionCookie({ uid: s.uid, sid: s.sid, role: s.role, staffRole: s.staffRole ?? null });
+  return { ok: true as const, token, uid: s.uid };
 });
