@@ -6,7 +6,8 @@ import { useStore } from "@/lib/store";
  * Contabo Postgres snapshot, and lets the user force a refresh.
  */
 export function SyncPill({ className = "" }: { className?: string }) {
-  const { sync } = useStore();
+  const { sync, logout } = useStore();
+  const needsSignIn = sync.status === "error" && /sign in again|account is unavailable/i.test(sync.error ?? "");
   const merging = sync.status === "merging";
   const busy = sync.status === "pulling" || sync.status === "pushing" || merging;
 
@@ -18,7 +19,7 @@ export function SyncPill({ className = "" }: { className?: string }) {
       ? "bg-slate-100 text-slate-600"
       : "bg-emerald-100 text-emerald-700";
 
-  const label = sync.status === "error" ? "Saved on phone"
+  const label = needsSignIn ? "Sign in to sync" : sync.status === "error" ? "Saved on phone"
     : sync.status === "offline" ? "Offline"
       : merging ? "Merging…"
         : busy ? "Syncing…"
@@ -30,8 +31,13 @@ export function SyncPill({ className = "" }: { className?: string }) {
   return (
     <button
       type="button"
-      onClick={() => void sync.pullNow()}
-      title={sync.error ?? "Refresh data from the database"}
+      onClick={() => {
+        // Saved work stays on the phone and uploads right after signing in.
+        if (needsSignIn) { logout(); window.location.assign("/login"); return; }
+        void sync.pushNow();
+        void sync.pullNow();
+      }}
+      title={needsSignIn ? "Your sign-in expired. Your work is safe on this phone — sign in to upload it." : sync.error ?? "Refresh data from the database"}
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 h-8 text-[11px] font-semibold ${tone} ${className}`}
     >
       <Icon className="w-3.5 h-3.5" />

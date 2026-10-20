@@ -96,7 +96,8 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     const delay = Math.min(60_000, 2_000 * 2 ** (failRef.current - 1));
     nextTryRef.current = Date.now() + delay + Math.random() * 1_000;
     const message = err instanceof Error ? err.message : String(err);
-    if (failRef.current < 3) {
+    const needsSignIn = /sign in again|account is unavailable/i.test(message);
+    if (failRef.current < 3 && !needsSignIn) {
       setState((s) => ({ ...s, status: "idle", pendingPush: pendingPush || s.pendingPush, error: null }));
       return;
     }
