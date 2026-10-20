@@ -5,8 +5,6 @@ import { useStore, formatTZS } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useServerFn } from "@tanstack/react-start";
-import { loginUser } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -24,7 +22,6 @@ type Tab = "customer" | "staff";
 
 function LoginPage() {
   const { login, signup, hasOwner, store, stores, canteenGroups, cart, cartTotal, changeOwnPassword } = useStore();
-  const loginFn = useServerFn(loginUser);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("customer");
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -50,18 +47,18 @@ function LoginPage() {
     e.preventDefault();
     setError("");
     if (tab === "staff") {
-      const u = login(phone, password);
+      let u;
+      try { u = await login(phone, password); } catch { return setError("Could not verify your account. Please retry when connected."); }
       if (!u) return setError("Invalid phone or password (or account disabled)");
       if (u.role !== "staff") return setError("This account is a customer account. Use the Customer tab.");
-      try { await loginFn({ data: { phone, password } }); } catch (err) { console.warn("[login] db mirror failed", err); }
       navigate({ to: "/staff" });
       return;
     }
     if (mode === "login") {
-      const u = login(phone, password);
+      let u;
+      try { u = await login(phone, password); } catch { return setError("Could not verify your account. Please retry when connected."); }
       if (!u) return setError("Invalid phone or password");
       if (u.role !== "customer") return setError("This account is a staff account. Use the Staff tab.");
-      try { await loginFn({ data: { phone, password } }); } catch (err) { console.warn("[login] db mirror failed", err); }
       if (u.must_change_password) { setMustChange({ id: u.id, name: u.full_name }); return; }
       navigate({ to: customerLanding(u.wallet_balance) });
     } else {

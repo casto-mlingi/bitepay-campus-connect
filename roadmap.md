@@ -1,5 +1,12 @@
 # Roadmap
 
+## Data recovery and protection
+- [ ] Back up shared records and recover evidenced stores and owner accounts.
+- [ ] Block local-test uploads, destructive replacement and concurrent overwrites; retain database versions.
+- [ ] Verify recovered login and data protection with isolated tests.
+- [ ] Recover unavailable history (requires an older backup or an unaffected device).
+- [ ] Apply updated application protections on the self-hosted site (requires redeployment).
+
 ## Business modes and waiter service (Oct 18)
 - [x] Add unpaid POS bill printing and additive business-type settings with food/beverage service tools.
 - [x] Enable single-sale QR-only waiter wallet payments without wallet browsing or top-ups.

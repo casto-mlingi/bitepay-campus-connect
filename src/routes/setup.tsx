@@ -71,25 +71,25 @@ function SetupWizard() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+    let canonicalIds;
+    try {
+      canonicalIds = await registerFn({ data: {
+        store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold },
+        owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
+        opening_cash: openingCash, opening_bank: openingBank,
+      }});
+    } catch {
+      setSubmitting(false);
+      return setError("Your store could not be saved. Please retry; no local account was created.");
+    }
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
       opening_bank: openingBank,
+      canonicalIds,
     });
     if (!res.ok) { setSubmitting(false); return setError(res.reason); }
-    // Persist to Postgres as well; the local store already navigated the UX.
-    try {
-      await registerFn({ data: {
-        store: { name: storeName, location, contact_phone: contactPhone, currency, low_balance_threshold: lowThreshold },
-        owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
-        opening_cash: openingCash,
-        opening_bank: openingBank,
-      }});
-    } catch (err) {
-      // DB write failed — surface it but don't block the local UX.
-      console.warn("[setup] DB registration failed:", err);
-    }
     setSubmitting(false);
     navigate({ to: "/staff" });
   };
