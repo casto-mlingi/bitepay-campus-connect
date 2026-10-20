@@ -15,3 +15,5 @@
 - Waiter wallet sales require an expiring, one-use in-memory scan grant scoped to customer, staff and store, including customer PIN verification when set; never queue these grants offline.
 - Refund requests and decisions live on their order with updated timestamps for snapshot merging; only manager actions execute reversals.
 - Order identifiers use UUIDs rather than per-session counters so refunds and cross-device orders cannot overwrite original sales.
+- Snapshot writes require a verified server session, reject local-development requests, use exact base-revision checks, and retain immutable database versions; this prevents test and stale-device replacement of customer data.
+- Recovery only reconstructs evidenced records and preserves the pre-recovery payload; missing historical transactions must never be fabricated.
