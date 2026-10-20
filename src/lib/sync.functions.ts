@@ -39,7 +39,11 @@ export const pushSnapshot = createServerFn({ method: "POST" })
       const [current] = await tx`select revision, payload, updated_at from app_snapshots where key = ${data.key} for update`;
       if (!current || Number(current.revision) !== data.baseRevision) return { ok: false as const, stale: true as const, revision: Number(current?.revision ?? 0), updated_at: current?.updated_at?.toISOString() ?? null };
       const previous = JSON.parse(String(current.payload));
-      const profile = previous.profiles?.find((p: { id: string; disabled?: boolean }) => p.id === session.uid && !p.disabled);
+      let profile = previous.profiles?.find((p: { id: string; disabled?: boolean }) => p.id === session.uid && !p.disabled);
+      if (!profile) {
+        const [registered] = await tx`select id, home_store_id, staff_role from profiles where id::text=${session.uid} and is_disabled=false`;
+        if (registered) profile = { id: registered.id, store_id: registered.home_store_id, memberships: [] };
+      }
       if (!profile) throw new Error("Account is unavailable; please sign in again");
       const storeIds = new Set<string>();
       if (profile.store_id) storeIds.add(profile.store_id);

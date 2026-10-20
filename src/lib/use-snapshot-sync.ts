@@ -120,6 +120,11 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
 
   /** Adopt a payload as the new local truth without re-triggering a push. */
   const adopt = useCallback((payload: string, revision: number) => {
+    // Preserve the pre-refresh device copy for recovery, including old offline history.
+    try {
+      const old = localStorage.getItem(SNAPSHOT_KEY);
+      if (old && old !== payload && !localStorage.getItem(`${SNAPSHOT_KEY}.recovery`)) localStorage.setItem(`${SNAPSHOT_KEY}.recovery`, old);
+    } catch { /* Database versions remain the primary backup. */ }
     suppressRef.current = true;
     const parsed = JSON.parse(payload) as T;
     snapshotRef.current = parsed;
