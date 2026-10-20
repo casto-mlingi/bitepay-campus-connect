@@ -611,7 +611,7 @@ type Ctx = {
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
   can: (perm: Permission) => boolean;
-  completeSetup: (input: { store: Omit<Store, "id" | "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number }) => Ok | Fail;
+  completeSetup: (input: { store: Omit<Store, "id" | "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number; canonicalIds?: { storeId: string; ownerId: string } }) => Ok | Fail;
   updateStore: (patch: Partial<Omit<Store, "id" | "created_at">>) => void;
   addStaff: (input: AddStaffInput) => Ok | Fail;
   updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
@@ -1423,7 +1423,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
     dismissNotification(id) { setNotifications((prev) => prev.filter((n) => n.id !== id)); },
     can, hasStaffRole,
-    completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0 }) {
+    completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0, canonicalIds }) {
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin ?? "")) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
@@ -1434,8 +1434,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const now = Date.now();
       const trialDays = 14;
-      const storeId = uid("s");
-      const ownerId = uid("u");
+      const storeId = canonicalIds?.storeId ?? uid("s");
+      const ownerId = canonicalIds?.ownerId ?? uid("u");
       const newStore: Store = {
         id: storeId, ...s, owner_user_id: ownerId, name: s.name.trim(), created_at: now,
         subscription: { plan: "trial", started_at: now, expires_at: now + trialDays * 86400000, status: "active", monthly_price: 0 },
