@@ -6,7 +6,7 @@ export type OnboardingInput = {
 };
 
 /** Canonical onboarding records are committed with the account, never later. */
-export function addCanonicalOnboarding(previous: Record<string, unknown>, data: OnboardingInput, ids: { storeId: string; ownerId: string }, now: number) {
+export function addCanonicalOnboarding<T extends Record<string, unknown>>(previous: T, data: OnboardingInput, ids: { storeId: string; ownerId: string }, now: number) {
   const stores = Array.isArray(previous.stores) ? previous.stores : [];
   const profiles = Array.isArray(previous.profiles) ? previous.profiles : [];
   return {
