@@ -247,7 +247,9 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (raw) {
         suppressRef.current = true;
-        applyRef.current(JSON.parse(raw) as T);
+        const cached = JSON.parse(raw) as T;
+        snapshotRef.current = cached;
+        applyRef.current(cached);
       }
       revisionRef.current = Number(localStorage.getItem(`${SNAPSHOT_KEY}.rev`) ?? 0);
       baseRevisionRef.current = Number(localStorage.getItem(BASE_KEY) ?? 0);
@@ -255,10 +257,9 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     } catch {
       /* corrupt snapshot — start fresh */
     }
-    setHydrated(true);
     setState((s) => ({ ...s, revision: revisionRef.current, pendingPush: dirtyRef.current }));
     // No unpushed local edits → the database is the source of truth.
-    void remotePull(!dirtyRef.current);
+    void remotePull(!dirtyRef.current).finally(() => setHydrated(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
