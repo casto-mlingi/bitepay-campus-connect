@@ -20,7 +20,7 @@ async function editSnapshot<R>(edit: (snap: Snap) => R): Promise<R> {
   const { ensureSnapshotTable } = await import("@/lib/sync.server");
   const sql = getSql();
   await ensureSnapshotTable(sql);
-  return sql.begin(async (tx) => {
+  return sql.begin<R>(async (tx) => {
     const [row] = await tx`select revision, payload from app_snapshots where key='global' for update`;
     if (!row) throw new Error("Store data not ready yet. Try again shortly.");
     const snap = JSON.parse(String(row.payload)) as Snap;
