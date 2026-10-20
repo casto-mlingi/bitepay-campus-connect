@@ -71,7 +71,11 @@ function parseCookies(header: string | undefined): Record<string, string> {
 export function readSessionCookie(): SessionPayload | null {
   const cookies = parseCookies(getRequestHeader("cookie"));
   const raw = cookies[COOKIE];
-  return raw ? verifySession(raw) : null;
+  const fromCookie = raw ? verifySession(raw) : null;
+  if (fromCookie) return fromCookie;
+  // Phones that block cookies inside frames send the signed token as a header.
+  const header = getRequestHeader("x-bp-session");
+  return header ? verifySession(header) : null;
 }
 
 export function writeSessionCookie(payload: Omit<SessionPayload, "exp">) {
@@ -79,7 +83,7 @@ export function writeSessionCookie(payload: Omit<SessionPayload, "exp">) {
   const maxAge = TTL_DAYS * 86400;
   setResponseHeader(
     "set-cookie",
-    `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+    `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
   );
   return token;
 }

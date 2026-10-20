@@ -1,6 +1,7 @@
 import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { getSessionToken } from "./lib/session-token";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -17,6 +18,13 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+/** Sends the stored session token so sync works even when cookies are blocked. */
+const sessionTokenMiddleware = createMiddleware({ type: "function" }).client(async ({ next }) => {
+  const token = getSessionToken();
+  return next(token ? { headers: { "x-bp-session": token } } : undefined);
+});
+
 export const startInstance = createStart(() => ({
   requestMiddleware: [errorMiddleware],
+  functionMiddleware: [sessionTokenMiddleware],
 }));

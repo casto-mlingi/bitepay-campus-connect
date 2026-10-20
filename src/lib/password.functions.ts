@@ -99,7 +99,8 @@ export const registerCustomer = createServerFn({ method: "POST" })
     });
     if (r.ok) {
       const { writeSessionCookie } = await import("@/lib/auth/session.server");
-      writeSessionCookie({ uid: data.id, sid: data.store_id, role: "customer", staffRole: null });
+      const token = writeSessionCookie({ uid: data.id, sid: data.store_id, role: "customer", staffRole: null });
+      return { ...r, token };
     }
     return r;
   });
