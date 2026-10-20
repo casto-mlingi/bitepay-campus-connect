@@ -17,7 +17,8 @@ function counts(payload: string) {
     .map(([key, value]) => [key, (value as unknown[]).length]));
 }
 try {
-  const backup = await sql.begin("isolation level repeatable read", async (tx) => {
+  if (!process.argv.includes("--inspect-only")) {
+    const backup = await sql.begin("isolation level repeatable read", async (tx) => {
     const [snapshot] = await tx`select key, revision, payload, updated_at from app_snapshots where key='global'`;
     if (!snapshot) throw new Error("Current shared records are unavailable; backup stopped");
     const records: Record<string, unknown[]> = {};
@@ -31,12 +32,13 @@ try {
     return { archiveId: String(archive.id), revision: Number(snapshot.revision), verified: true,
       snapshotCounts: counts(String(snapshot.payload)), tableCounts: Object.fromEntries(Object.entries(records).map(([k, rows]) => [k, rows.length])) };
   });
-  console.log("Verified internal backup:", JSON.stringify(backup));
+    console.log("Verified internal backup:", JSON.stringify(backup));
+  }
   const versions = await sql`select id,revision,payload from app_snapshot_versions where key='global' order by revision,id`;
   console.log("Historical snapshot counts:", JSON.stringify(versions.map((v) => ({ id: String(v.id), revision: Number(v.revision), counts: counts(String(v.payload)) }))));
   const archives = await sql`select id,source,data from bitepay_recovery_archives order by id`;
   console.log("Recovery archive counts:", JSON.stringify(archives.map((a) => {
-    const data = a.data as Record<string, unknown>;
+    const data = (typeof a.data === "string" ? JSON.parse(a.data) : a.data) as Record<string, unknown>;
     const snapshot = data.snapshot as { payload?: string } | undefined;
     const records = (data.records ?? data) as Record<string, unknown>;
     return { id: String(a.id), source: a.source, snapshotCounts: snapshot?.payload ? counts(snapshot.payload) : {},
