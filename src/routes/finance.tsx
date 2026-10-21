@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
+import { ACCOUNTS, buildLedger, trialBalance, balances, type AccountCode } from "@/lib/accounting";
 
 export const Route = createFileRoute("/finance")({
   component: FinancePage,
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/finance")({
   }),
 });
 
-type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal";
+type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal" | "books";
 
 function FinancePage() {
   const {
@@ -74,6 +75,7 @@ function FinancePage() {
         <TabBtn active={tab === "expenses"} onClick={() => setTab("expenses")} icon={<Receipt className="w-4 h-4" />} label="Expenses" />
         <TabBtn active={tab === "journal"} onClick={() => setTab("journal")} icon={<BookOpen className="w-4 h-4" />} label="Daily Journal" />
         <TabBtn active={tab === "pnl"} onClick={() => setTab("pnl")} icon={<FileBarChart className="w-4 h-4" />} label="Income Statement" />
+        <TabBtn active={tab === "books"} onClick={() => setTab("books")} icon={<BookOpen className="w-4 h-4" />} label="Books & Balance Sheet" />
       </div>
 
       {tab === "treasury" && (
@@ -87,6 +89,12 @@ function FinancePage() {
       {tab === "procurement" && <Procurement onSubmit={recordPurchase} />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal />}
+      {tab === "books" && (
+        <Books
+          orders={orders} purchases={purchases} expenses={expenses} cogs={cogs}
+          cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
+        />
+      )}
       {tab === "pnl" && (
         <IncomeStatement
           grossRevenue={grossRevenue} cogs={cogs} grossProfit={grossProfit}
@@ -739,6 +747,104 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "suc
     <div className="bg-muted rounded-xl p-3">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`text-lg font-black mt-1 ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function Books(props: Parameters<typeof buildLedger>[0]) {
+  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue]);
+  const tb = useMemo(() => trialBalance(entries), [entries]);
+  const bal = useMemo(() => balances(entries), [entries]);
+  const [account, setAccount] = useState<AccountCode>("1000");
+  const b = (c: AccountCode) => bal[c] ?? 0;
+  const assets = b("1000") + b("1010") + b("1100") + b("1200");
+  const liabilities = -b("2000");
+  const profit = -(b("4000") + b("5000") + b("6000"));
+  const equity = -b("3000") - b("3100") + profit;
+  let running = 0;
+  const rows = entries.flatMap((e) => e.lines.filter((l) => l.account === account).map((l) => {
+    running += l.debit - l.credit;
+    return { id: e.id + l.account + l.debit + l.credit, date: e.date, memo: e.memo, debit: l.debit, credit: l.credit, balance: running };
+  }));
+  const amt = (n: number) => (n ? formatTZS(n) : "—");
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="bg-surface border rounded-2xl p-5 min-w-0">
+          <h2 className="font-bold text-lg mb-1">Balance Sheet</h2>
+          <p className="text-xs text-muted-foreground mb-4">What the business owns, owes, and is worth right now.</p>
+          <BsRow label="Cash on hand" value={b("1000")} />
+          <BsRow label="Bank & mobile money" value={b("1010")} />
+          <BsRow label="Customer receivables (unpaid bills)" value={b("1100")} />
+          <BsRow label="Inventory (stock)" value={b("1200")} />
+          <BsRow label="Total assets" value={assets} bold />
+          <div className="h-3" />
+          <BsRow label="Customer wallet deposits" value={liabilities} />
+          <BsRow label="Total liabilities" value={liabilities} bold />
+          <div className="h-3" />
+          <BsRow label="Opening balance & other movements" value={-b("3000")} />
+          <BsRow label="Profit this period" value={profit} />
+          <BsRow label="Total equity" value={equity} bold />
+          <div className={`mt-4 rounded-xl px-3 py-2 text-xs font-semibold ${assets === liabilities + equity ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+            {assets === liabilities + equity ? "Balanced: Assets = Liabilities + Equity" : "Out of balance — please contact support"}
+          </div>
+        </div>
+        <div className="bg-surface border rounded-2xl p-5 min-w-0">
+          <h2 className="font-bold text-lg mb-1">Trial Balance</h2>
+          <p className="text-xs text-muted-foreground mb-4">Every shilling recorded twice: total debits must equal total credits.</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-muted-foreground border-b"><tr className="text-left"><th className="py-2">Account</th><th className="text-right">Debit</th><th className="text-right">Credit</th></tr></thead>
+              <tbody className="divide-y">
+                {tb.rows.map((r) => (
+                  <tr key={r.code} className="cursor-pointer hover:bg-muted/40" onClick={() => setAccount(r.code)}>
+                    <td className="py-2"><span className="text-muted-foreground font-mono text-xs mr-2">{r.code}</span>{r.name}</td>
+                    <td className="text-right font-mono">{amt(r.debit)}</td>
+                    <td className="text-right font-mono">{amt(r.credit)}</td>
+                  </tr>
+                ))}
+                <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{formatTZS(tb.debit)}</td><td className="text-right font-mono">{formatTZS(tb.credit)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${tb.balanced ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+            {tb.balanced ? "Debits equal credits" : "Debits and credits differ"}
+          </div>
+        </div>
+      </div>
+      <div className="bg-surface border rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 bg-muted/30">
+          <h2 className="font-bold">General Ledger</h2>
+          <select aria-label="Account" value={account} onChange={(e) => setAccount(e.target.value as AccountCode)} className="h-10 rounded-lg border bg-background px-3 text-sm">
+            {(Object.keys(ACCOUNTS) as AccountCode[]).map((c) => <option key={c} value={c}>{c} · {ACCOUNTS[c].name}</option>)}
+          </select>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-muted-foreground border-b"><tr className="text-left"><th className="px-4 py-2">Date</th><th>Description</th><th className="text-right">In (Dr)</th><th className="text-right">Out (Cr)</th><th className="text-right pr-4">Balance</th></tr></thead>
+            <tbody className="divide-y">
+              {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">No entries for this account yet.</td></tr>}
+              {rows.slice().reverse().map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">{r.date ? new Date(r.date).toLocaleDateString() : "Opening"}</td>
+                  <td className="text-xs min-w-[12rem]">{r.memo}</td>
+                  <td className="text-right font-mono">{amt(r.debit)}</td>
+                  <td className="text-right font-mono">{amt(r.credit)}</td>
+                  <td className="text-right pr-4 font-mono font-semibold">{formatTZS(r.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BsRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-3 py-1.5 text-sm ${bold ? "border-t font-bold" : ""}`}>
+      <span className="min-w-0">{label}</span><span className="font-mono shrink-0">{formatTZS(value)}</span>
     </div>
   );
 }
