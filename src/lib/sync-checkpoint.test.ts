@@ -17,3 +17,8 @@ describe("phone-first automatic saving", () => {
     assert.deepEqual(merged.orders, [{ id: "sale" }]);
   });
 });
+import { canonicalStringify as cs } from "./sync-checkpoint";
+test("same data in different key order is not treated as a new change", () => {
+  expect(cs({ openBills: [1], adminAuditLog: [] })).toBe(cs({ adminAuditLog: [], openBills: [1] }));
+  expect(cs({ a: 1 })).not.toBe(cs({ a: 2 }));
+});
