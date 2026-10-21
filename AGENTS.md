@@ -24,3 +24,5 @@
 - Preserve store context identity in Vite hot-module data during preview edits, never in an SSR global; provider and split-route consumers must keep the same context without sharing user state between requests.
 - Server calls carry the signed session as both a partitioned cookie and an x-bp-session header from browser storage, renewed on each launch; phones that block framed cookies must still sync.
 - Saved POS bills (open tabs) are status rows (open/paid/cancelled) with updated_at, never deleted, so snapshot union-merges cannot revive closed bills; an explicit waiter pick on a sale overrides table attribution.
+
+- Supplier bills are credit purchases; amounts owed are derived from append-only supplier payment rows so offline merges keep every payment.
