@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pushSnapshot, pullSnapshot } from "@/lib/sync.functions";
 import { mergeSnapshots } from "@/lib/snapshot-merge";
 import { isLocalSyncHost } from "@/lib/snapshot-safety";
-import { canAcknowledgeSnapshot, retainDeviceState } from "@/lib/sync-checkpoint";
+import { canAcknowledgeSnapshot, canonicalStringify, retainDeviceState } from "@/lib/sync-checkpoint";
 
 export const SNAPSHOT_KEY = "bitepay.snapshot.v1";
 const DIRTY_KEY = `${SNAPSHOT_KEY}.dirty`;
@@ -129,7 +129,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     } catch { /* Database versions remain the primary backup. */ }
     const parsed = retainDeviceState(JSON.parse(payload) as T, snapshotRef.current);
     const devicePayload = JSON.stringify(parsed);
-    suppressedPayloadRef.current = devicePayload;
+    suppressedPayloadRef.current = canonicalStringify(parsed);
     snapshotRef.current = parsed;
     applyRef.current(parsed);
     try { localStorage.setItem(SNAPSHOT_KEY, devicePayload); } catch { /* ignore */ }
@@ -149,7 +149,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     const revision = remoteRevision + 1;
     dirtyRef.current = true;
     baseRevisionRef.current = remoteRevision;
-    suppressedPayloadRef.current = payload;
+    suppressedPayloadRef.current = canonicalStringify(merged);
     snapshotRef.current = merged;
     applyRef.current(merged);
     try {
@@ -162,7 +162,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       if (res.ok) {
         baseRevisionRef.current = res.revision;
         try { localStorage.setItem(BASE_KEY, String(res.revision)); } catch { /* retry */ }
-        if (canAcknowledgeSnapshot(payload, JSON.stringify(snapshotRef.current))) adopt(res.payload, res.revision);
+        if (canAcknowledgeSnapshot(canonicalStringify(JSON.parse(payload)), canonicalStringify(snapshotRef.current))) adopt(res.payload, res.revision);
         noteSuccess();
         setState((s) => ({ ...s, status: "synced", pendingPush: dirtyRef.current, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
         return;
@@ -238,7 +238,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       }
       baseRevisionRef.current = res.revision;
       try { localStorage.setItem(BASE_KEY, String(res.revision)); } catch { /* retry */ }
-      if (canAcknowledgeSnapshot(payload, JSON.stringify(snapshotRef.current))) adopt(res.payload, res.revision);
+      if (canAcknowledgeSnapshot(canonicalStringify(JSON.parse(payload)), canonicalStringify(snapshotRef.current))) adopt(res.payload, res.revision);
       noteSuccess();
       setState((s) => ({ ...s, status: "synced", pendingPush: dirtyRef.current, revision: revisionRef.current, lastSyncedAt: Date.now(), error: null }));
     } catch (err) {
@@ -260,7 +260,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (raw) {
         const cached = JSON.parse(raw) as T;
-        suppressedPayloadRef.current = JSON.stringify(cached);
+        suppressedPayloadRef.current = canonicalStringify(cached);
         snapshotRef.current = cached;
         applyRef.current(cached);
       }
@@ -270,7 +270,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
     } catch {
       /* corrupt snapshot — start fresh */
     }
-    if (!localStorage.getItem(SNAPSHOT_KEY)) suppressedPayloadRef.current = JSON.stringify(snapshotRef.current);
+    if (!localStorage.getItem(SNAPSHOT_KEY)) suppressedPayloadRef.current = canonicalStringify(snapshotRef.current);
     setHydrated(true);
     setState((s) => ({ ...s, revision: revisionRef.current, pendingPush: dirtyRef.current }));
     // No unpushed local edits → the database is the source of truth.
@@ -282,7 +282,7 @@ export function useSnapshotSync<T>({ snapshot, apply, key = "global", isOnline }
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
     const payload = JSON.stringify(snapshot);
-    if (suppressedPayloadRef.current === payload) {
+    if (suppressedPayloadRef.current === canonicalStringify(snapshot)) {
       suppressedPayloadRef.current = null;
       return;
     }

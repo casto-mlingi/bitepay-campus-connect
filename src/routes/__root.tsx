@@ -45,7 +45,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "BitePay — Prepaid Canteen & Hotel Wallet" },
       { name: "description", content: "BitePay is a prepaid wallet system for college canteens and hotels. Top-up, order, and manage food service in seconds." },
       { property: "og:title", content: "BitePay — Prepaid Canteen & Hotel Wallet" },

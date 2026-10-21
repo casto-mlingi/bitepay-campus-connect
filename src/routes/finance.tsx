@@ -380,7 +380,7 @@ function TransferModal({
           <label className="text-xs font-semibold text-muted-foreground">Amount (TZS)</label>
           <input
             type="number" min={0} value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
+            onChange={(e) => setAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
             placeholder="0"
             className="w-full px-3 py-2 rounded-lg border bg-background mt-1"
           />
@@ -495,7 +495,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
               className="w-full px-3 py-2 rounded-lg border bg-background" />
           </Field>
           <Field label="Total Cost (TZS)">
-            <input required type="number" min={0} value={totalCost} onChange={(e) => setTotalCost(Number(e.target.value))}
+            <input required type="number" min={0} value={totalCost} onChange={(e) => setTotalCost(Math.max(0, Math.round(Number(e.target.value) || 0)))}
               className="w-full px-3 py-2 rounded-lg border bg-background" />
           </Field>
         </div>
@@ -598,7 +598,7 @@ function Expenses({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordE
           </div>
         </Field>
         <Field label="Amount (TZS)">
-          <input required type="number" min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))}
+          <input required type="number" min={1} value={amount} onChange={(e) => setAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
             className="w-full px-3 py-2 rounded-lg border bg-background" />
         </Field>
         <Field label="Description">
