@@ -2,10 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone,
+  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone, Truck,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
+import { PayablesPanel } from "@/components/payables-panel";
 import { ACCOUNTS, buildLedger, trialBalance, balances, type AccountCode } from "@/lib/accounting";
 
 export const Route = createFileRoute("/finance")({
@@ -22,12 +23,12 @@ export const Route = createFileRoute("/finance")({
   }),
 });
 
-type Tab = "treasury" | "procurement" | "expenses" | "pnl" | "journal" | "books";
+type Tab = "treasury" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
 
 function FinancePage() {
   const {
     currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
-    recordPurchase, recordExpense, hasStaffRole,
+    recordPurchase, recordExpense, hasStaffRole, vendorPayments,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
@@ -72,6 +73,7 @@ function FinancePage() {
       <div className="flex gap-1 mb-6 border-b overflow-x-auto">
         <TabBtn active={tab === "treasury"} onClick={() => setTab("treasury")} icon={<Wallet className="w-4 h-4" />} label="Treasury" />
         <TabBtn active={tab === "procurement"} onClick={() => setTab("procurement")} icon={<ShoppingCart className="w-4 h-4" />} label="Procurement" />
+        <TabBtn active={tab === "payables"} onClick={() => setTab("payables")} icon={<Truck className="w-4 h-4" />} label="Suppliers & Bills" />
         <TabBtn active={tab === "expenses"} onClick={() => setTab("expenses")} icon={<Receipt className="w-4 h-4" />} label="Expenses" />
         <TabBtn active={tab === "journal"} onClick={() => setTab("journal")} icon={<BookOpen className="w-4 h-4" />} label="Daily Journal" />
         <TabBtn active={tab === "pnl"} onClick={() => setTab("pnl")} icon={<FileBarChart className="w-4 h-4" />} label="Income Statement" />
@@ -87,11 +89,12 @@ function FinancePage() {
         />
       )}
       {tab === "procurement" && <Procurement onSubmit={recordPurchase} />}
+      {tab === "payables" && <PayablesPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal />}
       {tab === "books" && (
         <Books
-          orders={orders} purchases={purchases} expenses={expenses} cogs={cogs}
+          orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs}
           cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
         />
       )}
@@ -455,8 +458,11 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
 }
 
 function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
-  const { rawMaterials, purchases, cash, bank } = useStore();
+  const { rawMaterials, purchases, cash, bank, vendors } = useStore();
   const [supplier, setSupplier] = useState("");
+  const [vendorId, setVendorId] = useState("");
+  const [onCredit, setOnCredit] = useState(false);
+  const vendor = vendors.find((v) => v.id === vendorId);
   const [rawId, setRawId] = useState("");
   const [qty, setQty] = useState(1);
   const [totalCost, setTotalCost] = useState(0);
@@ -465,10 +471,10 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const res = onSubmit({ supplier, raw_id: rawId, qty, total_cost: totalCost, payment_method: method });
+    const res = onSubmit({ supplier: vendor?.name ?? supplier, raw_id: rawId, qty, total_cost: totalCost, payment_method: method, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7 });
     if (res) {
-      setMsg(`✓ ${res.id} recorded — cash reduced by ${formatTZS(totalCost)}`);
-      setSupplier(""); setRawId(""); setQty(1); setTotalCost(0); setMethod("cash");
+      setMsg(onCredit ? `✓ ${res.id} saved as a supplier bill — ${formatTZS(totalCost)} owed` : `✓ ${res.id} recorded — ${method === "bank" ? "bank" : "cash"} reduced by ${formatTZS(totalCost)}`);
+      setSupplier(""); setVendorId(""); setOnCredit(false); setRawId(""); setQty(1); setTotalCost(0); setMethod("cash");
     } else {
       setMsg("Could not record purchase. Check inputs.");
     }
@@ -485,8 +491,26 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
           <p className="text-xs text-muted-foreground">Deducts cash and adds to inventory value.</p>
         </div>
         <Field label="Supplier">
-          <input required value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Kilimanjaro Supplies"
-            className="w-full px-3 py-2 rounded-lg border bg-background" />
+          {vendors.length > 0 && (
+            <select aria-label="Choose a saved supplier" value={vendorId} onChange={(e) => setVendorId(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border bg-background mb-2">
+              <option value="">Type a supplier name below…</option>
+              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}{v.terms_days ? ` · pay in ${v.terms_days} days` : " · cash on delivery"}</option>)}
+            </select>
+          )}
+          {!vendor && (
+            <input required value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Kilimanjaro Supplies"
+              className="w-full px-3 py-2 rounded-lg border bg-background" />
+          )}
+        </Field>
+        <Field label="When do you pay?">
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setOnCredit(false)}
+              className={`py-2 rounded-lg border text-sm font-semibold ${!onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Paid now</button>
+            <button type="button" onClick={() => setOnCredit(true)}
+              className={`py-2 rounded-lg border text-sm font-semibold ${onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Pay later (bill)</button>
+          </div>
+          {onCredit && <p className="text-xs text-muted-foreground mt-1">Stock is added now. Due in {vendor?.terms_days ?? 7} days — pay it from Suppliers & Bills.</p>}
         </Field>
         <Field label="Raw Material">
           <select required value={rawId} onChange={(e) => setRawId(e.target.value)}
@@ -507,7 +531,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
               className="w-full px-3 py-2 rounded-lg border bg-background" />
           </Field>
         </div>
-        <Field label="Payment Method">
+        {!onCredit && <Field label="Payment Method">
           <div className="grid grid-cols-2 gap-2">
             {(["cash", "bank"] as PaymentMethod[]).map((m) => (
               <button key={m} type="button" onClick={() => setMethod(m)}
@@ -516,10 +540,10 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
               </button>
             ))}
           </div>
-        </Field>
+        </Field>}
         <div className="bg-muted rounded-xl p-3 text-xs space-y-1">
           <div className="flex justify-between"><span className="text-muted-foreground">Per unit</span><span className="font-mono font-semibold">{formatTZS(perUnit)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">{method === "bank" ? "Bank" : "Cash"} balance after</span><span className="font-mono font-semibold">{formatTZS((method === "bank" ? bank : cash) - totalCost)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{onCredit ? "Owed to supplier" : `${method === "bank" ? "Bank" : "Cash"} balance after`}</span><span className="font-mono font-semibold">{formatTZS(onCredit ? totalCost : (method === "bank" ? bank : cash) - totalCost)}</span></div>
         </div>
         <button className="w-full bg-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90">
           <Plus className="w-4 h-4" /> Record Purchase
@@ -554,7 +578,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
                     <td className="pr-3">{p.raw_name}</td>
                     <td className="pr-3 text-right">{p.qty}</td>
                     <td className="pr-3 text-right font-semibold">{formatTZS(p.total_cost)}</td>
-                    <td className="pr-3 capitalize"><span className="px-2 py-0.5 rounded-full bg-muted text-xs">{p.payment_method}</span></td>
+                    <td className="pr-3 capitalize"><span className="px-2 py-0.5 rounded-full bg-muted text-xs">{p.on_credit ? "bill" : p.payment_method}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -752,13 +776,13 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "suc
 }
 
 function Books(props: Parameters<typeof buildLedger>[0]) {
-  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue]);
+  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue]);
   const tb = useMemo(() => trialBalance(entries), [entries]);
   const bal = useMemo(() => balances(entries), [entries]);
   const [account, setAccount] = useState<AccountCode>("1000");
   const b = (c: AccountCode) => bal[c] ?? 0;
   const assets = b("1000") + b("1010") + b("1100") + b("1200");
-  const liabilities = -b("2000");
+  const liabilities = -b("2000") - b("2100");
   const profit = -(b("4000") + b("5000") + b("6000"));
   const equity = -b("3000") - b("3100") + profit;
   let running = 0;
@@ -779,7 +803,8 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
           <BsRow label="Inventory (stock)" value={b("1200")} />
           <BsRow label="Total assets" value={assets} bold />
           <div className="h-3" />
-          <BsRow label="Customer wallet deposits" value={liabilities} />
+          <BsRow label="Customer wallet deposits" value={-b("2000")} />
+          <BsRow label="Supplier bills owed" value={-b("2100")} />
           <BsRow label="Total liabilities" value={liabilities} bold />
           <div className="h-3" />
           <BsRow label="Opening balance & other movements" value={-b("3000")} />

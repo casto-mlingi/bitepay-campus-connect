@@ -5,7 +5,7 @@
 
 export type AccountCode =
   | "1000" | "1010" | "1100" | "1200"
-  | "2000" | "3000" | "3100"
+  | "2000" | "2100" | "3000" | "3100"
   | "4000" | "5000" | "6000";
 
 export const ACCOUNTS: Record<AccountCode, { name: string; kind: "asset" | "liability" | "equity" | "revenue" | "expense" }> = {
@@ -14,6 +14,7 @@ export const ACCOUNTS: Record<AccountCode, { name: string; kind: "asset" | "liab
   "1100": { name: "Customer receivables", kind: "asset" },
   "1200": { name: "Inventory (stock)", kind: "asset" },
   "2000": { name: "Customer wallet deposits", kind: "liability" },
+  "2100": { name: "Accounts payable (suppliers)", kind: "liability" },
   "3000": { name: "Opening balance & unrecorded movements", kind: "equity" },
   "3100": { name: "Retained earnings", kind: "equity" },
   "4000": { name: "Sales revenue", kind: "revenue" },
@@ -22,10 +23,11 @@ export const ACCOUNTS: Record<AccountCode, { name: string; kind: "asset" | "liab
 };
 
 export type LedgerLine = { account: AccountCode; debit: number; credit: number };
-export type LedgerEntry = { id: string; date: number; memo: string; source: "sale" | "purchase" | "expense" | "adjustment"; lines: LedgerLine[] };
+export type LedgerEntry = { id: string; date: number; memo: string; source: "sale" | "purchase" | "expense" | "payment" | "adjustment"; lines: LedgerLine[] };
 
 type OrderLike = { id: string; created_at: number; total_amount: number; receipt_no?: string; cash_paid?: number; wallet_paid?: number; tender?: "cash" | "mobile"; payment_status: "paid" | "unpaid"; amount_paid?: number; payments?: { amount: number; tender: "cash" | "mobile" }[]; customer_name?: string };
-type PurchaseLike = { id: string; date: number; supplier: string; raw_name: string; total_cost: number; payment_method: "cash" | "bank" };
+type PurchaseLike = { id: string; date: number; supplier: string; raw_name: string; total_cost: number; payment_method: "cash" | "bank"; on_credit?: boolean };
+type VendorPaymentLike = { id: string; created_at: number; amount: number; method: "cash" | "bank"; purchase_id: string; reference?: string };
 type ExpenseLike = { id: string; date: number; category: string; description: string; amount: number; payment_method: "cash" | "bank" };
 
 export const tzs = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0);
@@ -53,14 +55,18 @@ export function saleEntry(o: OrderLike): LedgerEntry {
 }
 
 export function buildLedger(input: {
-  orders: OrderLike[]; purchases: PurchaseLike[]; expenses: ExpenseLike[];
+  orders: OrderLike[]; purchases: PurchaseLike[]; expenses: ExpenseLike[]; vendorPayments?: VendorPaymentLike[];
   cogs: number; cash: number; bank: number; walletLiabilities: number; inventoryValue: number;
 }): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
   for (const o of input.orders) { const e = saleEntry(o); if (e.lines.length) entries.push(e); }
   for (const p of input.purchases) {
-    const acct = p.payment_method === "bank" ? "1010" : "1000";
-    entries.push({ id: `pur-${p.id}`, date: p.date, memo: `Stock purchase · ${p.raw_name}${p.supplier ? ` from ${p.supplier}` : ""}`, source: "purchase", lines: [dr("1200", p.total_cost), cr(acct, p.total_cost)] });
+    const acct = p.on_credit ? "2100" : p.payment_method === "bank" ? "1010" : "1000";
+    entries.push({ id: `pur-${p.id}`, date: p.date, memo: `${p.on_credit ? "Supplier bill" : "Stock purchase"} · ${p.raw_name}${p.supplier ? ` from ${p.supplier}` : ""}`, source: "purchase", lines: [dr("1200", p.total_cost), cr(acct, p.total_cost)] });
+  }
+  for (const v of input.vendorPayments ?? []) {
+    const acct = v.method === "bank" ? "1010" : "1000";
+    entries.push({ id: `vpay-${v.id}`, date: v.created_at, memo: `Supplier payment · ${v.purchase_id}${v.reference ? ` · ${v.reference}` : ""}`, source: "payment", lines: [dr("2100", v.amount), cr(acct, v.amount)] });
   }
   for (const x of input.expenses) {
     const acct = x.payment_method === "bank" ? "1010" : "1000";
