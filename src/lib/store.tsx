@@ -1,4 +1,6 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
+import { billBalance, dueDate, validPayment, type Vendor, type VendorPayment } from "./payables";
+export type { Vendor, VendorPayment } from "./payables";
 import { uploadImage } from "@/lib/images.functions";
 import { loginUser, logoutSession, renewSession } from "@/lib/auth.functions";
 import { saveSessionToken, getSessionToken } from "@/lib/session-token";
@@ -480,6 +482,10 @@ export type Purchase = {
   qty: number;
   total_cost: number;
   payment_method: PaymentMethod;
+  /** Supplier bill: stock received now, paid later (accounts payable). */
+  on_credit?: boolean;
+  vendor_id?: string;
+  due_date?: number;
 };
 
 export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
@@ -676,7 +682,11 @@ type Ctx = {
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
-  recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number }) => Purchase | null;
+  recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number; vendor_id?: string; on_credit?: boolean; terms_days?: number }) => Purchase | null;
+  vendors: Vendor[];
+  vendorPayments: VendorPayment[];
+  saveVendor: (input: { id?: string; name: string; phone?: string; terms_days: number }) => Vendor | null;
+  payVendorBill: (input: { purchase_id: string; amount: number; method: PaymentMethod; reference?: string }) => Ok | Fail;
   recordExpense: (input: { category: ExpenseCategory; amount: number; description: string; payment_method: PaymentMethod; date?: number }) => Expense | null;
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
   availablePlates: (product_id: string) => number | null;
@@ -867,6 +877,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [cookedCommodityUsages, setCookedCommodityUsages] = useState<CookedCommodityUsage[]>([]);
   const [wastage, setWastage] = useState<WastageLog[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendorPayments, setVendorPayments] = useState<VendorPayment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [treasuries, setTreasuries] = useState<Record<string, Treasury>>({});
   const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
@@ -947,7 +959,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-      tableAssignments, commissionPayouts, openBills,
+      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, vendors, vendorPayments,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
@@ -984,6 +996,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.menuAudits) setMenuAudits(s.menuAudits);
     if (s.tableAssignments) setTableAssignments(s.tableAssignments);
     if (s.openBills) setOpenBills(s.openBills);
+    if (s.vendors) setVendors(s.vendors);
+    if (s.vendorPayments) setVendorPayments(s.vendorPayments);
     if (s.commissionPayouts) setCommissionPayouts(s.commissionPayouts);
     if (s.stores) setStores(s.stores);
     if (s.tickets) setTickets(s.tickets);
@@ -1447,6 +1461,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cookedCommodityUsages: currentStoreId ? cookedCommodityUsages.filter((u) => u.store_id === currentStoreId) : [],
     wastage: scopedWaste,
     purchases: scopedPurchases, expenses: scopedExpenses, cash, bank,
+    vendors: currentStoreId ? vendors.filter((v) => v.store_id === currentStoreId).sort((a, b) => a.name.localeCompare(b.name)) : [],
+    vendorPayments: currentStoreId ? vendorPayments.filter((v) => v.store_id === currentStoreId).sort((a, b) => b.created_at - a.created_at) : [],
+    saveVendor({ id, name, phone, terms_days }) {
+      const clean = name.trim();
+      if (!currentStoreId || !clean) return null;
+      const now = Date.now();
+      const existing = id ? vendors.find((v) => v.id === id && v.store_id === currentStoreId) : undefined;
+      const v: Vendor = {
+        id: existing?.id ?? crypto.randomUUID(), store_id: currentStoreId, name: clean, phone: phone?.trim() || undefined,
+        terms_days: Math.max(0, Math.round(terms_days || 0)), created_at: existing?.created_at ?? now, updated_at: now,
+      };
+      setVendors((prev) => [v, ...prev.filter((x) => x.id !== v.id)]);
+      return v;
+    },
+    payVendorBill({ purchase_id, amount, method, reference }) {
+      if (!currentStoreId) return { ok: false, error: "No store selected" };
+      const bill = purchases.find((p) => p.id === purchase_id && p.store_id === currentStoreId);
+      if (!bill || !bill.on_credit) return { ok: false, error: "Supplier bill not found" };
+      const amt = Math.round(amount);
+      const mine = vendorPayments.filter((v) => v.store_id === currentStoreId);
+      if (!validPayment(bill, mine, amt)) return { ok: false, error: `Enter an amount up to ${formatTZS(billBalance(bill, mine))}` };
+      const t = treasuries[currentStoreId] ?? { cash: 0, bank: 0 };
+      if ((method === "bank" ? t.bank : t.cash) < amt) return { ok: false, error: `Not enough money in ${method === "bank" ? "bank / mobile" : "cash"}` };
+      setVendorPayments((prev) => [{
+        id: crypto.randomUUID(), store_id: currentStoreId, vendor_id: bill.vendor_id ?? "", purchase_id, amount: amt, method,
+        reference: reference?.trim() || undefined, paid_by_name: currentUser?.full_name, created_at: Date.now(),
+      }, ...prev]);
+      if (method === "bank") adjustBank((b) => b - amt); else adjustCash((c) => c - amt);
+      return { ok: true };
+    },
     shifts: scopedShifts, activeShift, pendingSales: scopedPending, smsLogs: scopedSms,
     isOnline, sync, LOW_BALANCE_THRESHOLD, topUpRequests: scopedRequests, store, stores, currentStoreId, hasOwner,
     selectedCanteenId, availableCanteens, canteenGroups, activeOrgId: orgOfCurrent,
@@ -2118,18 +2162,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
       setWastage((prev) => [{ id: uid("w"), store_id: currentStoreId, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
     },
-    recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date }) {
+    recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date, vendor_id, on_credit, terms_days }) {
       if (!currentStoreId || qty <= 0 || total_cost < 0) return null;
       const raw = rawMaterials.find((r) => r.id === raw_id && r.store_id === currentStoreId);
       if (!raw) return null;
       const newStock = raw.stock + qty;
       const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
       setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
-      if (payment_method === "bank") adjustBank((b) => b - total_cost);
-      else adjustCash((c) => c - total_cost);
+      if (!on_credit) {
+        if (payment_method === "bank") adjustBank((b) => b - total_cost);
+        else adjustCash((c) => c - total_cost);
+      }
+      const when = date ?? Date.now();
       const purchase: Purchase = {
-        id: `PO-${Date.now()}`, store_id: currentStoreId, date: date ?? Date.now(), supplier, raw_id, raw_name: raw.name,
+        id: `PO-${Date.now()}`, store_id: currentStoreId, date: when, supplier, raw_id, raw_name: raw.name,
         qty, total_cost, payment_method,
+        ...(vendor_id ? { vendor_id } : {}),
+        ...(on_credit ? { on_credit: true, due_date: dueDate(when, terms_days ?? 0) } : {}),
       };
       setPurchases((prev) => [purchase, ...prev]);
       return purchase;
@@ -2986,7 +3035,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is
