@@ -793,28 +793,33 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
     running += l.debit - l.credit;
     return { id: e.id + l.account + l.debit + l.credit, date: e.date, memo: e.memo, debit: l.debit, credit: l.credit, balance: running };
   }));
-  const amt = (n: number) => (n ? formatTZS(n) : "—");
+  const amt = (n: number) => (n ? num(n) : "—");
+  const ok = assets === liabilities + equity;
   return (
     <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">All amounts are in Tanzanian shillings (TZS).</p>
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="bg-surface border rounded-2xl p-5 min-w-0">
-          <h2 className="font-bold text-lg mb-1">Balance Sheet</h2>
-          <p className="text-xs text-muted-foreground mb-4">What the business owns, owes, and is worth right now.</p>
-          <BsRow label="Cash on hand" value={b("1000")} />
+          <h2 className="font-bold text-lg mb-1">Business Summary</h2>
+          <p className="text-xs text-muted-foreground mb-4">What you have, what you still owe, and what the business is worth now.</p>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">1. Money & stock you have</h3>
+          <BsRow label="Cash in the drawer" value={b("1000")} />
           <BsRow label="Bank & mobile money" value={b("1010")} />
-          <BsRow label="Customer receivables (unpaid bills)" value={b("1100")} />
-          <BsRow label="Inventory (stock)" value={b("1200")} />
-          <BsRow label="Total assets" value={assets} bold />
+          <BsRow label="Unpaid bills customers owe you" value={b("1100")} />
+          <BsRow label="Stock available to sell" value={b("1200")} />
+          <BsRow label="Total you have" value={assets} bold />
           <div className="h-3" />
-          <BsRow label="Customer wallet deposits" value={-b("2000")} />
-          <BsRow label="Supplier bills owed" value={-b("2100")} />
-          <BsRow label="Total liabilities" value={liabilities} bold />
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">2. Money you still owe</h3>
+          <BsRow label="Customer wallet money not yet used" note="Customers prepaid this — you still owe them food or drinks." value={-b("2000")} />
+          <BsRow label="Supplier bills to pay" value={-b("2100")} />
+          <BsRow label="Total you owe" value={liabilities} bold />
           <div className="h-3" />
-          <BsRow label="Opening balance & other movements" value={-b("3000")} />
-          <BsRow label="Profit this period" value={profit} />
-          <BsRow label="Total equity" value={equity} bold />
-          <div className={`mt-4 rounded-xl px-3 py-2 text-xs font-semibold ${assets === liabilities + equity ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
-            {assets === liabilities + equity ? "Balanced: Assets = Liabilities + Equity" : "Out of balance — please contact support"}
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">3. Your business value</h3>
+          <BsRow label="Starting value" note="Money & stock already in the business before these records began (older cash, stock, top-ups, transfers). Not new income." value={-b("3000")} />
+          <BsRow label="Profit since records began" value={profit} />
+          <BsRow label="Business value now" note="Total you have − total you owe" value={equity} bold />
+          <div className={`mt-4 rounded-xl px-3 py-2 text-xs font-semibold ${ok ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+            {ok ? `✓ Figures agree: ${num(assets)} you have = ${num(liabilities)} you owe + ${num(equity)} business value` : "Figures do not agree — please contact support"}
           </div>
         </div>
         <div className="bg-surface border rounded-2xl p-5 min-w-0">
@@ -831,7 +836,7 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
                     <td className="text-right font-mono">{amt(r.credit)}</td>
                   </tr>
                 ))}
-                <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{formatTZS(tb.debit)}</td><td className="text-right font-mono">{formatTZS(tb.credit)}</td></tr>
+                <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{num(tb.debit)}</td><td className="text-right font-mono">{num(tb.credit)}</td></tr>
               </tbody>
             </table>
           </div>
@@ -858,7 +863,7 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
                   <td className="text-xs min-w-[12rem]">{r.memo}</td>
                   <td className="text-right font-mono">{amt(r.debit)}</td>
                   <td className="text-right font-mono">{amt(r.credit)}</td>
-                  <td className="text-right pr-4 font-mono font-semibold">{formatTZS(r.balance)}</td>
+                  <td className="text-right pr-4 font-mono font-semibold">{num(r.balance)}</td>
                 </tr>
               ))}
             </tbody>
@@ -869,10 +874,14 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
   );
 }
 
-function BsRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+/** Plain number with thousands separators, no currency sign; never "-0". */
+const num = (n: number) => (Math.round(n) || 0).toLocaleString("en-US");
+
+function BsRow({ label, note, value, bold }: { label: string; note?: string; value: number; bold?: boolean }) {
   return (
     <div className={`flex justify-between gap-3 py-1.5 text-sm ${bold ? "border-t font-bold" : ""}`}>
-      <span className="min-w-0">{label}</span><span className="font-mono shrink-0">{formatTZS(value)}</span>
+      <span className="min-w-0">{label}{note && <span className="block text-xs font-normal text-muted-foreground">{note}</span>}</span>
+      <span className="font-mono shrink-0">{num(value)}</span>
     </div>
   );
 }
