@@ -13,3 +13,11 @@ export function retainDeviceState<T>(remote: T, local: T): T {
   }
   return result as T;
 }
+/** Key-sorted serialization: identical data always compares equal regardless of property order. */
+export function canonicalStringify(value: unknown): string {
+  return JSON.stringify(value, (_k, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.keys(v as Record<string, unknown>).sort().reduce<Record<string, unknown>>((acc, k) => { acc[k] = (v as Record<string, unknown>)[k]; return acc; }, {})
+      : v,
+  );
+}
