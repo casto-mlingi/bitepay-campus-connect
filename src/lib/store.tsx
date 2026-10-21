@@ -959,13 +959,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, vendors, vendorPayments,
+      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-     tableAssignments, commissionPayouts, openBills,
+     tableAssignments, commissionPayouts, openBills, vendors, vendorPayments,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -1476,14 +1476,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return v;
     },
     payVendorBill({ purchase_id, amount, method, reference }) {
-      if (!currentStoreId) return { ok: false, error: "No store selected" };
+      if (!currentStoreId) return { ok: false, reason: "No store selected" };
       const bill = purchases.find((p) => p.id === purchase_id && p.store_id === currentStoreId);
-      if (!bill || !bill.on_credit) return { ok: false, error: "Supplier bill not found" };
+      if (!bill || !bill.on_credit) return { ok: false, reason: "Supplier bill not found" };
       const amt = Math.round(amount);
       const mine = vendorPayments.filter((v) => v.store_id === currentStoreId);
-      if (!validPayment(bill, mine, amt)) return { ok: false, error: `Enter an amount up to ${formatTZS(billBalance(bill, mine))}` };
+      if (!validPayment(bill, mine, amt)) return { ok: false, reason: `Enter an amount up to ${formatTZS(billBalance(bill, mine))}` };
       const t = treasuries[currentStoreId] ?? { cash: 0, bank: 0 };
-      if ((method === "bank" ? t.bank : t.cash) < amt) return { ok: false, error: `Not enough money in ${method === "bank" ? "bank / mobile" : "cash"}` };
+      if ((method === "bank" ? t.bank : t.cash) < amt) return { ok: false, reason: `Not enough money in ${method === "bank" ? "bank / mobile" : "cash"}` };
       setVendorPayments((prev) => [{
         id: crypto.randomUUID(), store_id: currentStoreId, vendor_id: bill.vendor_id ?? "", purchase_id, amount: amt, method,
         reference: reference?.trim() || undefined, paid_by_name: currentUser?.full_name, created_at: Date.now(),
