@@ -18,7 +18,7 @@ describe("phone-first automatic saving", () => {
   });
 });
 import { canonicalStringify as cs } from "./sync-checkpoint";
-test("same data in different key order is not treated as a new change", () => {
-  expect(cs({ openBills: [1], adminAuditLog: [] })).toBe(cs({ adminAuditLog: [], openBills: [1] }));
-  expect(cs({ a: 1 })).not.toBe(cs({ a: 2 }));
+it("same data in different key order is not treated as a new change", () => {
+  assert.equal(cs({ openBills: [1], adminAuditLog: [] }), cs({ adminAuditLog: [], openBills: [1] }));
+  assert.notEqual(cs({ a: 1 }), cs({ a: 2 }));
 });
