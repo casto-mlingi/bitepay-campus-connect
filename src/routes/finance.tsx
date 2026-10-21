@@ -836,7 +836,7 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
                     <td className="text-right font-mono">{amt(r.credit)}</td>
                   </tr>
                 ))}
-                <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{formatTZS(tb.debit)}</td><td className="text-right font-mono">{formatTZS(tb.credit)}</td></tr>
+                <tr className="font-bold"><td className="py-2">Total</td><td className="text-right font-mono">{num(tb.debit)}</td><td className="text-right font-mono">{num(tb.credit)}</td></tr>
               </tbody>
             </table>
           </div>
@@ -863,7 +863,7 @@ function Books(props: Parameters<typeof buildLedger>[0]) {
                   <td className="text-xs min-w-[12rem]">{r.memo}</td>
                   <td className="text-right font-mono">{amt(r.debit)}</td>
                   <td className="text-right font-mono">{amt(r.credit)}</td>
-                  <td className="text-right pr-4 font-mono font-semibold">{formatTZS(r.balance)}</td>
+                  <td className="text-right pr-4 font-mono font-semibold">{num(r.balance)}</td>
                 </tr>
               ))}
             </tbody>
