@@ -2,11 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone, Truck,
+  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone, Truck, HandCoins,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { PayablesPanel } from "@/components/payables-panel";
+import { ReceivablesPanel } from "@/components/receivables-panel";
 import { ACCOUNTS, buildLedger, trialBalance, balances, type AccountCode } from "@/lib/accounting";
 
 export const Route = createFileRoute("/finance")({
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/finance")({
   }),
 });
 
-type Tab = "treasury" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
+type Tab = "treasury" | "receivables" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
 
 function FinancePage() {
   const {
@@ -73,6 +74,7 @@ function FinancePage() {
       <div className="flex gap-1 mb-6 border-b overflow-x-auto">
         <TabBtn active={tab === "treasury"} onClick={() => setTab("treasury")} icon={<Wallet className="w-4 h-4" />} label="Treasury" />
         <TabBtn active={tab === "procurement"} onClick={() => setTab("procurement")} icon={<ShoppingCart className="w-4 h-4" />} label="Procurement" />
+        <TabBtn active={tab === "receivables"} onClick={() => setTab("receivables")} icon={<HandCoins className="w-4 h-4" />} label="Customer Balances" />
         <TabBtn active={tab === "payables"} onClick={() => setTab("payables")} icon={<Truck className="w-4 h-4" />} label="Suppliers & Bills" />
         <TabBtn active={tab === "expenses"} onClick={() => setTab("expenses")} icon={<Receipt className="w-4 h-4" />} label="Expenses" />
         <TabBtn active={tab === "journal"} onClick={() => setTab("journal")} icon={<BookOpen className="w-4 h-4" />} label="Daily Journal" />
@@ -89,6 +91,7 @@ function FinancePage() {
         />
       )}
       {tab === "procurement" && <Procurement onSubmit={recordPurchase} />}
+      {tab === "receivables" && <ReceivablesPanel />}
       {tab === "payables" && <PayablesPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal />}

@@ -26,3 +26,4 @@
 - Saved POS bills (open tabs) are status rows (open/paid/cancelled) with updated_at, never deleted, so snapshot union-merges cannot revive closed bills; an explicit waiter pick on a sale overrides table attribution.
 
 - Supplier bills are credit purchases; amounts owed are derived from append-only supplier payment rows so offline merges keep every payment.
+- Customer balances (receivables) are a read-only aging view built from unpaid delivery orders, approved pay-later wallet debt and open tabs; collections go through each source's existing payment action.
