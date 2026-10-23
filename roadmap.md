@@ -1,5 +1,9 @@
 # Roadmap
 
+## Unified POS payments (Oct 23)
+- [ ] Add capped wallet debt, cash/mobile received amounts, saved change and customer change payouts without removing existing payments.
+- [ ] Connect receipts, financial entries and aging; test concrete amounts and responsive payment screens without uploading fixtures.
+
 ## Store signup and silent offline saving
 - [x] Remove global-owner signup blocking, validate inputs before registration, and commit canonical onboarding records with the account.
 - [x] Save changes on the device before network initialization; retry prerequisite downloads and queued uploads automatically, preserving edits made during uploads and device-local shift state.
