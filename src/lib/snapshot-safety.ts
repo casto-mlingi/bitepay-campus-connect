@@ -58,3 +58,31 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
   assertPreservesRecords(previous, result);
   return result;
 }
+
+/**
+ * Platform admin uploads: only subscription/billing fields on stores plus the
+ * admin log, billing payments and support tickets. Store business data
+ * (sales, wallets, stock, treasuries) is never taken from an admin device.
+ */
+export function adminSnapshotUpdate(previous: SnapshotData, incoming: SnapshotData): SnapshotData {
+  const result = { ...previous };
+  const merge = (field: string, pick?: (oldRow: Record<string, unknown>, row: Record<string, unknown>) => Record<string, unknown> | null) => {
+    const value = incoming[field];
+    if (!Array.isArray(value)) return;
+    const old = Array.isArray(previous[field]) ? previous[field] as Record<string, unknown>[] : [];
+    const rows = new Map(old.map((row) => [row.id, row]));
+    for (const row of value) {
+      if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error("Invalid snapshot record");
+      const existing = rows.get(row.id);
+      const next = pick ? (existing ? pick(existing, row) : null) : row;
+      if (next) rows.set(row.id, next);
+    }
+    result[field] = [...rows.values()];
+  };
+  merge("stores", (oldRow, row) => ({ ...oldRow, subscription: row.subscription ?? oldRow.subscription }));
+  merge("adminAuditLog");
+  merge("subscriptionPayments");
+  merge("tickets");
+  assertPreservesRecords(previous, result);
+  return result;
+}

@@ -23,8 +23,12 @@ export type SessionPayload = {
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;
-  if (!s) throw new Error("SESSION_SECRET is not set");
-  return s;
+  if (s) return s;
+  // Self-hosted servers without SESSION_SECRET: derive a private key from the
+  // database URL so sign-in never fails with a server error.
+  const db = process.env.DATABASE_URL;
+  if (!db) throw new Error("SESSION_SECRET is not set");
+  return createHmac("sha256", "bitepay-session-fallback").update(db).digest("hex");
 }
 
 function b64url(input: Buffer | string) {
