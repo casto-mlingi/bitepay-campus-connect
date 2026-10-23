@@ -31,3 +31,16 @@ describe("customer data preservation", () => {
     assert.equal((updated.profiles as typeof previous.profiles)[0]?.store_id, "a");
   });
 });
+import { it as t2 } from "node:test";
+import assertMod from "node:assert/strict";
+import { adminSnapshotUpdate } from "./snapshot-safety";
+t2("admin plan and days changes are saved, but store sales and cash are not touched", () => {
+  const prev = { stores: [{ id: "s1", name: "A", subscription: { plan: "trial", expires_at: 1 } }], orders: [{ id: "o1", store_id: "s1" }], treasuries: { s1: { cash: 500, bank: 0 } }, adminAuditLog: [] };
+  const next = adminSnapshotUpdate(prev, { stores: [{ id: "s1", name: "Hacked", subscription: { plan: "starter", expires_at: 99 } }], orders: [], treasuries: { s1: { cash: 0, bank: 0 } }, adminAuditLog: [{ id: "a1" }] }) as any;
+  assertMod.equal(next.stores[0].subscription.plan, "starter");
+  assertMod.equal(next.stores[0].subscription.expires_at, 99);
+  assertMod.equal(next.stores[0].name, "A");
+  assertMod.equal(next.orders.length, 1);
+  assertMod.equal(next.treasuries.s1.cash, 500);
+  assertMod.equal(next.adminAuditLog.length, 1);
+});

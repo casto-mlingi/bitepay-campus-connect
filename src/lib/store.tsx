@@ -811,7 +811,7 @@ type Ctx = {
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   superAdmin: SuperAdmin;
   isAdminSignedIn: boolean;
-  adminLogin: (verified: boolean) => boolean;
+  adminLogin: (verified: boolean, token?: string | null) => boolean;
   adminLogout: () => void;
   addSubscriptionDays: (days: number, storeId?: string) => void;
   changePlan: (plan: SubscriptionPlan, storeId?: string) => void;
@@ -928,7 +928,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         };
         if (s.currentUserId) { setCurrentUserId(s.currentUserId); setRestoredUid(s.currentUserId); }
         if (s.selectedCanteenId) setSelectedCanteenId(s.selectedCanteenId);
-        if (s.superAdminSignedIn) setSuperAdminSignedIn(true);
+        // Older admin sign-ins had no server session; ask them to sign in once more.
+        if (s.superAdminSignedIn && getSessionToken()) setSuperAdminSignedIn(true);
       }
     } catch { /* ignore corrupt storage */ }
     sessionRestored.current = true;
@@ -2955,15 +2956,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     superAdmin,
     isAdminSignedIn: superAdminSignedIn,
-    adminLogin(verified) {
+    adminLogin(verified, token) {
       if (verified === true) {
+        if (token) {
+          // Keep any staff sign-in on this phone so it can be restored on admin sign-out.
+          try { const prev = getSessionToken(); if (prev) localStorage.setItem("bitepay.prev_session", prev); } catch { /* ignore */ }
+          saveSessionToken(token);
+        }
         setSuperAdminSignedIn(true);
         setAdminAuditLog((prev) => [{ id: uid("au"), action: "sign_in", detail: "Admin signed in", created_at: Date.now() }, ...prev]);
         return true;
       }
       return false;
     },
-    adminLogout() { setSuperAdminSignedIn(false); },
+    adminLogout() {
+      let prev: string | null = null;
+      try { prev = localStorage.getItem("bitepay.prev_session"); localStorage.removeItem("bitepay.prev_session"); } catch { /* ignore */ }
+      saveSessionToken(prev);
+      if (!prev) void logoutSession();
+      setSuperAdminSignedIn(false);
+    },
     addSubscriptionDays(days, storeId) {
       const targetId = storeId ?? currentStoreId;
       if (!targetId || days === 0) return;

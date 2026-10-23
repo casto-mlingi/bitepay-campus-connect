@@ -46,7 +46,7 @@ const daysLeftOf = (expires: number) => Math.max(0, Math.ceil((expires - Date.no
 
 /* ------------------------------------------------------------------ login */
 
-function AdminLogin({ onLogin }: { onLogin: (verified: boolean) => boolean }) {
+function AdminLogin({ onLogin }: { onLogin: (verified: boolean, token?: string | null) => boolean }) {
   const [busy, setBusy] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -57,7 +57,7 @@ function AdminLogin({ onLogin }: { onLogin: (verified: boolean) => boolean }) {
     setBusy(true); setError("");
     try {
       const res = await verifyAdminLogin({ data: { username, password } });
-      if (!res.ok || !onLogin(true)) setError("Invalid admin credentials");
+      if (!res.ok || !onLogin(true, res.token)) setError("Invalid admin credentials");
     } catch {
       setError("Could not reach the server. Check your connection.");
     } finally { setBusy(false); }

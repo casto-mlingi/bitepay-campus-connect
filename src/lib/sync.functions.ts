@@ -39,6 +39,13 @@ export const pushSnapshot = createServerFn({ method: "POST" })
       const [current] = await tx`select revision, payload, updated_at from app_snapshots where key = ${data.key} for update`;
       if (!current || Number(current.revision) !== data.baseRevision) return { ok: false as const, stale: true as const, revision: Number(current?.revision ?? 0), updated_at: current?.updated_at?.toISOString() ?? null };
       const previous = JSON.parse(String(current.payload));
+      if (session.role === "super_admin") {
+        const { adminSnapshotUpdate } = await import("@/lib/snapshot-safety");
+        const payload = JSON.stringify(adminSnapshotUpdate(previous, JSON.parse(data.payload)));
+        const revision = Number(current.revision) + 1;
+        const [row] = await tx`update app_snapshots set revision=${revision}, payload=${payload}, updated_at=now() where key=${data.key} returning updated_at`;
+        return { ok: true as const, stale: false as const, revision, updated_at: row.updated_at.toISOString(), payload };
+      }
       let profile = previous.profiles?.find((p: { id: string; disabled?: boolean }) => p.id === session.uid && !p.disabled);
       if (!profile) {
         const [registered] = await tx`select id, home_store_id, staff_role from profiles where id::text=${session.uid} and is_disabled=false`;

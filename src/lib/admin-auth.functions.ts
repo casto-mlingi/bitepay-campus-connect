@@ -19,5 +19,9 @@ export const verifyAdminLogin = createServerFn({ method: "POST" })
     const expected = env ? sha(env) : Buffer.from(FALLBACK_ADMIN_HASH, "hex");
     const userOk = data.username.trim().toLowerCase() === "admin";
     const passOk = timingSafeEqual(sha(data.password.trim()), expected);
-    return { ok: (userOk && passOk) as boolean };
+    if (!(userOk && passOk)) return { ok: false as const, token: null };
+    // Signed admin session so the server accepts admin changes (plans, days).
+    const { writeSessionCookie } = await import("@/lib/auth/session.server");
+    const token = writeSessionCookie({ uid: "super-admin", sid: null, role: "super_admin" });
+    return { ok: true as const, token };
   });
