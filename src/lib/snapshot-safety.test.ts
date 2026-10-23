@@ -31,7 +31,7 @@ describe("customer data preservation", () => {
     assert.equal((updated.profiles as typeof previous.profiles)[0]?.store_id, "a");
   });
 });
-import { test as t2 } from "bun:test";
+import { it as t2 } from "node:test";
 import assertMod from "node:assert/strict";
 import { adminSnapshotUpdate } from "./snapshot-safety";
 t2("admin plan and days changes are saved, but store sales and cash are not touched", () => {
