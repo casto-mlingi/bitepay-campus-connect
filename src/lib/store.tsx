@@ -928,7 +928,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         };
         if (s.currentUserId) { setCurrentUserId(s.currentUserId); setRestoredUid(s.currentUserId); }
         if (s.selectedCanteenId) setSelectedCanteenId(s.selectedCanteenId);
-        if (s.superAdminSignedIn) setSuperAdminSignedIn(true);
+        // Older admin sign-ins had no server session; ask them to sign in once more.
+        if (s.superAdminSignedIn && getSessionToken()) setSuperAdminSignedIn(true);
       }
     } catch { /* ignore corrupt storage */ }
     sessionRestored.current = true;
