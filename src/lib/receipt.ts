@@ -40,7 +40,7 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
     lines.push(`WALLET             ${formatTZS(order.wallet_paid ?? 0).padStart(13)}`);
     lines.push(`CASH               ${formatTZS(order.cash_paid ?? 0).padStart(13)}`);
   }
-  if (extras.paymentMode === "cash" && extras.cashReceived != null) {
+  if (extras.paymentMode === "cash" && extras.cashReceived != null && order.amount_received == null) {
     lines.push(`CASH               ${formatTZS(extras.cashReceived).padStart(13)}`);
     lines.push(`CHANGE             ${formatTZS(extras.change ?? 0).padStart(13)}`);
   }

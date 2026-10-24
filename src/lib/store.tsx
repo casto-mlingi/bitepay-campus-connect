@@ -1,5 +1,5 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
-import { cashSettlement, walletSettlement, validWalletPayout, wholeAmount } from "./pos-payments";
+import { cashSettlement, walletSettlement, validWalletPayout, debtSince } from "./pos-payments";
 import { billBalance, dueDate, validPayment, type Vendor, type VendorPayment } from "./payables";
 export type { Vendor, VendorPayment } from "./payables";
 import { uploadImage } from "@/lib/images.functions";
@@ -1341,10 +1341,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const sid = storeId ?? currentStoreId;
     const org = orgIdOfId(sid);
     if (debtorBalance(customerId, sid ?? undefined) <= 0) return false;
-    return payLaterRequests.some((r) =>
+    const approvedOverdue = payLaterRequests.some((r) =>
       r.customer_id === customerId && r.status === "approved" &&
       orgIdOfId(r.store_id) === org && (r.due_at ?? Infinity) < Date.now());
-  }, [payLaterRequests, currentStoreId, orgIdOfId, debtorBalance]);
+    const customer = profiles.find((p) => p.id === customerId);
+    if (!customer || !sid) return approvedOverdue;
+    const since = debtSince(transactions.filter((t) => t.customer_id === customerId && orgIdOfId(t.store_id) === org), walletFor(customer, sid));
+    const days = stores.find((s) => s.id === sid)?.credit_terms_days ?? 7;
+    return approvedOverdue || since + days * 86400000 < Date.now();
+  }, [payLaterRequests, currentStoreId, orgIdOfId, debtorBalance, profiles, transactions, stores]);
 
   const logAudit = useCallback((entry: Omit<MenuRequestAudit, "id" | "created_at">) => {
     setMenuAudits((prev) => [{ ...entry, id: uid("ma"), created_at: Date.now() }, ...prev]);
@@ -1477,7 +1482,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     adjustCash((c) => c + settlement.cashDelta);
     if (changeProfile && settlement.changeSaved > 0) {
       const target = changeProfile;
-      if (!profiles.some((p) => p.id === target.id)) setProfiles((prev) => [...prev, target]);
+      if (!profiles.some((p) => p.id === target.id)) {
+        setProfiles((prev) => [...prev, target]);
+        void savePassword({ data: { targetId: target.id, password: target.password, mustChange: true, newCustomer: { id: target.id, full_name: target.full_name, phone: target.phone, store_id: currentStoreId } } }).catch(() => {});
+      }
       setWallet(target.id, currentStoreId, settlement.changeSaved);
       setTransactions((prev) => [{ id: uid("change"), store_id: currentStoreId, customer_id: target.id, order_id: id, type: "topup", amount: settlement.changeSaved, description: `Change saved · ${receipt_no}`, created_at: Date.now(), tender, by_name: currentUser?.full_name }, ...prev]);
     }
