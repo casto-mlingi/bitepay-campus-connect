@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
 import { isBeverage } from "@/lib/business-rules";
+import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
 export const Route = createFileRoute("/pos")({
@@ -39,6 +40,9 @@ function POS() {
   const [topupTender, setTopupTender] = useState<Tender>("cash");
   const [topupRef, setTopupRef] = useState<string>("");
   const [cashReceived, setCashReceived] = useState<number>(0);
+  const [saveChange, setSaveChange] = useState(false);
+  const [changePhone, setChangePhone] = useState("");
+  const [allowDebt, setAllowDebt] = useState(false);
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
   const [mobileRef, setMobileRef] = useState<string>("");
@@ -98,7 +102,7 @@ function POS() {
     showToast("Saved bill removed");
   };
   const total = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
-  const change = tender === "mobile" ? 0 : Math.max(0, cashReceived - total);
+  const change = Math.max(0, cashReceived - total);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -135,7 +139,7 @@ function POS() {
 
   const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
   const [splitCash, setSplitCash] = useState<number>(0);
-  useEffect(() => { setSplitCash(walletShort); }, [walletShort]);
+  useEffect(() => { setSplitCash(Math.min(total, walletShort)); setAllowDebt(false); }, [walletShort, total]);
 
   const requireShift = () => {
     if (!activeShift) { showToast("Open a shift first"); return false; }
@@ -147,14 +151,14 @@ function POS() {
     if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    const cashPortion = walletShort > 0 ? Math.max(splitCash, walletShort) : 0;
-    if (!isOnline) {
+    const cashPortion = walletShort > 0 ? splitCash : 0;
+    if (!isOnline && !allowDebt) {
       enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setSplitCash(0); setMobileRef("");
       return;
     }
-    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined });
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, allowDebt });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
@@ -167,20 +171,20 @@ function POS() {
   const doCashSale = () => {
     if (lines.length === 0) return;
     if (!requireShift()) return;
-    const effectiveReceived = tender === "mobile" ? total : cashReceived;
+    const effectiveReceived = cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
-    if (!isOnline) {
+    if (!isOnline && !saveChange) {
       enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
       return;
     }
-    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined });
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, changeCustomer: saveChange && change > 0 ? { phone: changePhone, name: cashName || billLabel } : undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); resetBill(res.order.id);
+    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); setSaveChange(false); setChangePhone(""); resetBill(res.order.id);
     showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${res.order.receipt_no ?? res.order.id}`);
   };
 
@@ -225,8 +229,10 @@ function POS() {
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
-  const canWallet = !!freshCustomer && lines.length > 0 && total > 0 && (freshCustomer.wallet_balance + splitCash >= total);
-  const canCash = lines.length > 0 && total > 0 && (tender === "mobile" ? mobileRef.trim().length > 0 : cashReceived >= total);
+  const debtLimit = Math.max(0, store?.customer_debt_limit ?? 0);
+  const walletPreview = freshCustomer ? walletSettlement(freshCustomer.wallet_balance, total, walletShort > 0 ? splitCash : 0, debtLimit, allowDebt) : null;
+  const canWallet = !!walletPreview?.ok && lines.length > 0 && total > 0;
+  const canCash = lines.length > 0 && total > 0 && cashReceived >= total && (!saveChange || change <= 0 || changePhone.replace(/\D/g, "").length >= 9);
   const creditedWaiter = waiterId ? servers.find((s) => s.id === waiterId)?.full_name : (tableNo.trim() ? waiterForTable(tableNo)?.waiter_name : undefined);
 
   const billPanel = (
@@ -351,7 +357,7 @@ function POS() {
                           <div className="font-semibold text-sm truncate">{s.full_name}</div>
                           <div className="text-xs text-muted-foreground">{s.phone}</div>
                         </div>
-                        <div className="text-xs font-bold text-success">{formatTZS(s.wallet_balance)}</div>
+                        <div className={`text-xs font-bold ${s.wallet_balance < 0 ? "text-destructive" : "text-success"}`}>{formatTZS(s.wallet_balance)}</div>
                       </button>
                     </li>
                   ))}
@@ -362,7 +368,7 @@ function POS() {
                   <User className="w-5 h-5 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{freshCustomer.full_name}</div>
-                    {!qrOnly && <div className="text-xs text-success font-bold">{formatTZS(freshCustomer.wallet_balance)}</div>}
+                    {!qrOnly && <div className={`text-xs font-bold ${freshCustomer.wallet_balance < 0 ? "text-destructive" : "text-success"}`}>{formatTZS(freshCustomer.wallet_balance)}</div>}
                   </div>
                   <button onClick={() => { setCustomer(null); setQuery(""); }} className="p-2 hover:bg-background rounded" aria-label="Remove customer"><X className="w-4 h-4" /></button>
                 </div>
@@ -370,9 +376,12 @@ function POS() {
               {freshCustomer && walletShort > 0 && (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
                   <div className="text-sm font-semibold text-amber-800">Wallet short by {formatTZS(walletShort)} — collect the rest</div>
-                  <Input type="number" value={splitCash || ""} onChange={(e) => setSplitCash(Number(e.target.value) || 0)} className="h-11 font-semibold bg-background" />
+                  <Input type="number" value={splitCash || ""} aria-label="Remaining amount received" min={0} max={total} inputMode="numeric" onChange={(e) => setSplitCash(Math.max(0, wholeAmount(Number(e.target.value)) || 0))} className="h-11 font-semibold bg-background" />
                   <TenderPicker tender={tender} onChange={setTender} />
-                  {tender === "mobile" && <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba code" className="h-11 bg-background" />}
+                  {tender === "mobile" && <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 bg-background" />}
+                  <label className="flex items-start gap-2 text-sm font-medium"><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={allowDebt} disabled={debtLimit <= 0} onChange={(e) => { setAllowDebt(e.target.checked); setSplitCash(e.target.checked ? 0 : Math.min(total, walletShort)); }} />Pay later · leave the shortage as customer debt</label>
+                  <div className="text-xs text-muted-foreground">Debt limit: {formatTZS(debtLimit)}{debtLimit === 0 ? " · disabled in Settings" : ""}</div>
+                  {allowDebt && walletPreview && (walletPreview.ok ? <div className="text-destructive font-bold text-sm">Balance after payment: {formatTZS(walletPreview.balanceAfter)}</div> : <div role="alert" className="text-destructive text-sm">{walletPreview.reason}</div>)}
                 </div>
               )}
               <Button disabled={!canWallet || !activeShift} onClick={doWalletSale} className="w-full h-14 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
@@ -382,20 +391,30 @@ function POS() {
           ) : (
             <>
               <TenderPicker tender={tender} onChange={setTender} />
-              {tender === "cash" ? (
-                <>
-                  <Input type="number" inputMode="numeric" value={cashReceived || ""} onChange={(e) => setCashReceived(Number(e.target.value) || 0)} placeholder="Cash received" className="h-12 text-lg font-semibold" />
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
-                      <button key={v} onClick={() => setCashReceived(v)} className="h-11 rounded-lg bg-muted text-sm font-semibold active:scale-95">{v === total ? "Exact" : formatTZS(v)}</button>
-                    ))}
+              <label className="block text-sm font-medium">{tender === "cash" ? "Cash received" : "Amount received by Lipa"}
+                <Input aria-label="Amount received" type="number" min={0} inputMode="numeric" value={cashReceived || ""} onChange={(e) => setCashReceived(Math.max(0, wholeAmount(Number(e.target.value)) || 0))} placeholder="Amount received" className="mt-1 h-12 text-lg font-semibold" />
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[total, 5000, 10000, 20000, 50000].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map((v) => (
+                  <Button variant="secondary" key={v} onClick={() => setCashReceived(v)} className="h-11 text-sm font-semibold">{v === total ? "Exact" : v.toLocaleString()}</Button>
+                ))}
+              </div>
+              {tender === "mobile" && <Input aria-label="Lipa reference / token (optional)" value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11" />}
+              <div className={`flex items-center justify-between rounded-lg p-3 text-lg ${cashReceived >= total ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                <span className="font-medium">Change</span><span className="font-bold">{formatTZS(change)}</span>
+              </div>
+              {change > 0 && can("customers.topup") && (
+                <div className="space-y-2 border-t pt-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant={saveChange ? "outline" : "default"} onClick={() => setSaveChange(false)} className="h-12 whitespace-normal">Return cash change</Button>
+                    <Button variant={saveChange ? "default" : "outline"} onClick={() => setSaveChange(true)} className="h-12 whitespace-normal"><Wallet className="h-4 w-4 mr-1 shrink-0" />Save change</Button>
                   </div>
-                  <div className={`flex items-center justify-between rounded-lg p-3 text-lg ${cashReceived >= total ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                    <span className="font-medium">Change</span><span className="font-bold">{formatTZS(change)}</span>
-                  </div>
-                </>
-              ) : (
-                <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa Namba confirmation code" className="h-12 font-mono" />
+                  {saveChange && <>
+                    <Input aria-label="Customer phone for saved change" type="tel" value={changePhone} onChange={(e) => setChangePhone(e.target.value)} placeholder="Customer phone / WhatsApp number" className="h-12" />
+                    <Input aria-label="Customer name for saved change" value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder="Customer name (optional)" className="h-11" />
+                    <div className="text-success text-sm font-semibold">Save {formatTZS(change)} to customer balance</div>
+                  </>}
+                </div>
               )}
               <Button disabled={!canCash || !activeShift} onClick={doCashSale} className="w-full h-14 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
                 <CheckCircle2 className="w-5 h-5 mr-2" /> {tender === "mobile" ? "Confirm Lipa Namba & print" : "Paid in cash & print"}

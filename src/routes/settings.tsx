@@ -47,6 +47,7 @@ function SettingsPage() {
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
+  const [debtLimit, setDebtLimit] = useState(store?.customer_debt_limit ?? 0);
   const [businessType, setBusinessType] = useState<BusinessType>(store?.business_type ?? "canteen");
 
   useEffect(() => {
@@ -58,14 +59,16 @@ function SettingsPage() {
     setWaiterTables(store.enable_waiter_tables ?? false);
     setDeliveryFee(store.delivery_fee ?? 0);
     setBusinessType(store.business_type ?? "canteen");
+    setDebtLimit(store.customer_debt_limit ?? 0);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
-  if (!can("settings.manage")) return <StaffShell><AccessDenied feature="Store settings" /></StaffShell>;
+  if (!can("settings.manage") && !can("settings.credit")) return <StaffShell><AccessDenied feature="Store settings" /></StaffShell>;
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    updateStore({ business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
+    if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Debt limit saved"); return; }
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -84,10 +87,10 @@ function SettingsPage() {
     <StaffShell>
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2"><SettingsIcon className="w-7 h-7 text-primary" /> Store settings</h1>
-        <p className="text-muted-foreground">Only the owner can change these.</p>
+        <p className="text-muted-foreground">{can("settings.manage") ? "Store profile and payment settings" : "Customer debt limit"}</p>
       </div>
 
-      {sub && (
+      {sub && can("settings.manage") && (
         <div className="max-w-2xl mb-6 bg-gradient-to-br from-primary to-orange-500 text-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-90"><Sparkles className="w-4 h-4" /> Subscription</div>
           <div className="mt-2 flex items-end justify-between gap-4 flex-wrap">
@@ -129,6 +132,8 @@ function SettingsPage() {
       )}
 
       <form onSubmit={save} className="max-w-2xl bg-surface border rounded-2xl p-6 space-y-4">
+        <Row label="Customer debt limit (TZS)"><Input aria-label="Customer debt limit" type="number" min={0} step={1} inputMode="numeric" value={debtLimit || ""} placeholder="0 — disabled" onChange={(e) => setDebtLimit(Math.max(0, Math.round(Number(e.target.value) || 0)))} className="h-12" /></Row>
+        {can("settings.manage") && <>
         <div className="flex items-center gap-2 mb-1"><StoreIcon className="w-5 h-5 text-primary" /><h2 className="font-bold">Profile</h2></div>
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
         <Row label="Business type">
@@ -187,10 +192,11 @@ function SettingsPage() {
           </div>
           <input type="checkbox" checked={mobile} onChange={(e) => setMobile(e.target.checked)} className="w-5 h-5 accent-primary" />
         </label>
+        </>}
         <Button type="submit" className="w-full h-11 rounded-xl"><Save className="w-4 h-4 mr-2" /> Save settings</Button>
       </form>
 
-      {store && <SelcomSettingsCard storeId={store.id} />}
+      {store && can("settings.manage") && <SelcomSettingsCard storeId={store.id} />}
 
       {payPlan && (
         <PaymentDialog

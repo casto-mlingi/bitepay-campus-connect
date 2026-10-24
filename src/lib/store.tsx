@@ -1458,7 +1458,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const canonical = (v: string) => v.replace(/\D/g, "").replace(/^0/, "255");
       const existing = profiles.find((p) => canonical(p.phone) === canonical(phone));
       if (existing && (existing.role !== "customer" || existing.disabled)) return { ok: false, reason: "This phone cannot receive customer change" };
-      changeProfile = existing ?? { id: uid("u"), full_name: changeCustomer.name?.trim() || phone, phone, password: defaultPasswordFor(phone), default_password: defaultPasswordFor(phone), must_change_password: true, wallet_balance: 0, wallets: { [orgIdOfId(currentStoreId)]: 0 }, role: "customer", store_id: currentStoreId, created_at: Date.now() };
+      changeProfile = existing ?? { id: uid("u"), full_name: changeCustomer.name?.trim() || phone, phone, password: defaultPasswordFor(phone), default_password: defaultPasswordFor(phone), must_change_password: true, wallet_balance: 0, wallets: { [orgIdOfId(currentStoreId) ?? currentStoreId]: 0 }, role: "customer", store_id: currentStoreId, created_at: Date.now() };
     }
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
