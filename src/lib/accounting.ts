@@ -58,10 +58,12 @@ export function saleEntry(o: OrderLike): LedgerEntry {
 
 export function buildLedger(input: {
   orders: OrderLike[]; purchases: PurchaseLike[]; expenses: ExpenseLike[]; vendorPayments?: VendorPaymentLike[];
+  walletPayouts?: { id: string; amount: number; created_at: number; balance_before?: number }[];
   cogs: number; cash: number; bank: number; walletLiabilities: number; inventoryValue: number; walletReceivables?: number;
 }): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
   for (const o of input.orders) { const e = saleEntry(o); if (e.lines.length) entries.push(e); }
+  for (const p of input.walletPayouts ?? []) entries.push({ id: `wallet-payout-${p.id}`, date: p.created_at, memo: "Customer credit returned in cash", source: "payment", lines: [dr("2000", p.amount), cr("1000", p.amount)] });
   for (const p of input.purchases) {
     const acct = p.on_credit ? "2100" : p.payment_method === "bank" ? "1010" : "1000";
     entries.push({ id: `pur-${p.id}`, date: p.date, memo: `${p.on_credit ? "Supplier bill" : "Stock purchase"} · ${p.raw_name}${p.supplier ? ` from ${p.supplier}` : ""}`, source: "purchase", lines: [dr("1200", p.total_cost), cr(acct, p.total_cost)] });

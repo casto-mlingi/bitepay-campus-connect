@@ -35,7 +35,7 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
       for (const row of value) {
         if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error("Invalid snapshot record");
         const existing = rows.get(row.id);
-        if (field === "stores" && existing && row.customer_debt_limit !== existing.customer_debt_limit) {
+        if (field === "stores" && storeIds.has(row.id) && existing && row.customer_debt_limit !== existing.customer_debt_limit && role !== "customer") {
           const actor = (previous.profiles as Record<string, unknown>[] | undefined)?.find((p) => p.id === userId);
           const memberships = actor?.memberships as { store_id: string; staff_role: string }[] | undefined;
           const staffRole = memberships?.find((m) => m.store_id === row.id)?.staff_role ?? (actor?.store_id === row.id ? actor?.staff_role : undefined);

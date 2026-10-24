@@ -21,6 +21,12 @@ it("saved 5,000 change is a liability, not extra sales", () => {
   assert.equal(e.lines.find((l) => l.account === "4000")?.credit, 10000);
   assert.ok(isBalanced(e));
 });
+it("returning saved change reduces cash and customer liability by 5,000", () => {
+  const entries = buildLedger({ ...base, cash: 0, bank: 0, orders: [], walletPayouts: [{ id: "p", amount: 5000, created_at: 1 }] });
+  const payout = entries.find((e) => e.id === "wallet-payout-p");
+  assert.equal(payout?.lines.find((l) => l.account === "1000")?.credit, 5000);
+  assert.equal(payout?.lines.find((l) => l.account === "2000")?.debit, 5000);
+});
 
 it("a cash sale increases cash and revenue by the exact amount", () => {
   const e = saleEntry({ id: "a", created_at: 1, total_amount: 15000, cash_paid: 15000, payment_status: "paid" });

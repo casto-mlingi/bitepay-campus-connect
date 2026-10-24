@@ -29,7 +29,7 @@ type Tab = "treasury" | "receivables" | "payables" | "procurement" | "expenses" 
 function FinancePage() {
   const {
     currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
-    recordPurchase, recordExpense, hasStaffRole, vendorPayments,
+    recordPurchase, recordExpense, hasStaffRole, vendorPayments, transactions,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
@@ -100,6 +100,7 @@ function FinancePage() {
           orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs}
           cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
           walletReceivables={profiles.filter((p) => p.role === "customer").reduce((s, p) => s + Math.max(0, -p.wallet_balance), 0)}
+          walletPayouts={transactions.filter((t) => t.wallet_payout)}
         />
       )}
       {tab === "pnl" && (
@@ -780,7 +781,7 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "suc
 }
 
 function Books(props: Parameters<typeof buildLedger>[0]) {
-  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables]);
+  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables, props.walletPayouts]);
   const tb = useMemo(() => trialBalance(entries), [entries]);
   const bal = useMemo(() => balances(entries), [entries]);
   const [account, setAccount] = useState<AccountCode>("1000");
