@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { HandCoins, X, Truck, Wallet, Beer, Search } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { BUCKETS, agingTotals, buildReceivables, customerBalances, type ArItem, type ArSource } from "@/lib/receivables";
+import { debtSince } from "@/lib/pos-payments";
 
 const SOURCE: Record<ArSource, { label: string; icon: React.ReactNode }> = {
   delivery: { label: "Pay on delivery", icon: <Truck className="w-3.5 h-3.5" /> },
@@ -11,7 +12,7 @@ const SOURCE: Record<ArSource, { label: string; icon: React.ReactNode }> = {
 };
 
 export function ReceivablesPanel() {
-  const { receivables, openBills, profiles, payLaterRequests, debtorBalance, store, recordOrderPayment } = useStore();
+  const { receivables, openBills, profiles, payLaterRequests, debtorBalance, store, recordOrderPayment, transactions } = useStore();
   const [view, setView] = useState<"items" | "customers">("items");
   const [source, setSource] = useState<ArSource | "all">("all");
   const [q, setQ] = useState("");
@@ -23,12 +24,12 @@ export function ReceivablesPanel() {
       const lines = payLaterRequests.filter((r) => r.customer_id === p.id && r.status === "approved");
       return {
         customer_id: p.id, name: p.full_name, phone: p.phone, balance: debtorBalance(p.id),
-        since: Math.min(...lines.map((r) => r.resolved_at ?? r.created_at), Date.now()),
+        since: debtSince(transactions.filter((t) => t.customer_id === p.id), p.wallet_balance),
         due: lines.length ? Math.min(...lines.map((r) => r.due_at ?? Infinity)) : undefined,
       };
     }).map((d) => ({ ...d, due: Number.isFinite(d.due) ? d.due : undefined }));
     return buildReceivables({ orders: receivables, tabs: openBills, debtors, termsDays: store?.credit_terms_days ?? 7 });
-  }, [receivables, openBills, profiles, payLaterRequests, debtorBalance, store?.credit_terms_days]);
+  }, [receivables, openBills, profiles, payLaterRequests, debtorBalance, store?.credit_terms_days, transactions]);
 
   const totals = agingTotals(items);
   const filtered = items.filter((i) => (source === "all" || i.source === source) && (!q || i.party.toLowerCase().includes(q.toLowerCase()) || i.ref.toLowerCase().includes(q.toLowerCase())));

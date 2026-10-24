@@ -40,13 +40,23 @@ function receiptText(order: Order, extras: ReceiptExtras = {}) {
     lines.push(`WALLET             ${formatTZS(order.wallet_paid ?? 0).padStart(13)}`);
     lines.push(`CASH               ${formatTZS(order.cash_paid ?? 0).padStart(13)}`);
   }
-  if (extras.paymentMode === "cash" && extras.cashReceived != null) {
+  if (extras.paymentMode === "cash" && extras.cashReceived != null && order.amount_received == null) {
     lines.push(`CASH               ${formatTZS(extras.cashReceived).padStart(13)}`);
     lines.push(`CHANGE             ${formatTZS(extras.change ?? 0).padStart(13)}`);
   }
   if ((order.loyalty_earned ?? 0) > 0) {
     lines.push(`Loyalty earned     ${formatTZS(order.loyalty_earned ?? 0).padStart(13)}`);
   }
+  if ((order.debt_added ?? 0) > 0) {
+    lines.push(`Wallet paid        ${formatTZS(order.wallet_paid ?? 0)}`);
+    lines.push(`Added to debt      ${formatTZS(order.debt_added ?? 0)}`);
+  }
+  if (order.amount_received != null) {
+    lines.push(`Amount received    ${formatTZS(order.amount_received)}`);
+    lines.push(`Change returned    ${formatTZS(order.change_returned ?? 0)}`);
+    lines.push(`Change saved       ${formatTZS(order.change_saved ?? 0)}`);
+  }
+  if (order.wallet_balance_after != null) lines.push(`Wallet balance     ${formatTZS(order.wallet_balance_after)}`);
   lines.push(line);
   lines.push("     Thank you & enjoy!");
   lines.push("     bitepay.co.tz");
