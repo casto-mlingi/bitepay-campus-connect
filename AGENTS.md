@@ -27,3 +27,4 @@
 
 - Supplier bills are credit purchases; amounts owed are derived from append-only supplier payment rows so offline merges keep every payment.
 - Customer balances (receivables) are a read-only aging view built from unpaid delivery orders, approved pay-later wallet debt and open tabs; collections go through each source's existing payment action.
+- POS settlement rules live in pos-payments; orders retain separate tender receipts, treasury deltas, wallet charges and saved change so debt, refunds and shift reports do not mistake tendered money for sales revenue.

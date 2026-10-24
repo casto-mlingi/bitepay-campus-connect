@@ -35,6 +35,13 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
       for (const row of value) {
         if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error("Invalid snapshot record");
         const existing = rows.get(row.id);
+        if (field === "stores" && existing && row.customer_debt_limit !== existing.customer_debt_limit) {
+          const actor = (previous.profiles as Record<string, unknown>[] | undefined)?.find((p) => p.id === userId);
+          const memberships = actor?.memberships as { store_id: string; staff_role: string }[] | undefined;
+          const staffRole = memberships?.find((m) => m.store_id === row.id)?.staff_role ?? (actor?.store_id === row.id ? actor.staff_role : undefined);
+          if (staffRole !== "owner" && staffRole !== "supervisor") throw new Error("Only the store owner or manager may change the customer debt limit");
+          if (!Number.isSafeInteger(row.customer_debt_limit) || Number(row.customer_debt_limit) < 0) throw new Error("Invalid customer debt limit");
+        }
         const allowed = (r: Record<string, unknown>) => role === "customer"
           ? field === "profiles" ? r.id === userId : ["orders", "topUpRequests", "notifications", "payLaterRequests"].includes(field) && (r.customer_id === userId || r.user_id === userId)
           : field === "stores" ? storeIds.has(String(r.id))

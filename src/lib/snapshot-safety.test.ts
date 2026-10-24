@@ -3,6 +3,13 @@ import { strict as assert } from "node:assert";
 import { assertPreservesRecords, isLocalSyncHost, scopedSnapshotUpdate } from "./snapshot-safety";
 
 describe("customer data preservation", () => {
+  it("only the owner or manager can upload a customer debt limit", () => {
+    const base = { stores: [{ id: "a", customer_debt_limit: 0 }], profiles: [{ id: "p", role: "staff", staff_role: "cashier", store_id: "a" }] };
+    const incoming = { stores: [{ id: "a", customer_debt_limit: 20000 }] };
+    assert.throws(() => scopedSnapshotUpdate(base, incoming, "p", new Set(["a"])));
+    const manager = { ...base, profiles: [{ ...base.profiles[0], staff_role: "supervisor" }] };
+    assert.equal((scopedSnapshotUpdate(manager, incoming, "p", new Set(["a"])).stores as typeof incoming.stores)[0]?.customer_debt_limit, 20000);
+  });
   it("blocks localhost test hosts", () => {
     assert.equal(isLocalSyncHost("localhost:8080"), true);
     assert.equal(isLocalSyncHost("127.0.0.1:8080"), true);

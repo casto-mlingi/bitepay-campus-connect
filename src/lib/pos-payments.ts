@@ -19,7 +19,7 @@ export function cashSettlement(total: number, received: number, tender: "cash" |
   const change = r - t;
   const returned = saveChange ? 0 : change;
   if (tender === "mobile" && returned > drawerCash) return { ok: false as const, reason: "Not enough drawer cash for change; save it to the customer wallet instead" };
-  return { ok: true as const, received: r, change, changeSaved: saveChange ? change : 0, changeReturned: returned, cashDelta: tender === "cash" ? r - returned : -returned, bankDelta: tender === "mobile" ? r : 0 };
+  return { ok: true as const, received: r, change, changeSaved: saveChange ? change : 0, changeReturned: returned, cashDelta: tender === "cash" ? r - returned : returned ? -returned : 0, bankDelta: tender === "mobile" ? r : 0 };
 }
 
 export function validWalletPayout(balance: number, amount: number, available: number) {
