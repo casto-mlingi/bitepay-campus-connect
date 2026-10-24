@@ -12,7 +12,7 @@ export const Route = createFileRoute("/shift")({
 });
 
 function ShiftPage() {
-  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift } = useStore();
+  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift, transactions } = useStore();
   const navigate = useNavigate();
   const [float, setFloat] = useState<number>(50000);
   const [countedCash, setCountedCash] = useState<number>(0);
@@ -31,13 +31,14 @@ function ShiftPage() {
   );
 
   const stats = useMemo(() => {
-    const cashSales = shiftOrders.reduce((s, o) => s + (o.tender === "cash" ? (o.cash_paid ?? 0) : 0), 0);
-    const mobileSales = shiftOrders.reduce((s, o) => s + (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0), 0);
+    const payouts = transactions.filter((t) => t.wallet_payout && t.shift_id === activeShift?.id).reduce((s, t) => s + t.amount, 0);
+    const cashSales = shiftOrders.reduce((s, o) => s + (o.cash_delta ?? (o.tender === "cash" ? (o.cash_paid ?? 0) : 0)), 0) - payouts;
+    const mobileSales = shiftOrders.reduce((s, o) => s + (o.bank_delta ?? (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0)), 0);
     const walletSales = shiftOrders.reduce((s, o) => s + (o.wallet_paid ?? 0), 0);
     const gross = shiftOrders.filter((o) => !o.is_reversal).reduce((s, o) => s + o.total_amount, 0);
     const reversals = shiftOrders.filter((o) => o.is_reversal).reduce((s, o) => s + Math.abs(o.total_amount), 0);
     return { cashSales, mobileSales, walletSales, gross, reversals };
-  }, [shiftOrders]);
+  }, [shiftOrders, transactions, activeShift]);
 
   const expectedCash = (activeShift?.opening_float ?? 0) + stats.cashSales;
   const cashVariance = countedCash - expectedCash;

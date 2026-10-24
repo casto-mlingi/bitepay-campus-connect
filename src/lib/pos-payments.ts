@@ -25,3 +25,17 @@ export function cashSettlement(total: number, received: number, tender: "cash" |
 export function validWalletPayout(balance: number, amount: number, available: number) {
   return Number.isSafeInteger(amount) && amount > 0 && amount <= Math.max(0, balance) && amount <= available;
 }
+
+/** Date the current uninterrupted debt began; top-ups that clear it reset aging. */
+export function debtSince(rows: { type: "topup" | "deduction"; amount: number; created_at: number }[], currentBalance: number) {
+  const sorted = [...rows].sort((a, b) => a.created_at - b.created_at);
+  const net = sorted.reduce((s, r) => s + (r.type === "topup" ? r.amount : -r.amount), 0);
+  let balance = currentBalance - net;
+  let since = sorted[0]?.created_at ?? Date.now();
+  for (const r of sorted) {
+    const next = balance + (r.type === "topup" ? r.amount : -r.amount);
+    if (balance >= 0 && next < 0) since = r.created_at;
+    balance = next;
+  }
+  return since;
+}

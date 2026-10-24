@@ -17,7 +17,7 @@ export const Route = createFileRoute("/customers")({
 function Customers() {
   const {
     currentUser, sessionReady, can, profiles, transactions, addCustomer, staffTopUp, topUpRequests, rejectTopUpRequest, setStaffPin,
-    resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf,
+    resetCustomerPassword, payLaterRequests, reviewPayLaterRequest, debtorBalance, isOverdue, creditLimitOf, returnWalletCredit, activeShift,
   } = useStore();
   const navigate = useNavigate();
 
@@ -30,6 +30,8 @@ function Customers() {
   const [pinPrompt, setPinPrompt] = useState<null | { title: string; onSubmit: (pin: string) => void }>(null);
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [toast, setToast] = useState("");
+  const [view, setView] = useState<"all" | "change">("all");
+  const [returnAmount, setReturnAmount] = useState(0);
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
@@ -41,6 +43,7 @@ function Customers() {
   const filtered = useMemo(() => {
     const q = filter.q.trim().toLowerCase();
     return customers.filter((c) => {
+      if (view === "change" && !transactions.some((t) => t.customer_id === c.id && t.description.startsWith("Change saved"))) return false;
       if (q && !(c.full_name.toLowerCase().includes(q) || c.phone.includes(q) || c.id.toLowerCase().includes(q))) return false;
       if (filter.status === "debtor" && c.wallet_balance >= 0) return false;
       if (filter.status === "overdue" && !isOverdue(c.id)) return false;
@@ -49,13 +52,13 @@ function Customers() {
       if (at && (at < range.from || at > range.to)) return false;
       return true;
     });
-  }, [customers, filter, range, isOverdue]);
+  }, [customers, filter, range, isOverdue, view, transactions]);
 
   const pendingCredit = useMemo(() => payLaterRequests.filter((r) => r.status === "pending"), [payLaterRequests]);
 
   const pendingRequests = useMemo(() => topUpRequests.filter((r) => r.status === "pending"), [topUpRequests]);
 
-  const totalLiability = customers.reduce((s, c) => s + c.wallet_balance, 0);
+  const totalLiability = customers.reduce((s, c) => s + Math.max(0, c.wallet_balance), 0);
   const activeToday = new Set(
     transactions.filter((t) => Date.now() - t.created_at < 24 * 3600 * 1000).map((t) => t.customer_id)
   ).size;
@@ -195,6 +198,10 @@ function Customers() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
         <section className="bg-surface border rounded-2xl overflow-hidden">
           <div className="p-4 border-b">
+            <div className="flex gap-2 mb-3" role="group" aria-label="Customer view">
+              <Button variant={view === "all" ? "default" : "outline"} onClick={() => setView("all")}><Users className="h-4 w-4 mr-1" />All customers</Button>
+              <Button variant={view === "change" ? "default" : "outline"} onClick={() => setView("change")}><Wallet className="h-4 w-4 mr-1" />Saved change</Button>
+            </div>
             <ListFilter
               filter={filter}
               onChange={setFilter}
@@ -348,6 +355,18 @@ function Customers() {
               </div>
 
 
+              {selected.wallet_balance > 0 && can("customers.topup") && (
+                <div className="mt-4 border-t pt-3 space-y-2">
+                  <label className="block text-sm font-semibold">Return customer credit in cash
+                    <Input aria-label="Customer credit to return" type="number" min={1} max={selected.wallet_balance} inputMode="numeric" value={returnAmount || ""} onChange={(e) => setReturnAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))} className="mt-1 h-12" />
+                  </label>
+                  <Button disabled={!activeShift || returnAmount <= 0 || returnAmount > selected.wallet_balance} variant="outline" className="w-full h-12" onClick={() => requestPin(`Return ${formatTZS(returnAmount)} to ${selected.full_name} in cash`, (pin) => {
+                    const result = returnWalletCredit(selected.id, returnAmount, pin);
+                    if (!result.ok) { showToast(result.reason); return; }
+                    setPinPrompt(null); setReturnAmount(0); showToast("Customer credit returned in cash");
+                  })}><RotateCcw className="h-4 w-4 mr-2" />Return cash · PIN required</Button>
+                </div>
+              )}
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Recent activity</div>
                 {selectedTx.length === 0 ? (
