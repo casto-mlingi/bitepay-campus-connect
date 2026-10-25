@@ -410,12 +410,13 @@ function POS() {
                     <Input aria-label="Customer phone for saved change" type="tel" value={changePhone} onChange={(e) => setChangePhone(e.target.value)} placeholder="Customer phone / WhatsApp number" className="h-12" />
                     <Input aria-label="Customer name for saved change" value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder="Customer name (optional)" className="h-11" />
                     <div className="text-success text-sm font-semibold">Customer credit: {formatTZS(change)}</div>
+                    <p className="text-xs text-muted-foreground">New customers get a wallet: they sign in with this phone number, and their first password is the last 4 digits of it.</p>
                 </div>
               )}
-              <div className={`grid gap-2 ${tender === "mobile" && change > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
-                {tender === "mobile" && change > 0 && <Button variant="outline" disabled={!canCash || !activeShift} onClick={() => doCashSale(false)} className="w-full min-h-14 h-auto py-3 whitespace-normal text-sm font-bold"><Banknote className="w-5 h-5 mr-1 shrink-0" />Return cash change</Button>}
-                <Button disabled={!canCash || !canSaveCredit || !activeShift} onClick={() => doCashSale(change > 0)} className="w-full min-h-14 h-auto py-3 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
-                  <CheckCircle2 className="w-5 h-5 mr-2 shrink-0" />Confirm
+              <div className={`grid gap-2 ${change > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {change > 0 && <Button variant="outline" disabled={!canCash || !activeShift} onClick={() => doCashSale(false)} className="w-full min-h-14 h-auto py-3 whitespace-normal text-sm font-bold"><Banknote className="w-5 h-5 mr-1 shrink-0" />Return cash change</Button>}
+                <Button disabled={!canCash || !canSaveCredit || !activeShift} onClick={() => doCashSale(change > 0)} className="w-full min-h-14 h-auto py-3 whitespace-normal text-sm font-bold bg-success hover:bg-success/90 text-success-foreground">
+                  <CheckCircle2 className="w-5 h-5 mr-2 shrink-0" />{change > 0 ? "Save as credit" : "Confirm"}
                 </Button>
               </div>
             </>
