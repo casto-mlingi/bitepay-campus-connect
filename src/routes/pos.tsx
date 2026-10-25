@@ -40,7 +40,6 @@ function POS() {
   const [topupTender, setTopupTender] = useState<Tender>("cash");
   const [topupRef, setTopupRef] = useState<string>("");
   const [cashReceived, setCashReceived] = useState<number>(0);
-  const [saveChange, setSaveChange] = useState(false);
   const [changePhone, setChangePhone] = useState("");
   const [allowDebt, setAllowDebt] = useState(false);
   const [cashName, setCashName] = useState<string>("");
@@ -168,8 +167,10 @@ function POS() {
     showToast(`Sale ${res.order.receipt_no ?? res.order.id} — receipt printed`);
   };
 
-  const doCashSale = () => {
+  const doCashSale = (saveChange: boolean) => {
     if (lines.length === 0) return;
+    if (!Number.isFinite(cashReceived) || cashReceived < total) { showToast("Enter the full amount received"); return; }
+    if (saveChange && change > 0 && changePhone.replace(/\D/g, "").length < 9) { showToast("Enter the customer phone number to save their credit"); return; }
     if (!requireShift()) return;
     const effectiveReceived = cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
@@ -184,8 +185,8 @@ function POS() {
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
     printReceipt(res.order, extras);
-    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); setSaveChange(false); setChangePhone(""); resetBill(res.order.id);
-    showToast(`${tender === "mobile" ? "Mobile" : "Cash"} sale ${res.order.receipt_no ?? res.order.id}`);
+    setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); setChangePhone(""); resetBill(res.order.id);
+    showToast(saveChange && change > 0 ? `${formatTZS(change)} saved as customer credit` : tender === "mobile" && change > 0 ? `Payment saved · give customer ${formatTZS(change)} cash change` : `Payment saved · receipt printed`);
   };
 
   const doTopUp = () => {
@@ -232,7 +233,8 @@ function POS() {
   const debtLimit = Math.max(0, store?.customer_debt_limit ?? 0);
   const walletPreview = freshCustomer ? walletSettlement(freshCustomer.wallet_balance, total, walletShort > 0 ? splitCash : 0, debtLimit, allowDebt) : null;
   const canWallet = !!walletPreview?.ok && lines.length > 0 && total > 0;
-  const canCash = lines.length > 0 && total > 0 && cashReceived >= total && (!saveChange || change <= 0 || changePhone.replace(/\D/g, "").length >= 9);
+  const canCash = lines.length > 0 && total > 0 && Number.isFinite(cashReceived) && cashReceived >= total;
+  const canSaveCredit = change <= 0 || (can("customers.topup") && changePhone.replace(/\D/g, "").length >= 9);
   const creditedWaiter = waiterId ? servers.find((s) => s.id === waiterId)?.full_name : (tableNo.trim() ? waiterForTable(tableNo)?.waiter_name : undefined);
 
   const billPanel = (
@@ -405,20 +407,17 @@ function POS() {
               </div>
               {change > 0 && can("customers.topup") && (
                 <div className="space-y-2 border-t pt-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant={saveChange ? "outline" : "default"} onClick={() => setSaveChange(false)} className="h-12 whitespace-normal">Return cash change</Button>
-                    <Button variant={saveChange ? "default" : "outline"} onClick={() => setSaveChange(true)} className="h-12 whitespace-normal"><Wallet className="h-4 w-4 mr-1 shrink-0" />Save change</Button>
-                  </div>
-                  {saveChange && <>
                     <Input aria-label="Customer phone for saved change" type="tel" value={changePhone} onChange={(e) => setChangePhone(e.target.value)} placeholder="Customer phone / WhatsApp number" className="h-12" />
                     <Input aria-label="Customer name for saved change" value={cashName} onChange={(e) => setCashName(e.target.value)} placeholder="Customer name (optional)" className="h-11" />
-                    <div className="text-success text-sm font-semibold">Save {formatTZS(change)} to customer balance</div>
-                  </>}
+                    <div className="text-success text-sm font-semibold">Customer credit: {formatTZS(change)}</div>
                 </div>
               )}
-              <Button disabled={!canCash || !activeShift} onClick={doCashSale} className="w-full h-14 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
-                <CheckCircle2 className="w-5 h-5 mr-2" /> {tender === "mobile" ? "Confirm Lipa Namba & print" : "Paid in cash & print"}
-              </Button>
+              <div className={`grid gap-2 ${tender === "mobile" && change > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {tender === "mobile" && change > 0 && <Button variant="outline" disabled={!canCash || !activeShift} onClick={() => doCashSale(false)} className="w-full min-h-14 h-auto py-3 whitespace-normal text-sm font-bold"><Banknote className="w-5 h-5 mr-1 shrink-0" />Return cash change</Button>}
+                <Button disabled={!canCash || !canSaveCredit || !activeShift} onClick={() => doCashSale(change > 0)} className="w-full min-h-14 h-auto py-3 text-base font-bold bg-success hover:bg-success/90 text-success-foreground">
+                  <CheckCircle2 className="w-5 h-5 mr-2 shrink-0" />Confirm
+                </Button>
+              </div>
             </>
           )}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send to kitchen / bar after payment</label>
