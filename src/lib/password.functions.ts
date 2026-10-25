@@ -65,6 +65,7 @@ export const savePassword = createServerFn({ method: "POST" })
         if (!myStores.has(data.newCustomer.store_id)) return { ok: false as const, error: "Not allowed" };
         if (snap.profiles.some((p) => norm(p.phone) === norm(data.newCustomer!.phone))) return { ok: false as const, error: "Phone already registered" };
         target = { ...data.newCustomer, role: "customer", wallet_balance: 0, created_at: Date.now() };
+        // Wallet stays unset so the device's balance (e.g. saved change) wins on merge.
         snap.profiles.push(target);
       }
       if (!target) return { ok: false as const, error: "Account not found" };

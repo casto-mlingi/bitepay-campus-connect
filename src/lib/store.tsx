@@ -1076,6 +1076,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else if (p.store_id === c.id) total += p.wallet_balance; // legacy field
     }
     if (!(org in w) && p.store_id === org) total += p.wallet_balance; // legacy field
+    // A wallet that was never written on this record (e.g. replaced by a server
+    // copy created before the saved change arrived) falls back to its ledger.
+    const written = Object.keys(w).some((k) => k === org || canteensInOrg(org).some((c) => c.id === k));
+    if (!written && total === 0) {
+      const ledger = transactions
+        .filter((t) => t.customer_id === p.id && orgIdOfId(t.store_id) === org)
+        .reduce((s, t) => s + (t.type === "topup" ? t.amount : -t.amount), 0);
+      if (ledger !== 0) return ledger;
+    }
     return total;
   };
 
