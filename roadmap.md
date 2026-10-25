@@ -1,5 +1,9 @@
 # Roadmap
 
+## Direct POS payment actions (Oct 25)
+- [x] Replace change toggles and the extra payment button with direct Confirm and Lipa-only Return cash change actions; keep existing settlement records and permissions.
+- [ ] Verify the signed-in payment flow (blocked: real staff session unavailable in the sandbox; do not upload test sales to shared records).
+
 ## Unified POS payments (Oct 23)
 - [x] Add capped wallet debt, cash/mobile received amounts, saved change and customer change payouts without removing existing payments.
 - [x] Connect receipts, financial entries and aging; automated payment and preservation tests pass.
