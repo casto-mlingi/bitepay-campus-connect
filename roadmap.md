@@ -1,8 +1,10 @@
 # Roadmap
 
 ## Unified POS payments (Oct 23)
-- [ ] Add capped wallet debt, cash/mobile received amounts, saved change and customer change payouts without removing existing payments.
-- [ ] Connect receipts, financial entries and aging; test concrete amounts and responsive payment screens without uploading fixtures.
+- [x] Add capped wallet debt, cash/mobile received amounts, saved change and customer change payouts without removing existing payments.
+- [x] Connect receipts, financial entries and aging; automated payment and preservation tests pass.
+- [ ] Verify real account payment and responsive screens (blocked: staff sign-in failed; isolated browser check could not reach POS). No test records uploaded.
+- [ ] Enforce debt caps atomically across simultaneous offline tills (blocked: existing snapshot-based wallet writes are not atomic payment reservations).
 
 ## Store signup and silent offline saving
 - [x] Remove global-owner signup blocking, validate inputs before registration, and commit canonical onboarding records with the account.
