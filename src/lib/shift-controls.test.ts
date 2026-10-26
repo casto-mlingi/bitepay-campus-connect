@@ -1,0 +1,5 @@
+import { it } from "node:test";
+import { strict as assert } from "node:assert";
+import { shiftTotals, validHandover } from "./shift-controls";
+it("retained float plus manager drop equals counted cash", () => { assert.equal(validHandover(60000, 10000, 50000, 0), true); assert.equal(validHandover(60000, 10000, 49000, 0), false); });
+it("shift counts topups, cash change and expenses exactly once", () => assert.deepEqual(shiftTotals("s", 10000, [{ shift_id: "s", cash_delta: 15000, bank_delta: 0 }, { shift_id: "s", cash_delta: -5000, bank_delta: 20000 }], [{ shift_id: "s", order_id: "o", type: "topup", amount: 5000, tender: "cash" }, { shift_id: "s", type: "topup", amount: 10000, tender: "cash" }, { shift_id: "s", type: "deduction", amount: 2000, wallet_payout: true }], [{ shift_id: "s", amount: 3000, method: "cash" }]), { expected_cash: 25000, expected_mobile: 20000 }));
