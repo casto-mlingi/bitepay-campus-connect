@@ -1,4 +1,6 @@
 import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
+import { liveWallet, canonicalWallet, loyaltyReward } from "./wallet-balances";
+import { confirmHandover } from "./shift.functions";
 import { cashSettlement, walletSettlement, validWalletPayout, debtSince } from "./pos-payments";
 import { billBalance, dueDate, validPayment, type Vendor, type VendorPayment } from "./payables";
 export type { Vendor, VendorPayment } from "./payables";
@@ -23,6 +25,7 @@ export type Profile = {
   password: string;
   wallet_balance: number; // legacy — for customers this reflects the ACTIVE canteen wallet
   updated_at?: number;
+  wallet_anchors?: Record<string, { balance: number; transaction_ids: string[] }>;
   wallets?: Record<string, number>; // per-canteen balances (customers only)
   role: Role;
   staff_role?: StaffRole;
@@ -76,6 +79,7 @@ export type Store = {
   /** Days a pay-later (debtor) balance may stay open before it is flagged overdue. */
   credit_terms_days?: number;
   customer_debt_limit?: number;
+  loyalty_percentage?: number;
   /** Default staff commission, in percent of the sales value they handled. */
   commission_rate?: number;
   /** Credit each order to the waiter serving that table/section. */
@@ -489,6 +493,7 @@ export type WastageLog = {
 
 export type PaymentMethod = "cash" | "bank";
 export type Purchase = {
+  shift_id?: string;
   id: string;
   store_id: string;
   date: number;
@@ -506,6 +511,7 @@ export type Purchase = {
 
 export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
 export type Expense = {
+  shift_id?: string;
   id: string;
   store_id: string;
   date: number;
@@ -525,6 +531,13 @@ export type Shift = {
   opened_at: number;
   closed_at?: number;
   opening_float: number;
+  updated_at?: number;
+  expected_cash?: number;
+  expected_mobile?: number;
+  retained_float?: number;
+  cash_drop?: number;
+  witness_id?: string;
+  witness_name?: string;
   counted_cash?: number;
   counted_mobile?: number;
   cash_variance?: number;
@@ -708,7 +721,7 @@ type Ctx = {
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
   availablePlates: (product_id: string) => number | null;
   openShift: (opening_float: number) => Shift | null;
-  closeShift: (input: { counted_cash: number; counted_mobile: number; notes?: string }) => Shift | null;
+  closeShift: (input: { counted_cash: number; counted_mobile: number; retained_float: number; cash_drop: number; witness_id: string; witness_pin: string; notes?: string }) => Promise<Shift>;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
 
   customDishRequests: CustomDishRequest[];
@@ -874,7 +887,7 @@ const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
-const LOYALTY_RATE = 0.01;
+
 const roleRank: Record<StaffRole, number> = { waiter: 1, cashier: 1, supervisor: 2, owner: 3 };
 const uid = (prefix: string) => `${prefix}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -1065,27 +1078,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Customer's wallet balance for the store group that owns `sid`. Legacy
   // per-canteen balances inside the same group are merged into the total.
   const walletFor = (p: Profile, sid: string | null): number => {
-    if (!sid) return 0;
     const org = orgIdOfId(sid);
     if (!org) return 0;
-    const w = p.wallets ?? {};
-    let total = w[org] ?? 0;
-    for (const c of canteensInOrg(org)) {
-      if (c.id === org) continue;
-      if (c.id in w) total += w[c.id];
-      else if (p.store_id === c.id) total += p.wallet_balance; // legacy field
-    }
-    if (!(org in w) && p.store_id === org) total += p.wallet_balance; // legacy field
-    // A wallet that was never written on this record (e.g. replaced by a server
-    // copy created before the saved change arrived) falls back to its ledger.
-    const written = Object.keys(w).some((k) => k === org || canteensInOrg(org).some((c) => c.id === k));
-    if (!written && total === 0) {
-      const ledger = transactions
-        .filter((t) => t.customer_id === p.id && orgIdOfId(t.store_id) === org)
-        .reduce((s, t) => s + (t.type === "topup" ? t.amount : -t.amount), 0);
-      if (ledger !== 0) return ledger;
-    }
-    return total;
+    return liveWallet(p, org, canteensInOrg(org).map((c) => c.id), transactions);
   };
 
   // A staff member's effective role is the one attached to the store they are
@@ -1231,19 +1226,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const org = target ? orgIdOf(target) : storeId;
       const siblings = stores.filter((s) => orgIdOf(s) === org).map((s) => s.id);
       const wallets = { ...(p.wallets ?? {}) };
-      let cur = wallets[org] ?? 0;
-      for (const cid of siblings) {
-        if (cid === org) continue;
-        if (cid in wallets) { cur += wallets[cid]; delete wallets[cid]; }
-        else if (p.store_id === cid) cur += p.wallet_balance;
-      }
-      if (!(org in wallets) && p.store_id === org) cur += p.wallet_balance;
+      const anchor = p.wallet_anchors?.[org] ?? { balance: canonicalWallet(p, org, siblings), transaction_ids: transactions.filter((t) => t.customer_id === p.id && (t.store_id === org || siblings.includes(t.store_id))).map((t) => t.id) };
+      const cur = liveWallet({ ...p, wallet_anchors: { ...p.wallet_anchors, [org]: anchor } }, org, siblings, transactions);
+      for (const cid of siblings) if (cid !== org) delete wallets[cid];
       const nv = cur + delta;
       wallets[org] = nv;
       const inOrg = siblings.includes(p.store_id ?? "") || p.store_id === org;
-      return { ...p, wallets, wallet_balance: inOrg ? nv : p.wallet_balance, updated_at: Date.now() };
+      return { ...p, wallet_anchors: { ...p.wallet_anchors, [org]: anchor }, wallets, wallet_balance: inOrg ? nv : p.wallet_balance, updated_at: Date.now() };
     }));
-  }, [stores]);
+  }, [stores, transactions]);
 
 
 
@@ -1427,7 +1418,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const walletCharge = settlement.walletCharge;
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
-    const loyalty = settlement.balanceAfter < 0 ? 0 : Math.round(total * LOYALTY_RATE);
+    const loyalty = loyaltyReward(total, store?.loyalty_percentage ?? 1, settlement.balanceAfter);
     const order: Order = {
       id, store_id: currentStoreId, customer_id: cust.id, customer_name: cust.full_name, items,
       total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
@@ -1443,8 +1434,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setWallet(cust.id, currentStoreId, -walletCharge + loyalty);
     setTransactions((prev) => {
       const tx: Transaction[] = [];
-      if (walletCharge > 0) tx.push({ id: uid("t"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "deduction", amount: walletCharge, description: `POS ${receipt_no}`, created_at: Date.now() });
-      if (loyalty > 0) tx.push({ id: uid("tl"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "topup", amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
+      if (walletCharge > 0) tx.push({ id: uid("t"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "deduction", balance_before: custWallet, amount: walletCharge, description: `POS ${receipt_no}`, created_at: Date.now() });
+      if (loyalty > 0) tx.push({ id: uid("tl"), store_id: currentStoreId, customer_id: cust.id, order_id: id, type: "topup", balance_before: settlement.balanceAfter, amount: loyalty, description: `Loyalty reward (${receipt_no})`, created_at: Date.now() + 1 });
       return [...tx, ...prev];
     });
     if (cashPart > 0) {
@@ -1472,7 +1463,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const canonical = (v: string) => v.replace(/\D/g, "").replace(/^0/, "255");
       const existing = profiles.find((p) => canonical(p.phone) === canonical(phone));
       if (existing && (existing.role !== "customer" || existing.disabled)) return { ok: false, reason: "This phone cannot receive customer change" };
-      changeProfile = existing ?? { id: uid("u"), full_name: changeCustomer.name?.trim() || phone, phone, password: defaultPasswordFor(phone), default_password: defaultPasswordFor(phone), must_change_password: true, wallet_balance: 0, wallets: { [orgIdOfId(currentStoreId) ?? currentStoreId]: 0 }, role: "customer", store_id: currentStoreId, created_at: Date.now() };
+      changeProfile = existing ?? { id: uid("u"), full_name: changeCustomer.name?.trim() || phone, phone, password: defaultPasswordFor(phone), default_password: defaultPasswordFor(phone), must_change_password: true, wallet_balance: 0, wallet_anchors: { [orgIdOfId(currentStoreId) ?? currentStoreId]: { balance: 0, transaction_ids: [] } }, wallets: { [orgIdOfId(currentStoreId) ?? currentStoreId]: 0 }, role: "customer", store_id: currentStoreId, created_at: Date.now() };
     }
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
@@ -1496,13 +1487,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         void savePassword({ data: { targetId: target.id, password: target.password, mustChange: true, newCustomer: { id: target.id, full_name: target.full_name, phone: target.phone, store_id: currentStoreId } } }).catch(() => {});
       }
       setWallet(target.id, currentStoreId, settlement.changeSaved);
-      setTransactions((prev) => [{ id: uid("change"), store_id: currentStoreId, customer_id: target.id, order_id: id, type: "topup", amount: settlement.changeSaved, description: `Change saved · ${receipt_no}`, created_at: Date.now(), tender, by_name: currentUser?.full_name }, ...prev]);
+      setTransactions((prev) => [{ id: uid("change"), store_id: currentStoreId, customer_id: target.id, order_id: id, type: "topup", balance_before: walletFor(target, currentStoreId), amount: settlement.changeSaved, description: `Change saved · ${receipt_no}`, created_at: Date.now(), tender, by_name: currentUser?.full_name }, ...prev]);
     }
     return { ok: true, order };
   }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor, waiterFor, profiles, setWallet, cash, orgIdOfId]);
 
   const value: Ctx = useMemo(() => ({
-    currentUser, sessionReady, profiles: scopedProfiles, allProfiles: profiles, products: scopedProducts,
+    currentUser, sessionReady, profiles: scopedProfiles.map((p) => p.role === "customer" ? { ...p, wallet_balance: walletFor(p, currentStoreId) } : p), allProfiles: profiles, products: scopedProducts,
     adminData: {
       orders, transactions, tickets, topUpRequests, purchases, expenses,
       wastage, shifts, customDishRequests, notifications, treasuries,
@@ -1539,7 +1530,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if ((method === "bank" ? t.bank : t.cash) < amt) return { ok: false, reason: `Not enough money in ${method === "bank" ? "bank / mobile" : "cash"}` };
       setVendorPayments((prev) => [{
         id: crypto.randomUUID(), store_id: currentStoreId, vendor_id: bill.vendor_id ?? "", purchase_id, amount: amt, method,
-        reference: reference?.trim() || undefined, paid_by_name: currentUser?.full_name, created_at: Date.now(),
+        reference: reference?.trim() || undefined, paid_by_name: currentUser?.full_name, created_at: Date.now(), shift_id: activeShift?.id,
       }, ...prev]);
       if (method === "bank") adjustBank((b) => b - amt); else adjustCash((c) => c - amt);
       return { ok: true };
@@ -1634,8 +1625,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     updateStore(patch) {
-      if (!can("settings.manage") && !(can("settings.credit") && Object.keys(patch).every((k) => k === "customer_debt_limit"))) return;
+      if (!can("settings.manage") && !(can("settings.credit") && Object.keys(patch).every((k) => ["customer_debt_limit", "loyalty_percentage"].includes(k)))) return;
       if (!currentStoreId) return;
+      if (patch.loyalty_percentage != null && (!Number.isFinite(patch.loyalty_percentage) || patch.loyalty_percentage < 0 || patch.loyalty_percentage > 100)) return;
       if (patch.customer_debt_limit != null && (!Number.isSafeInteger(patch.customer_debt_limit) || patch.customer_debt_limit < 0)) return;
       setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, updated_at: Date.now(), name: (patch.name ?? s.name).trim() || s.name } : s));
     },
@@ -1737,9 +1729,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     creditMobileTopUp({ order_id, amount, network }) {
       if (!currentUser || currentUser.role !== "customer") return false;
       const sid = activeStoreId;
-      if (!sid || amount <= 0) return false;
+      if (!sid || !Number.isSafeInteger(amount) || amount <= 0) return false;
+      if (transactions.some((t) => t.reference === order_id)) return true;
       setWallet(currentUser.id, sid, amount);
-      setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via Selcom`, created_at: Date.now(), reference: order_id }, ...prev]);
+      setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via Selcom`, balance_before: walletFor(currentUser, sid), tender: "mobile", created_at: Date.now(), reference: order_id }, ...prev]);
       adjustBank((b) => b + amount, sid);
       pushNotification({ store_id: sid, user_id: currentUser.id, title: "Wallet topped up", body: `TZS ${amount.toLocaleString()} added from ${network}.`, kind: "topup" });
       return true;
@@ -1762,7 +1755,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const c = scopedProfiles.find((p) => p.role === "customer" && !p.disabled && p.id === qr.trim());
       if (!c) return null;
       scanGrants.current.set(c.id, { customerId: c.id, staffId: currentUser.id, storeId: currentStoreId, expiresAt: Date.now() + 120000, pinVerified: !c.wallet_pin });
-      return c;
+      return { ...c, wallet_balance: walletFor(c, currentStoreId) };
     },
     verifyWalletPin(customerId, pin) {
       const c = profiles.find((p) => p.id === customerId);
@@ -1786,13 +1779,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
       if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
       if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
-      if (amount <= 0) return { ok: false, reason: "Enter an amount" };
+      if (!currentStoreId || !Number.isSafeInteger(amount) || amount <= 0) return { ok: false, reason: "Enter a whole positive amount" };
+      if (requestId && topUpRequests.find((r) => r.id === requestId)?.status !== "pending") return { ok: false, reason: "Top-up already processed" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
       const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
       if (!cust) return { ok: false, reason: "Customer not found" };
       const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
-      setWallet(customerId, currentStoreId!, amount);
-      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId!, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference }, ...prev]);
+      setWallet(customerId, currentStoreId, amount);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference, tender, balance_before: walletFor(cust, currentStoreId), shift_id: activeShift?.id, by_name: currentUser.full_name }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
       if (requestId) {
@@ -1800,7 +1794,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const prevBal = walletFor(cust, currentStoreId!);
       pushNotification({
-        store_id: currentStoreId!, user_id: customerId,
+        store_id: currentStoreId, user_id: customerId,
         title: "Wallet topped up",
         body: `TZS ${amount.toLocaleString()} added by ${currentUser.full_name}. New balance for this store group: TZS ${(prevBal + amount).toLocaleString()}.`,
         kind: "topup",
@@ -1940,10 +1934,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     topUp(customerId, amount, description = "Cash top-up at counter", tender = "cash", reference) {
       if (!can("customers.topup")) return;
-      if (!currentStoreId) return;
+      if (!currentStoreId || !Number.isSafeInteger(amount) || amount <= 0) return;
+      const cust = profiles.find((p) => p.id === customerId && p.role === "customer");
+      if (!cust) return;
       setWallet(customerId, currentStoreId, amount);
       const desc = tender === "mobile" && reference ? `${description} · ref ${reference}` : description;
-      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference }, ...prev]);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: desc, created_at: Date.now(), reference, tender, balance_before: walletFor(cust, currentStoreId), shift_id: activeShift?.id, by_name: currentUser?.full_name }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
     },
@@ -2019,7 +2015,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         change_saved: original.change_saved == null ? undefined : -original.change_saved,
         cash_delta: original.cash_delta == null ? undefined : -original.cash_delta,
         bank_delta: original.bank_delta == null ? undefined : -original.bank_delta,
-        created_at: Date.now(), status: "completed",
+        created_at: Date.now(), status: "completed", shift_id: activeShift?.id, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
         is_reversal: true, reversal_of: original.id,
       };
       setOrders((prev) => prev.map((o) => o.id === original.id ? { ...o, reversed: true, updated_at: Date.now() } : o).concat([credit]).sort((a, b) => b.created_at - a.created_at));
@@ -2051,7 +2047,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     findCustomer(query) {
       const q = query.trim().toLowerCase();
       if (!q) return null;
-      return scopedProfiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q)) ?? null;
+      const found = scopedProfiles.find((p) => p.role === "customer" && (p.phone.includes(q) || p.id.toLowerCase() === q));
+      return found ? { ...found, wallet_balance: walletFor(found, currentStoreId) } : null;
     },
     addCustomer({ full_name, phone, initial_balance = 0, default_password }) {
       if (!currentStoreId) return null;
@@ -2251,7 +2248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const when = date ?? Date.now();
       const purchase: Purchase = {
         id: `PO-${Date.now()}`, store_id: currentStoreId, date: when, supplier, raw_id, raw_name: raw.name,
-        qty, total_cost, payment_method,
+        qty, total_cost, payment_method, shift_id: activeShift?.id,
         ...(vendor_id ? { vendor_id } : {}),
         ...(on_credit ? { on_credit: true, due_date: dueDate(when, terms_days ?? 0) } : {}),
       };
@@ -2260,7 +2257,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     recordExpense({ category, amount, description, payment_method, date }) {
       if (!currentStoreId || amount <= 0) return null;
-      const exp: Expense = { id: `EX-${Date.now()}`, store_id: currentStoreId, date: date ?? Date.now(), category, amount, description, payment_method };
+      const exp: Expense = { id: `EX-${Date.now()}`, store_id: currentStoreId, date: date ?? Date.now(), category, amount, description, payment_method, shift_id: activeShift?.id };
       setExpenses((prev) => [exp, ...prev]);
       if (payment_method === "bank") adjustBank((b) => b - amount);
       else adjustCash((c) => c - amount);
@@ -2285,30 +2282,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     openShift(opening_float) {
       if (!currentUser || currentUser.role !== "staff" || !currentStoreId) return null;
-      if (activeShift) return null;
+      if (activeShift || !can("shift.manage") || !Number.isSafeInteger(opening_float) || opening_float < 0) return null;
       const s: Shift = {
         id: `SH-${Date.now()}`, store_id: currentStoreId, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
         opened_at: Date.now(), opening_float,
       };
       setShifts((prev) => [s, ...prev]);
       setActiveShiftId(s.id);
-      adjustCash((c) => c + opening_float);
+      // Opening float is counted existing cash, not new income.
       return s;
     },
-    closeShift({ counted_cash, counted_mobile, notes }) {
-      if (!activeShift) return null;
-      const shiftOrders = orders.filter((o) => o.shift_id === activeShift.id && !o.is_reversal);
-      const reversals = orders.filter((o) => o.shift_id === activeShift.id && o.is_reversal);
-      const cashSales = shiftOrders.reduce((s, o) => s + (o.cash_delta ?? (o.tender === "cash" ? (o.cash_paid ?? 0) : 0)), 0)
-        + reversals.reduce((s, o) => s + (o.cash_delta ?? (o.tender === "cash" ? (o.cash_paid ?? 0) : 0)), 0);
-      const mobileSales = shiftOrders.reduce((s, o) => s + (o.bank_delta ?? (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0)), 0)
-        + reversals.reduce((s, o) => s + (o.bank_delta ?? (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0)), 0);
-      const payouts = transactions.filter((t) => t.wallet_payout && t.shift_id === activeShift.id).reduce((s, t) => s + t.amount, 0);
-      const expectedCash = activeShift.opening_float + cashSales - payouts;
-      const cash_variance = counted_cash - expectedCash;
-      const mobile_variance = counted_mobile - mobileSales;
-      const closed: Shift = { ...activeShift, closed_at: Date.now(), counted_cash, counted_mobile, cash_variance, mobile_variance, notes };
-      setShifts((prev) => prev.map((s) => s.id === activeShift.id ? closed : s));
+    async closeShift(input) {
+      if (!activeShift || !currentUser || activeShift.cashier_id !== currentUser.id) throw new Error("Only the shift cashier can submit the count");
+      if (!isOnline) throw new Error("Connect to confirm witnessed handover");
+      await sync.pushNow();
+      const closed = await confirmHandover({ data: { ...input, shift_id: activeShift.id } });
+      setShifts((prev) => prev.map((s) => s.id === closed.id ? closed : s));
       setActiveShiftId(null);
       return closed;
     },
@@ -2732,7 +2721,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         exps.push({
           id: expense_id, store_id: currentStoreId, date: now, category: "Labor", amount,
           description: `Commission payout · ${m.full_name} · ${run_key} (${rate}% of ${formatTZS(sales)})`,
-          payment_method: "cash",
+          payment_method: "cash", shift_id: activeShift?.id,
         });
         rows.push({
           id: uid("cp"), store_id: currentStoreId, run_key, staff_id: m.id, staff_name: m.full_name,

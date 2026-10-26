@@ -1,0 +1,10 @@
+import { it } from "node:test";
+import { strict as assert } from "node:assert";
+import { canonicalWallet, liveWallet, loyaltyReward } from "./wallet-balances";
+it("group balance never adds the legacy 20,000 a second time", () => assert.equal(canonicalWallet({ id: "c", store_id: "s", wallets: { owner: 20000 }, wallet_balance: 20000 }, "owner", ["s"]), 20000));
+it("20,000 less 10,000 plus 100 reward is 10,100", () => assert.equal(liveWallet({ id: "c", wallet_anchors: { owner: { balance: 20000, transaction_ids: [] } } }, "owner", ["s"], [{ id: "sale", customer_id: "c", store_id: "s", type: "deduction", amount: 10000 }, { id: "reward", customer_id: "c", store_id: "s", type: "topup", amount: 100 }]), 10100));
+it("new saved-change customer has 10,000 even with a zero display field", () => assert.equal(liveWallet({ id: "c", wallet_balance: 0, wallet_anchors: { owner: { balance: 0, transaction_ids: [] } } }, "owner", ["s"], [{ id: "change", customer_id: "c", store_id: "s", type: "topup", amount: 10000 }]), 10000));
+it("10,000 top-up settles 7,000 debt leaving 3,000", () => assert.equal(liveWallet({ id: "c", wallet_anchors: { s: { balance: -7000, transaction_ids: [] } } }, "s", ["s"], [{ id: "t", customer_id: "c", store_id: "s", type: "topup", amount: 10000 }]), 3000));
+it("zero percent disables loyalty", () => assert.equal(loyaltyReward(10000, 0, 10000), 0));
+it("two percent rewards 200", () => assert.equal(loyaltyReward(10000, 2, 0), 200));
+it("debt receives no loyalty", () => assert.equal(loyaltyReward(10000, 2, -1), 0));
