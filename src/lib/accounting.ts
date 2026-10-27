@@ -60,9 +60,11 @@ export function buildLedger(input: {
   orders: OrderLike[]; purchases: PurchaseLike[]; expenses: ExpenseLike[]; vendorPayments?: VendorPaymentLike[];
   walletPayouts?: { id: string; amount: number; created_at: number; balance_before?: number }[];
   walletTopups?: { id: string; amount: number; created_at: number; balance_before?: number; tender?: "cash" | "mobile"; order_id?: string; description: string }[];
+  fundTransfers?: { id: string; amount: number; from: "cash" | "bank"; created_at: number }[];
   cogs: number; cash: number; bank: number; walletLiabilities: number; inventoryValue: number; walletReceivables?: number;
 }): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
+  for (const t of input.fundTransfers ?? []) entries.push({ id: `transfer-${t.id}`, date: t.created_at, memo: "Cash / bank transfer", source: "payment", lines: [dr(t.from === "cash" ? "1010" : "1000", t.amount), cr(t.from === "cash" ? "1000" : "1010", t.amount)] });
   for (const t of input.walletTopups ?? []) {
     if (t.order_id || !t.tender) continue;
     const debtCleared = Math.min(t.amount, Math.max(0, -(t.balance_before ?? 0)));
