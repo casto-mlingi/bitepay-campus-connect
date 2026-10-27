@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Play, Square, AlertTriangle, CheckCircle2, Banknote, Smartphone, Wallet, ArrowLeftRight, Printer } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { ClipboardCheck, Play, Square, CheckCircle2, ArrowLeftRight, Printer } from "lucide-react";
 import { useStore, formatTZS, type Shift } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/shift")({
 });
 
 function ShiftPage() {
-  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift, transactions, profiles, isOnline } = useStore();
+  const { currentUser, sessionReady, activeShift, openShift, closeShift, profiles, isOnline } = useStore();
   const navigate = useNavigate();
   const [float, setFloat] = useState<number>(50000);
   const [countedCash, setCountedCash] = useState<number>(0);
@@ -83,7 +83,7 @@ function ShiftPage() {
           <PastShifts onSelect={setReport} />
         </div>
       ) : (
-        <div className="grid lg:grid-cols-[1fr_400px] gap-6">
+        <div className="grid lg:grid-cols-[1fr_400px] gap-6 pb-4">
           <div className="space-y-4">
             <h2 className="font-bold text-lg">Drawer count</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[10000, 5000, 2000, 1000, 500, 200, 100, 50].map((value) => <label key={value} className="block"><span className="text-sm text-muted-foreground">{value.toLocaleString()} ×</span><Input aria-label={`${value} denomination count`} inputMode="numeric" type="number" min={0} step={1} value={denominations[value] || ""} placeholder="0" onChange={(e) => { const next = { ...denominations, [value]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }; setDenominations(next); setCountedCash(Object.entries(next).reduce((sum, [note, qty]) => sum + Number(note) * qty, 0)); }} /></label>)}</div>
@@ -147,8 +147,8 @@ function PastShifts({ onSelect }: { onSelect: (shift: Shift) => void }) {
             </div>
             <div className="text-right text-xs">
               <Button variant="ghost" size="sm" onClick={() => onSelect(s)} aria-label={`View report ${s.id}`}><Printer className="w-4 h-4" /> Report</Button>
-              <div>Cash Δ <span className={Math.abs(s.cash_variance ?? 0) < 500 ? "text-emerald-600" : "text-red-600"}>{formatTZS(s.cash_variance ?? 0)}</span></div>
-              <div>Mob Δ <span className={Math.abs(s.mobile_variance ?? 0) < 500 ? "text-emerald-600" : "text-red-600"}>{formatTZS(s.mobile_variance ?? 0)}</span></div>
+              <div>Cash Δ <span className={Math.abs(s.cash_variance ?? 0) === 0 ? "text-success" : "text-destructive"}>{formatTZS(s.cash_variance ?? 0)}</span></div>
+              <div>Mob Δ <span className={Math.abs(s.mobile_variance ?? 0) === 0 ? "text-success" : "text-destructive"}>{formatTZS(s.mobile_variance ?? 0)}</span></div>
             </div>
           </li>
         ))}
