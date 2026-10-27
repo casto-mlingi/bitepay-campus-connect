@@ -3,6 +3,16 @@ import { strict as assert } from "node:assert";
 import { assertPreservesRecords, isLocalSyncHost, scopedSnapshotUpdate } from "./snapshot-safety";
 
 describe("customer data preservation", () => {
+  it("cashier cannot change loyalty, manager can set zero", () => {
+    const base = { stores: [{ id: "a", loyalty_percentage: 1 }], profiles: [{ id: "p", staff_role: "cashier", store_id: "a" }] };
+    assert.throws(() => scopedSnapshotUpdate(base, { stores: [{ id: "a", loyalty_percentage: 0 }] }, "p", new Set(["a"])));
+    const manager = { ...base, profiles: [{ ...base.profiles[0], staff_role: "supervisor" }] };
+    assert.equal((scopedSnapshotUpdate(manager, { stores: [{ id: "a", loyalty_percentage: 0 }] }, "p", new Set(["a"])).stores as typeof base.stores)[0].loyalty_percentage, 0);
+  });
+  it("witnessed handover count cannot be overwritten by sync", () => {
+    const before = { shifts: [{ id: "s", store_id: "a", closed_at: 100, witness_id: "w", counted_cash: 50000 }] };
+    assert.deepEqual(scopedSnapshotUpdate(before, { shifts: [{ ...before.shifts[0], counted_cash: 60000 }] }, "p", new Set(["a"])), before);
+  });
   it("only the owner or manager can upload a customer debt limit", () => {
     const base = { stores: [{ id: "a", customer_debt_limit: 0 }], profiles: [{ id: "p", role: "staff", staff_role: "cashier", store_id: "a" }] };
     const incoming = { stores: [{ id: "a", customer_debt_limit: 20000 }] };

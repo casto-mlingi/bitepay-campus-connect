@@ -101,6 +101,7 @@ function FinancePage() {
           cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
           walletReceivables={profiles.filter((p) => p.role === "customer").reduce((s, p) => s + Math.max(0, -p.wallet_balance), 0)}
           walletPayouts={transactions.filter((t) => t.wallet_payout)}
+          walletTopups={transactions.filter((t) => t.type === "topup")}
         />
       )}
       {tab === "pnl" && (
@@ -781,7 +782,7 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "suc
 }
 
 function Books(props: Parameters<typeof buildLedger>[0]) {
-  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables, props.walletPayouts]);
+  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables, props.walletPayouts, props.walletTopups]);
   const tb = useMemo(() => trialBalance(entries), [entries]);
   const bal = useMemo(() => balances(entries), [entries]);
   const [account, setAccount] = useState<AccountCode>("1000");

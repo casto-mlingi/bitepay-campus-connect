@@ -25,7 +25,7 @@ export const ACCOUNTS: Record<AccountCode, { name: string; kind: "asset" | "liab
 export type LedgerLine = { account: AccountCode; debit: number; credit: number };
 export type LedgerEntry = { id: string; date: number; memo: string; source: "sale" | "purchase" | "expense" | "payment" | "adjustment"; lines: LedgerLine[] };
 
-type OrderLike = { id: string; created_at: number; total_amount: number; receipt_no?: string; cash_paid?: number; wallet_paid?: number; cash_delta?: number; bank_delta?: number; change_saved?: number; tender?: "cash" | "mobile"; payment_status: "paid" | "unpaid"; amount_paid?: number; payments?: { amount: number; tender: "cash" | "mobile" }[]; customer_name?: string };
+type OrderLike = { id: string; created_at: number; total_amount: number; receipt_no?: string; cash_paid?: number; wallet_paid?: number; cash_delta?: number; bank_delta?: number; change_saved?: number; loyalty_earned?: number; tender?: "cash" | "mobile"; payment_status: "paid" | "unpaid"; amount_paid?: number; payments?: { amount: number; tender: "cash" | "mobile" }[]; customer_name?: string };
 type PurchaseLike = { id: string; date: number; supplier: string; raw_name: string; total_cost: number; payment_method: "cash" | "bank"; on_credit?: boolean };
 type VendorPaymentLike = { id: string; created_at: number; amount: number; method: "cash" | "bank"; purchase_id: string; reference?: string };
 type ExpenseLike = { id: string; date: number; category: string; description: string; amount: number; payment_method: "cash" | "bank" };
@@ -51,7 +51,7 @@ export function saleEntry(o: OrderLike): LedgerEntry {
   const receivable = total - wallet - cashIn - bankIn;
   cashIn = o.cash_delta == null ? cashIn : tzs(o.cash_delta);
   bankIn = o.bank_delta == null ? bankIn : tzs(o.bank_delta);
-  const lines = [dr("1000", cashIn), dr("1010", bankIn), dr("2000", wallet), cr("2000", o.change_saved ?? 0), dr("1100", receivable), cr("4000", total)]
+  const lines = [dr("1000", cashIn), dr("1010", bankIn), dr("2000", wallet), cr("2000", o.change_saved ?? 0), dr("1100", receivable), cr("4000", total), dr("6000", o.loyalty_earned ?? 0), cr("2000", o.loyalty_earned ?? 0)]
     .filter((l) => l.debit || l.credit);
   return { id: `sale-${o.id}`, date: o.created_at, memo: `Sale ${o.receipt_no ?? o.id.slice(0, 8)}${o.customer_name ? ` · ${o.customer_name}` : ""}`, source: "sale", lines };
 }
@@ -59,9 +59,15 @@ export function saleEntry(o: OrderLike): LedgerEntry {
 export function buildLedger(input: {
   orders: OrderLike[]; purchases: PurchaseLike[]; expenses: ExpenseLike[]; vendorPayments?: VendorPaymentLike[];
   walletPayouts?: { id: string; amount: number; created_at: number; balance_before?: number }[];
+  walletTopups?: { id: string; amount: number; created_at: number; balance_before?: number; tender?: "cash" | "mobile"; order_id?: string; description: string }[];
   cogs: number; cash: number; bank: number; walletLiabilities: number; inventoryValue: number; walletReceivables?: number;
 }): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
+  for (const t of input.walletTopups ?? []) {
+    if (t.order_id || !t.tender) continue;
+    const debtCleared = Math.min(t.amount, Math.max(0, -(t.balance_before ?? 0)));
+    entries.push({ id: `topup-${t.id}`, date: t.created_at, memo: t.description, source: "payment", lines: [dr(t.tender === "mobile" ? "1010" : "1000", t.amount), cr("1100", debtCleared), cr("2000", t.amount - debtCleared)].filter((l) => l.debit || l.credit) });
+  }
   for (const o of input.orders) { const e = saleEntry(o); if (e.lines.length) entries.push(e); }
   for (const p of input.walletPayouts ?? []) entries.push({ id: `wallet-payout-${p.id}`, date: p.created_at, memo: "Customer credit returned in cash", source: "payment", lines: [dr("2000", p.amount), cr("1000", p.amount)] });
   for (const p of input.purchases) {
