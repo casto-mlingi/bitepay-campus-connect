@@ -4,6 +4,18 @@ import { buildLedger, isBalanced, saleEntry, trialBalance } from "./accounting";
 
 const base = { purchases: [], expenses: [], cogs: 0, walletLiabilities: 0, inventoryValue: 0 };
 
+it("10,000 topup clears 7,000 receivable and creates 3,000 deposits", () => {
+  const e = buildLedger({ ...base, orders: [], cash: 10000, bank: 0, walletTopups: [{ id: "t", amount: 10000, balance_before: -7000, tender: "cash", description: "Topup", created_at: 1 }] }).find((e) => e.id === "topup-t");
+  assert.equal(e?.lines.find((l) => l.account === "1100")?.credit, 7000);
+  assert.equal(e?.lines.find((l) => l.account === "2000")?.credit, 3000);
+  assert.ok(e && isBalanced(e));
+});
+it("200 loyalty is an expense and wallet credit, never cash income", () => {
+  const e = saleEntry({ id: "r", created_at: 1, total_amount: 10000, wallet_paid: 10000, cash_paid: 0, payment_status: "paid", loyalty_earned: 200 });
+  assert.equal(e.lines.find((l) => l.account === "6000")?.debit, 200);
+  assert.ok(isBalanced(e));
+});
+
 it("a wallet shortage is a 760 receivable, not wallet deposits", () => {
   const e = saleEntry({ id: "debt", created_at: 1, total_amount: 11000, wallet_paid: 10240, cash_paid: 0, payment_status: "paid" });
   assert.equal(e.lines.find((l) => l.account === "1100")?.debit, 760);

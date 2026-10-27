@@ -29,3 +29,5 @@
 - Customer balances (receivables) are a read-only aging view built from unpaid delivery orders, approved pay-later wallet debt and open tabs; collections go through each source's existing payment action.
 - POS settlement rules live in pos-payments; orders retain separate tender receipts, treasury deltas, wallet charges and saved change so debt, refunds and shift reports do not mistake tendered money for sales revenue.
 - POS completion actions pass the change disposition directly to the sale handler rather than setting a toggle first, preventing stale selection state from changing the financial outcome.
+- Wallet reads use a group-level opening anchor plus unique subsequent transaction rows; a group wallet never adds its legacy display balance, preserving deductions across device merges without inventing missing history.
+- Witnessed shift closes are verified and frozen server-side; drawer float and safe handovers are locations of existing cash, not new revenue or expenses.

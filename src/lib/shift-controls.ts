@@ -10,3 +10,9 @@ export function shiftTotals(id: string, opening: number, orders: ShiftMovement[]
   return { expected_cash: cash, expected_mobile: mobile };
 }
 export function validHandover(counted: number, retained: number, drop: number, mobile: number) { return [counted, retained, drop, mobile].every((n) => Number.isSafeInteger(n) && n >= 0) && counted === retained + drop; }
+export type FundTransfer = { id: string; store_id: string; shift_id?: string; amount: number; from: "cash" | "bank"; created_at: number; by_name?: string };
+export function transferTotals(id: string, rows: FundTransfer[]) {
+  const delta = rows.filter((r) => r.shift_id === id).reduce((sum, r) => sum + (r.from === "bank" ? r.amount : -r.amount), 0);
+  return { cash: delta, mobile: -delta };
+}
+export function shiftEvidence(id: string, rows: { id: string; shift_id?: string }[]) { return rows.filter((r) => r.shift_id === id).map((r) => r.id).sort().join("|"); }

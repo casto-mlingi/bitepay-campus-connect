@@ -15,6 +15,7 @@ export type Vendor = {
 };
 
 export type VendorPayment = {
+  shift_id?: string;
   id: string;
   store_id: string;
   vendor_id: string;

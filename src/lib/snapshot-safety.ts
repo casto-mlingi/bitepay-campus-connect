@@ -35,6 +35,15 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
       for (const row of value) {
         if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error("Invalid snapshot record");
         const existing = rows.get(row.id);
+        if (field === "shifts" && existing?.closed_at && existing?.witness_id) continue;
+        if (field === "shifts" && row.witness_id && !existing?.witness_id) throw new Error("Witnessed shift closing requires verified handover");
+        if (field === "stores" && storeIds.has(row.id) && existing && row.loyalty_percentage != null && row.loyalty_percentage !== existing.loyalty_percentage) {
+          const actor = (previous.profiles as Record<string, unknown>[] | undefined)?.find((p) => p.id === userId);
+          const memberships = actor?.memberships as { store_id: string; staff_role: string }[] | undefined;
+          const staffRole = memberships?.find((m) => m.store_id === row.id)?.staff_role ?? (actor?.store_id === row.id ? actor?.staff_role : undefined);
+          if (role === "customer" || !["owner", "supervisor"].includes(String(staffRole))) throw new Error("Only the owner or manager may change loyalty");
+          if (typeof row.loyalty_percentage !== "number" || !Number.isFinite(row.loyalty_percentage) || row.loyalty_percentage < 0 || row.loyalty_percentage > 100) throw new Error("Invalid loyalty percentage");
+        }
         if (field === "stores" && storeIds.has(row.id) && existing && row.customer_debt_limit != null && row.customer_debt_limit !== existing.customer_debt_limit && role !== "customer") {
           const actor = (previous.profiles as Record<string, unknown>[] | undefined)?.find((p) => p.id === userId);
           const memberships = actor?.memberships as { store_id: string; staff_role: string }[] | undefined;
@@ -53,6 +62,8 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
             : field === "profiles" && existing
             ? { ...row, role: existing.role, store_id: existing.store_id, memberships: existing.memberships, staff_role: existing.staff_role }
             : row;
+          if (field === "profiles" && existing?.wallet_anchors) next.wallet_anchors = { ...(row.wallet_anchors ?? {}), ...existing.wallet_anchors };
+          if (field === "stores" && existing && row.loyalty_percentage == null) next.loyalty_percentage = existing.loyalty_percentage;
           rows.set(row.id, next);
         }
       }

@@ -9,7 +9,7 @@ import { z } from "zod";
 type SnapProfile = {
   id: string; phone: string; role: string; store_id?: string | null; full_name: string;
   password?: string; default_password?: string; must_change_password?: boolean; disabled?: boolean;
-  memberships?: { store_id: string }[]; wallets?: Record<string, number>; wallet_balance?: number; created_at?: number;
+  memberships?: { store_id: string }[]; wallets?: Record<string, number>; wallet_balance?: number; created_at?: number; updated_at?: number; wallet_anchors?: Record<string, { balance: number; transaction_ids: string[] }>;
 };
 type Snap = { profiles?: SnapProfile[]; stores?: { id: string; parent_id?: string | null }[] };
 
@@ -63,14 +63,15 @@ export const savePassword = createServerFn({ method: "POST" })
       if (!isSelf && session.role !== "staff") return { ok: false as const, error: "Not allowed" };
       if (!target && data.newCustomer && session.role === "staff") {
         if (!myStores.has(data.newCustomer.store_id)) return { ok: false as const, error: "Not allowed" };
-        if (snap.profiles.some((p) => norm(p.phone) === norm(data.newCustomer!.phone))) return { ok: false as const, error: "Phone already registered" };
+         const customer = data.newCustomer;
+         if (snap.profiles.some((p) => norm(p.phone) === norm(customer.phone))) return { ok: false as const, error: "Phone already registered" };
         target = { ...data.newCustomer, role: "customer", wallet_balance: 0, created_at: Date.now() };
         // Wallet stays unset so the device's balance (e.g. saved change) wins on merge.
         snap.profiles.push(target);
       }
       if (!target) return { ok: false as const, error: "Account not found" };
       if (!isSelf && (target.role !== "customer" && !myStores.has(target.store_id ?? ""))) return { ok: false as const, error: "Not allowed" };
-      target.password = data.password;
+       target.password = data.password;
       target.must_change_password = data.mustChange;
       if (data.mustChange) target.default_password = data.password;
       return { ok: true as const, phone: target.phone };
