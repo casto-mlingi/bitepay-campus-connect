@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Play, Square, AlertTriangle, CheckCircle2, Banknote, Smartphone, Wallet, ArrowLeftRight } from "lucide-react";
-import { useStore, formatTZS } from "@/lib/store";
+import { ClipboardCheck, Play, Square, AlertTriangle, CheckCircle2, Banknote, Smartphone, Wallet, ArrowLeftRight, Printer } from "lucide-react";
+import { useStore, formatTZS, type Shift } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { validHandover } from "@/lib/shift-controls";
 
 export const Route = createFileRoute("/shift")({
   component: ShiftPage,
@@ -12,11 +13,18 @@ export const Route = createFileRoute("/shift")({
 });
 
 function ShiftPage() {
-  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift, transactions } = useStore();
+  const { currentUser, sessionReady, activeShift, shifts, orders, openShift, closeShift, transactions, profiles, isOnline } = useStore();
   const navigate = useNavigate();
   const [float, setFloat] = useState<number>(50000);
   const [countedCash, setCountedCash] = useState<number>(0);
   const [countedMobile, setCountedMobile] = useState<number>(0);
+  const [retained, setRetained] = useState(0);
+  const [drop, setDrop] = useState(0);
+  const [witness, setWitness] = useState("");
+  const [witnessPin, setWitnessPin] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [denominations, setDenominations] = useState<Record<number, number>>({});
+  const [report, setReport] = useState<Shift | null>(null);
   const [notes, setNotes] = useState<string>("");
   const [toast, setToast] = useState<string>("");
 
@@ -25,25 +33,6 @@ function ShiftPage() {
     else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
   }, [currentUser, navigate]);
 
-  const shiftOrders = useMemo(
-    () => activeShift ? orders.filter((o) => o.shift_id === activeShift.id) : [],
-    [activeShift, orders]
-  );
-
-  const stats = useMemo(() => {
-    const payouts = transactions.filter((t) => t.wallet_payout && t.shift_id === activeShift?.id).reduce((s, t) => s + t.amount, 0);
-    const cashSales = shiftOrders.reduce((s, o) => s + (o.cash_delta ?? (o.tender === "cash" ? (o.cash_paid ?? 0) : 0)), 0) - payouts;
-    const mobileSales = shiftOrders.reduce((s, o) => s + (o.bank_delta ?? (o.tender === "mobile" ? (o.cash_paid ?? 0) : 0)), 0);
-    const walletSales = shiftOrders.reduce((s, o) => s + (o.wallet_paid ?? 0), 0);
-    const gross = shiftOrders.filter((o) => !o.is_reversal).reduce((s, o) => s + o.total_amount, 0);
-    const reversals = shiftOrders.filter((o) => o.is_reversal).reduce((s, o) => s + Math.abs(o.total_amount), 0);
-    return { cashSales, mobileSales, walletSales, gross, reversals };
-  }, [shiftOrders, transactions, activeShift]);
-
-  const expectedCash = (activeShift?.opening_float ?? 0) + stats.cashSales;
-  const cashVariance = countedCash - expectedCash;
-  const mobileVariance = countedMobile - stats.mobileSales;
-
   const show = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
   const doOpen = () => {
@@ -51,10 +40,13 @@ function ShiftPage() {
     if (!s) show("Could not open shift"); else show(`Shift ${s.id} opened with float ${formatTZS(float)}`);
   };
 
-  const doClose = () => {
-    const s = closeShift({ counted_cash: countedCash, counted_mobile: countedMobile, notes });
-    if (!s) show("Could not close shift");
-    else { show(`Shift closed · cash Δ ${formatTZS(s.cash_variance ?? 0)} · mobile Δ ${formatTZS(s.mobile_variance ?? 0)}`); setCountedCash(0); setCountedMobile(0); setNotes(""); }
+  const doClose = async () => {
+    setClosing(true);
+    try {
+      const closed = await closeShift({ counted_cash: countedCash, counted_mobile: countedMobile, retained_float: retained, cash_drop: drop, witness_id: witness, witness_pin: witnessPin, notes });
+      setReport(closed); setWitnessPin(""); setNotes("");
+    } catch (e) { show(e instanceof Error ? e.message : "Could not confirm handover"); }
+    finally { setClosing(false); }
   };
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -64,7 +56,7 @@ function ShiftPage() {
       <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><ClipboardCheck className="w-7 h-7 text-primary" /> Shift & Z-Report</h1>
-          <p className="text-muted-foreground">Open with a float, close by counting cash and mobile — variance is flagged automatically.</p>
+          <p className="text-muted-foreground">Cash counts & witnessed handovers</p>
         </div>
         {activeShift ? (
           <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-full">
@@ -80,89 +72,56 @@ function ShiftPage() {
       {!activeShift ? (
         <div className="bg-surface border rounded-2xl p-6 max-w-lg">
           <h2 className="font-bold text-lg flex items-center gap-2"><Play className="w-5 h-5 text-primary" /> Open new shift</h2>
-          <p className="text-sm text-muted-foreground mt-1">Add the physical cash you're starting the drawer with. It's added to Cash on Hand.</p>
+          <p className="text-sm text-muted-foreground mt-1">Cash already in the drawer at the start of this shift.</p>
           <label className="block mt-4">
             <span className="text-xs font-semibold text-muted-foreground uppercase">Opening float (TZS)</span>
             <Input type="number" value={float || ""} onChange={(e) => setFloat(Number(e.target.value) || 0)} className="mt-1 h-11" />
           </label>
-          <Button onClick={doOpen} disabled={float <= 0} className="w-full mt-4 h-11 bg-primary">
+          <Button onClick={doOpen} disabled={float < 0} className="w-full mt-4 h-11 bg-primary">
             <Play className="w-4 h-4 mr-2" /> Open Shift
           </Button>
-          <PastShifts />
+          <PastShifts onSelect={setReport} />
         </div>
       ) : (
         <div className="grid lg:grid-cols-[1fr_400px] gap-6">
           <div className="space-y-4">
-            <div className="bg-gradient-to-br from-foreground to-foreground/80 text-background rounded-3xl p-6">
-              <div className="text-xs uppercase tracking-wider opacity-70">Live Z-Report — {activeShift.id}</div>
-              <div className="grid md:grid-cols-3 gap-4 mt-4">
-                <ZBlock icon={<Banknote className="w-4 h-4 text-emerald-400" />} label="Cash sales" value={formatTZS(stats.cashSales)} />
-                <ZBlock icon={<Smartphone className="w-4 h-4 text-sky-400" />} label="Mobile sales (Lipa Namba)" value={formatTZS(stats.mobileSales)} />
-                <ZBlock icon={<Wallet className="w-4 h-4 text-primary" />} label="Wallet deductions" value={formatTZS(stats.walletSales)} />
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/20 grid md:grid-cols-3 gap-4 text-sm">
-                <div><span className="opacity-70">Opening float</span><div className="font-bold">{formatTZS(activeShift.opening_float)}</div></div>
-                <div><span className="opacity-70">Gross revenue</span><div className="font-bold">{formatTZS(stats.gross)}</div></div>
-                <div><span className="opacity-70">Reversals</span><div className="font-bold">− {formatTZS(stats.reversals)}</div></div>
-              </div>
-            </div>
-
-            <div className="bg-surface border rounded-2xl p-5">
-              <h3 className="font-bold mb-3">Sales in this shift ({shiftOrders.length})</h3>
-              {shiftOrders.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-8 text-center">No sales yet — head to the <Link to="/pos" className="text-primary font-semibold">POS</Link>.</div>
-              ) : (
-                <div className="overflow-x-auto -mx-2">
-                  <table className="w-full text-sm">
-                    <thead className="text-xs text-muted-foreground border-b">
-                      <tr className="text-left"><th className="px-2 py-2">Receipt</th><th>Customer</th><th>Tender</th><th>Ref</th><th className="text-right">Cash/Mob</th><th className="text-right">Wallet</th><th className="text-right">Total</th></tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {shiftOrders.map((o) => (
-                        <tr key={o.id} className={o.is_reversal ? "text-red-600" : ""}>
-                          <td className="px-2 py-2 font-mono text-xs">{o.receipt_no ?? o.id}</td>
-                          <td>{o.customer_name}</td>
-                          <td className="capitalize text-xs">{o.tender ?? "wallet"}</td>
-                          <td className="text-xs text-muted-foreground">{o.reference ?? "—"}</td>
-                          <td className="text-right">{formatTZS(o.cash_paid ?? 0)}</td>
-                          <td className="text-right">{formatTZS(o.wallet_paid ?? 0)}</td>
-                          <td className="text-right font-semibold">{formatTZS(o.total_amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            <h2 className="font-bold text-lg">Drawer count</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[10000, 5000, 2000, 1000, 500, 200, 100, 50].map((value) => <label key={value} className="block"><span className="text-sm text-muted-foreground">{value.toLocaleString()} ×</span><Input aria-label={`${value} denomination count`} inputMode="numeric" type="number" min={0} step={1} value={denominations[value] || ""} placeholder="0" onChange={(e) => { const next = { ...denominations, [value]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }; setDenominations(next); setCountedCash(Object.entries(next).reduce((sum, [note, qty]) => sum + Number(note) * qty, 0)); }} /></label>)}</div>
+            <PastShifts onSelect={setReport} />
           </div>
 
           <aside className="bg-surface border rounded-2xl p-5 h-fit lg:sticky lg:top-24">
             <h3 className="font-bold flex items-center gap-2"><Square className="w-5 h-5 text-primary" /> Close Shift</h3>
-            <p className="text-xs text-muted-foreground mt-1">Count the drawer and confirm the mobile total from your provider portal.</p>
+            <p className="text-xs text-muted-foreground mt-1">Physical cash and confirmed mobile receipts</p>
 
             <div className="mt-4 space-y-3">
               <label className="block">
                 <span className="text-xs text-muted-foreground">Counted cash in drawer (TZS)</span>
                 <Input type="number" value={countedCash || ""} onChange={(e) => setCountedCash(Number(e.target.value) || 0)} className="mt-1" />
-                <VarianceRow expected={expectedCash} counted={countedCash} variance={cashVariance} label="Cash" />
+
               </label>
               <label className="block">
                 <span className="text-xs text-muted-foreground">Counted mobile money total (TZS)</span>
                 <Input type="number" value={countedMobile || ""} onChange={(e) => setCountedMobile(Number(e.target.value) || 0)} className="mt-1" />
-                <VarianceRow expected={stats.mobileSales} counted={countedMobile} variance={mobileVariance} label="Mobile" />
+
               </label>
+              <label className="block"><span className="text-xs text-muted-foreground">Float left in drawer</span><Input aria-label="Float left in drawer" inputMode="numeric" type="number" min={0} value={retained || ""} onChange={(e) => setRetained(Math.max(0, Math.round(Number(e.target.value) || 0)))} /></label>
+              <label className="block"><span className="text-xs text-muted-foreground">Cash handed to manager / safe</span><Input aria-label="Cash handed to manager" inputMode="numeric" type="number" min={0} value={drop || ""} onChange={(e) => setDrop(Math.max(0, Math.round(Number(e.target.value) || 0)))} /></label>
+              <label className="block"><span className="text-xs text-muted-foreground">Receiving cashier or manager</span><select aria-label="Handover witness" className="w-full min-h-12 rounded-lg border bg-background px-3 text-sm" value={witness} onChange={(e) => setWitness(e.target.value)}><option value="">Select staff member</option>{profiles.filter((p) => p.role === "staff" && !p.disabled && p.id !== currentUser.id && p.staff_role !== "waiter" && p.staff_pin).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
+              <label className="block"><span className="text-xs text-muted-foreground">Receiver’s staff PIN</span><Input aria-label="Receiver staff PIN" type="password" autoComplete="off" inputMode="numeric" value={witnessPin} onChange={(e) => setWitnessPin(e.target.value)} /></label>
               <label className="block">
                 <span className="text-xs text-muted-foreground">Notes (optional)</span>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="mt-1 w-full px-3 py-2 rounded-lg border bg-background text-sm" placeholder="Explain variance if any…" />
               </label>
             </div>
-            <Button onClick={doClose} className="w-full mt-4 h-11 bg-red-500 hover:bg-red-600">
-              <Square className="w-4 h-4 mr-2" /> Close Shift & Print Z-Report
+            <Button onClick={doClose} disabled={closing || !isOnline || !witness || !witnessPin || !validHandover(countedCash, retained, drop, countedMobile)} variant="destructive" className="w-full mt-4 h-12">
+              <Square className="w-4 h-4 mr-2" /> {closing ? "Confirming…" : "Confirm handover"}
             </Button>
           </aside>
         </div>
       )}
 
+      {report && <ShiftReport shift={report} onClose={() => setReport(null)} />}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
           <CheckCircle2 className="w-4 h-4 text-success" /> {toast}
@@ -172,30 +131,7 @@ function ShiftPage() {
   );
 }
 
-function ZBlock({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="bg-background/10 rounded-2xl p-4">
-      <div className="text-xs opacity-70 flex items-center gap-1">{icon}{label}</div>
-      <div className="text-2xl font-bold mt-1">{value}</div>
-    </div>
-  );
-}
-
-function VarianceRow({ expected, counted, variance, label }: { expected: number; counted: number; variance: number; label: string }) {
-  const abs = Math.abs(variance);
-  const ok = abs < 500;
-  return (
-    <div className="mt-1.5 flex items-center justify-between text-[11px]">
-      <span className="text-muted-foreground">Expected {formatTZS(expected)}</span>
-      <span className={`inline-flex items-center gap-1 font-semibold ${ok ? "text-emerald-600" : "text-red-600"}`}>
-        {ok ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-        {label} Δ {variance >= 0 ? "+" : "−"}{formatTZS(abs)}
-      </span>
-    </div>
-  );
-}
-
-function PastShifts() {
+function PastShifts({ onSelect }: { onSelect: (shift: Shift) => void }) {
   const { shifts } = useStore();
   const closed = shifts.filter((s) => s.closed_at);
   if (closed.length === 0) return null;
@@ -210,6 +146,7 @@ function PastShifts() {
               <div className="text-xs text-muted-foreground">{new Date(s.opened_at).toLocaleString()} → {s.closed_at ? new Date(s.closed_at).toLocaleTimeString() : "—"}</div>
             </div>
             <div className="text-right text-xs">
+              <Button variant="ghost" size="sm" onClick={() => onSelect(s)} aria-label={`View report ${s.id}`}><Printer className="w-4 h-4" /> Report</Button>
               <div>Cash Δ <span className={Math.abs(s.cash_variance ?? 0) < 500 ? "text-emerald-600" : "text-red-600"}>{formatTZS(s.cash_variance ?? 0)}</span></div>
               <div>Mob Δ <span className={Math.abs(s.mobile_variance ?? 0) < 500 ? "text-emerald-600" : "text-red-600"}>{formatTZS(s.mobile_variance ?? 0)}</span></div>
             </div>
@@ -219,4 +156,10 @@ function PastShifts() {
       <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground"><ArrowLeftRight className="w-3 h-3" /> Reconcile daily against bank statement.</div>
     </div>
   );
+}
+
+function ShiftReport({ shift, onClose }: { shift: Shift; onClose: () => void }) {
+  const fields: [string, number][] = [["Starting drawer cash", shift.opening_float], ["Expected cash", shift.expected_cash ?? (shift.counted_cash ?? 0) - (shift.cash_variance ?? 0)], ["Counted cash", shift.counted_cash ?? 0], ["Shortage / surplus", shift.cash_variance ?? 0], ["Float left in drawer", shift.retained_float ?? 0], ["Handed to manager / safe", shift.cash_drop ?? 0], ["Expected mobile", shift.expected_mobile ?? (shift.counted_mobile ?? 0) - (shift.mobile_variance ?? 0)], ["Counted mobile", shift.counted_mobile ?? 0], ["Mobile difference", shift.mobile_variance ?? 0]];
+  const print = () => { const w = window.open("", "_blank"); if (!w) return; const text = ["BitePay — Shift handover", shift.id, `Cashier: ${shift.cashier_name}`, `Receiver: ${shift.witness_name ?? "Legacy report — no witness"}`, `Closed: ${new Date(shift.closed_at ?? 0).toLocaleString()}`, ...fields.map(([label, value]) => `${label}: ${value.toLocaleString()}`), shift.notes ?? ""].join("\n"); w.document.title = "BitePay Shift Handover"; const pre = w.document.createElement("pre"); pre.textContent = text; w.document.body.appendChild(pre); w.print(); };
+  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"><section role="dialog" aria-label="Shift handover report" className="bg-background border rounded-lg p-5 w-full max-w-lg max-h-[85dvh] overflow-y-auto"><h2 className="font-bold text-xl">Shift handover report</h2><p className="text-sm text-muted-foreground break-all">{shift.id}</p><p className="mt-3 text-sm">Cashier: {shift.cashier_name}<br />Receiver: {shift.witness_name ?? "Not recorded"}</p><dl className="mt-4 space-y-2">{fields.map(([label, value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt>{label}</dt><dd className={value < 0 ? "text-destructive font-bold" : "font-semibold"}>{value.toLocaleString()}</dd></div>)}</dl>{shift.notes && <p className="mt-3 text-sm">{shift.notes}</p>}<div className="mt-5 flex gap-2"><Button onClick={print}><Printer className="w-4 h-4 mr-2" />Print report</Button><Button variant="outline" onClick={onClose}>Close</Button></div></section></div>;
 }
