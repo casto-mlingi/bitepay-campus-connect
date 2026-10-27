@@ -30,6 +30,7 @@ function POS() {
   const walletAllowed = can("pos.wallet") || qrOnly;
   const mode = walletAllowed ? selectedMode : "cash";
   const [query, setQuery] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("all");
   const [customer, setCustomer] = useState<Profile | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [pinCustomer, setPinCustomer] = useState<Profile | null>(null); // awaiting wallet-PIN unlock
@@ -105,11 +106,11 @@ function POS() {
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q || freshCustomer) return [] as Profile[];
+    if (freshCustomer || qrOnly) return [] as Profile[];
     return profiles
-      .filter((p) => p.role === "customer" && (p.full_name.toLowerCase().includes(q) || p.phone.includes(q) || p.id.toLowerCase().includes(q)))
-      .slice(0, 6);
-  }, [query, profiles, freshCustomer]);
+      .filter((p) => p.role === "customer" && !p.disabled && (customerFilter === "all" || customerFilter === "credit" && p.wallet_balance > 0 || customerFilter === "debt" && p.wallet_balance < 0) && (!q || p.full_name.toLowerCase().includes(q) || p.phone.includes(q) || p.id.toLowerCase().includes(q)))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  }, [query, profiles, freshCustomer, customerFilter, qrOnly]);
 
   const addLine = (p: Product) => {
     const plates = availablePlates(p.id);
@@ -350,17 +351,18 @@ function POS() {
                   <QrCode className="w-5 h-5" />{qrOnly && <span className="ml-2">Scan customer QR</span>}
                 </Button>
               </div>
+              {!qrOnly && !freshCustomer && <div className="flex gap-1" aria-label="Customer balance filter">{[["all", "All"], ["credit", "With credit"], ["debt", "Debtors"]].map(([value, label]) => <Button key={value} variant={customerFilter === value ? "secondary" : "ghost"} size="sm" onClick={() => setCustomerFilter(value)}>{label}</Button>)}</div>}
               {!qrOnly && suggestions.length > 0 && (
                 <ul className="border rounded-xl overflow-hidden bg-background max-h-56 overflow-y-auto">
                   {suggestions.map((s) => (
                     <li key={s.id}>
-                      <button onClick={() => pickCustomer(s)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted">
+                      <Button variant="ghost" onClick={() => pickCustomer(s)} className="w-full h-auto flex items-center gap-2.5 px-3 py-2.5 text-left justify-start">
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-sm truncate">{s.full_name}</div>
                           <div className="text-xs text-muted-foreground">{s.phone}</div>
                         </div>
                         <div className={`text-xs font-bold ${s.wallet_balance < 0 ? "text-destructive" : "text-success"}`}>{formatTZS(s.wallet_balance)}</div>
-                      </button>
+                      </Button>
                     </li>
                   ))}
                 </ul>

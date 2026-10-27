@@ -30,7 +30,11 @@ function stamp(row: Row): number {
 
 /** Newest row wins; ties fall back to the remote copy (server is the shared truth). */
 function pick(local: Row, remote: Row): Row {
-  return stamp(local) > stamp(remote) ? local : remote;
+  if (remote.closed_at && remote.witness_id) return remote;
+  if (local.closed_at && local.witness_id) return local;
+  const winner = stamp(local) > stamp(remote) ? local : remote;
+  if (local.wallet_anchors || remote.wallet_anchors) return { ...winner, wallet_anchors: { ...(local.wallet_anchors as object ?? {}), ...(remote.wallet_anchors as object ?? {}) } };
+  return winner;
 }
 
 function mergeArrays(local: unknown[], remote: unknown[]): unknown[] {

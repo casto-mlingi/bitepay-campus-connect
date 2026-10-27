@@ -48,6 +48,7 @@ function SettingsPage() {
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
   const [debtLimit, setDebtLimit] = useState(store?.customer_debt_limit ?? 0);
+  const [loyalty, setLoyalty] = useState(store?.loyalty_percentage ?? 1);
   const [businessType, setBusinessType] = useState<BusinessType>(store?.business_type ?? "canteen");
 
   useEffect(() => {
@@ -60,6 +61,7 @@ function SettingsPage() {
     setDeliveryFee(store.delivery_fee ?? 0);
     setBusinessType(store.business_type ?? "canteen");
     setDebtLimit(store.customer_debt_limit ?? 0);
+    setLoyalty(store.loyalty_percentage ?? 1);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -67,7 +69,8 @@ function SettingsPage() {
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Debt limit saved"); return; }
+    updateStore({ loyalty_percentage: loyalty });
+    if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
     updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
@@ -133,6 +136,7 @@ function SettingsPage() {
 
       <form onSubmit={save} className="max-w-2xl bg-surface border rounded-2xl p-6 space-y-4">
         <Row label="Customer debt limit (TZS)"><Input aria-label="Customer debt limit" type="number" min={0} step={1} inputMode="numeric" value={debtLimit || ""} placeholder="0 — disabled" onChange={(e) => setDebtLimit(Math.max(0, Math.round(Number(e.target.value) || 0)))} className="h-12" /></Row>
+        <Row label="Customer loyalty reward (%)"><Input aria-label="Customer loyalty reward" type="number" min={0} max={100} step="0.01" inputMode="decimal" value={loyalty} onChange={(e) => setLoyalty(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="h-12" /><span className="text-xs text-muted-foreground">0% — no loyalty rewards</span></Row>
         {can("settings.manage") && <>
         <div className="flex items-center gap-2 mb-1"><StoreIcon className="w-5 h-5 text-primary" /><h2 className="font-bold">Profile</h2></div>
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
