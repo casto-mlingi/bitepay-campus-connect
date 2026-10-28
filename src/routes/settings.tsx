@@ -46,6 +46,7 @@ function SettingsPage() {
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
+  const [waiterPay, setWaiterPay] = useState<boolean>(store?.allow_waiter_payments ?? true);
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
   const [debtLimit, setDebtLimit] = useState(store?.customer_debt_limit ?? 0);
   const [loyalty, setLoyalty] = useState(store?.loyalty_percentage ?? 1);
@@ -58,6 +59,7 @@ function SettingsPage() {
     setServiceRate(store.service_rate ?? 5);
     setCommissionRate(store.commission_rate ?? 0);
     setWaiterTables(store.enable_waiter_tables ?? false);
+    setWaiterPay(store.allow_waiter_payments ?? true);
     setDeliveryFee(store.delivery_fee ?? 0);
     setBusinessType(store.business_type ?? "canteen");
     setDebtLimit(store.customer_debt_limit ?? 0);
@@ -71,7 +73,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, delivery_fee: Math.max(0, deliveryFee) });
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, allow_waiter_payments: waiterPay, delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -188,6 +190,13 @@ function SettingsPage() {
             <div className="text-xs text-muted-foreground">Credit each sale to the waiter serving that table. Assign tables in <b>Tables</b>. Off = sales are credited to whoever rings them up.</div>
           </div>
           <input type="checkbox" checked={waiterTables} onChange={(e) => setWaiterTables(e.target.checked)} className="w-5 h-5 accent-primary" />
+        </label>
+        <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
+          <div>
+            <div className="font-semibold text-sm">Waiters can receive payments</div>
+            <div className="text-xs text-muted-foreground">On = waiters collect cash, Lipa Namba or wallet payments at the table. Off = waiters only save bills; the cashier takes every payment at the counter.</div>
+          </div>
+          <input type="checkbox" checked={waiterPay} onChange={(e) => setWaiterPay(e.target.checked)} className="w-5 h-5 accent-primary" />
         </label>
         <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
           <div>
