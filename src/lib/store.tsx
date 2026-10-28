@@ -85,6 +85,8 @@ export type Store = {
   commission_rate?: number;
   /** Credit each order to the waiter serving that table/section. */
   enable_waiter_tables?: boolean;
+  /** Allow waiters to accept payments at the table. Off = waiters save bills; the cashier collects payment. */
+  allow_waiter_payments?: boolean;
   /** Flat fee added when a customer chooses delivery. 0 = free delivery. */
   delivery_fee?: number;
   enable_mobile_tender: boolean;
