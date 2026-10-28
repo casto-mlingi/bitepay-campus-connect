@@ -57,7 +57,7 @@ function FinancePage() {
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
   const cogs = batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
   const grossProfit = grossRevenue - cogs;
-  const opex = expenses.reduce((s, e) => s + e.amount, 0);
+  const opex = expenses.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
   const netProfit = grossProfit - opex;
 
   if (!currentUser || currentUser.role !== "staff" || !hasStaffRole("supervisor")) return null;

@@ -322,6 +322,7 @@ export type Order = {
   amount_received?: number;
   change_returned?: number;
   change_saved?: number;
+  change_debt_settled?: number;
   wallet_charge?: number;
   debt_added?: number;
   wallet_balance_after?: number;
@@ -1474,7 +1475,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const order: Order = {
       id, store_id: currentStoreId, customer_id: changeProfile?.id ?? "walkin", customer_name: changeProfile?.full_name ?? customerName, items,
       total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
-      created_at: Date.now(), receipt_no, cash_paid: total, wallet_paid: 0, tender, amount_received: settlement.received, change_returned: settlement.changeReturned, change_saved: settlement.changeSaved, cash_delta: settlement.cashDelta, bank_delta: settlement.bankDelta, wallet_balance_after: changeProfile ? walletFor(changeProfile, currentStoreId) + settlement.changeSaved : undefined,
+      created_at: Date.now(), receipt_no, cash_paid: total, wallet_paid: 0, tender, amount_received: settlement.received, change_returned: settlement.changeReturned, change_saved: settlement.changeSaved, change_debt_settled: changeProfile ? Math.min(settlement.changeSaved, Math.max(0, -walletFor(changeProfile, currentStoreId))) : 0, cash_delta: settlement.cashDelta, bank_delta: settlement.bankDelta, wallet_balance_after: changeProfile ? walletFor(changeProfile, currentStoreId) + settlement.changeSaved : undefined,
       reference: tender === "mobile" ? reference : undefined,
       cashier_id: currentUser?.id, cashier_name: currentUser?.full_name, shift_id: activeShift?.id,
       table_no: table_no?.trim() || undefined,
@@ -2017,6 +2018,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         amount_received: original.amount_received == null ? undefined : -original.amount_received,
         change_returned: original.change_returned == null ? undefined : -original.change_returned,
         change_saved: original.change_saved == null ? undefined : -original.change_saved,
+        change_debt_settled: original.change_debt_settled == null ? undefined : -original.change_debt_settled,
         cash_delta: original.cash_delta == null ? undefined : -original.cash_delta,
         bank_delta: original.bank_delta == null ? undefined : -original.bank_delta,
         created_at: Date.now(), status: "completed", shift_id: activeShift?.id, cashier_id: currentUser.id, cashier_name: currentUser.full_name,
