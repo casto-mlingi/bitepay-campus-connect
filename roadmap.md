@@ -1,11 +1,13 @@
 # Roadmap
 
 ## Wallet reliability and shift handover (Oct 26)
-- [ ] Fix duplicate wallet additions, ledger-backed saved change and customer visibility.
-- [ ] Add configurable loyalty (0 disables), debt/top-up accounting and regression tests.
-- [ ] Add blind shift counting, retained float, witnessed handover and permanent printable reports.
-- [ ] Back up and repair only evidenced distorted balances (requires authorized production database access).
-- [ ] Verify tests and isolated device flows without writing fixtures to shared records.
+- [x] Fix duplicate wallet additions, ledger-backed saved change and customer visibility.
+- [x] Add configurable loyalty (0 disables), debt/top-up accounting and regression tests.
+- [x] Add blind shift counting, retained float, witnessed handover and permanent printable reports.
+- [x] Back up and repair the two proven distorted balances; preserve original payloads and all history.
+- [x] Verify signed-in customer readback, isolated POS wallet purchase and phone/desktop count screens without uploading test sales.
+- [ ] Verify live witnessed handover (requires redeployment and a distinct receiving cashier/manager with a PIN).
+- [ ] Reconcile the remaining ambiguous legacy customer balance (requires evidence of missing opening funds/top-ups; do not infer a negative balance from incomplete history).
 
 ## Direct POS payment actions (Oct 25)
 - [x] Replace change toggles and the extra payment button with direct Confirm and Lipa-only Return cash change actions; keep existing settlement records and permissions.
