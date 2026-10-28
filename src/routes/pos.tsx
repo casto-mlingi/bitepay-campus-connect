@@ -141,9 +141,10 @@ function POS() {
   const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
   const [splitCash, setSplitCash] = useState<number>(0);
   useEffect(() => {
-    setSplitCash(Math.min(total, walletShort));
     // Cashiers get "Pay later" pre-checked when the wallet is short; waiters choose it themselves.
-    setAllowDebt(!isWaiter && walletShort > 0 && Math.max(0, store?.customer_debt_limit ?? 0) > 0);
+    const autoDebt = !isWaiter && walletShort > 0 && Math.max(0, store?.customer_debt_limit ?? 0) > 0;
+    setSplitCash(autoDebt ? 0 : Math.min(total, walletShort));
+    setAllowDebt(autoDebt);
   }, [walletShort, total, isWaiter, store?.customer_debt_limit]);
 
   const requireShift = () => {
