@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
-import { isBeverage } from "@/lib/business-rules";
+import { isBeverage, waiterCanTakePayment } from "@/lib/business-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
@@ -70,6 +70,7 @@ function POS() {
   const [itemSearch, setItemSearch] = useState("");
   const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")) && (!itemSearch.trim() || p.name.toLowerCase().includes(itemSearch.trim().toLowerCase())));
   const isWaiter = currentUser?.staff_role === "waiter";
+  const canTakePayment = waiterCanTakePayment(currentUser?.staff_role, store);
   const servers = profiles.filter((p) => p.role === "staff" && !p.disabled);
   const itemCount = lines.reduce((n, l) => n + l.qty, 0);
   const toItems = () => lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
@@ -139,7 +140,12 @@ function POS() {
 
   const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
   const [splitCash, setSplitCash] = useState<number>(0);
-  useEffect(() => { setSplitCash(Math.min(total, walletShort)); setAllowDebt(false); }, [walletShort, total]);
+  useEffect(() => {
+    // Cashiers get "Pay later" pre-checked when the wallet is short; waiters choose it themselves.
+    const autoDebt = !isWaiter && walletShort > 0 && Math.max(0, store?.customer_debt_limit ?? 0) > 0;
+    setSplitCash(autoDebt ? 0 : Math.min(total, walletShort));
+    setAllowDebt(autoDebt);
+  }, [walletShort, total, isWaiter, store?.customer_debt_limit]);
 
   const requireShift = () => {
     if (!activeShift) { showToast("Open a shift first"); return false; }
@@ -147,6 +153,7 @@ function POS() {
   };
 
   const doWalletSale = () => {
+    if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (!walletAllowed || !freshCustomer || !lines.length) return;
     if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
@@ -169,6 +176,7 @@ function POS() {
   };
 
   const doCashSale = (saveChange: boolean) => {
+    if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (lines.length === 0) return;
     if (!Number.isFinite(cashReceived) || cashReceived < total) { showToast("Enter the full amount received"); return; }
     if (saveChange && change > 0 && changePhone.replace(/\D/g, "").length < 9) { showToast("Enter the customer phone number to save their credit"); return; }
@@ -321,9 +329,13 @@ function POS() {
         <Button disabled={!lines.length} variant="outline" className="h-14 text-base font-semibold col-span-2 sm:col-span-1" onClick={() => printBill({ items: toItems(), customerName: billLabel || freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}>
           <Printer className="w-5 h-5 mr-2" /> Print bill
         </Button>
-        <Button disabled={!lines.length} onClick={() => setPayOpen((v) => !v)} className="h-14 text-base font-bold col-span-2 bg-success hover:bg-success/90 text-success-foreground">
-          <Banknote className="w-5 h-5 mr-2" /> {payOpen ? "Hide payment" : `Take payment · ${formatTZS(total)}`}
-        </Button>
+        {canTakePayment ? (
+          <Button disabled={!lines.length} onClick={() => setPayOpen((v) => !v)} className="h-14 text-base font-bold col-span-2 bg-success hover:bg-success/90 text-success-foreground">
+            <Banknote className="w-5 h-5 mr-2" /> {payOpen ? "Hide payment" : `Take payment · ${formatTZS(total)}`}
+          </Button>
+        ) : (
+          <p className="col-span-2 rounded-xl bg-muted px-3 py-2.5 text-sm text-muted-foreground">Payments are taken at the cashier counter — save the bill and the cashier will collect it.</p>
+        )}
       </div>
       {creditedWaiter && <p className="text-sm text-muted-foreground -mt-2">Credited to <b>{creditedWaiter}</b></p>}
 
