@@ -303,6 +303,8 @@ export type Product = {
   emoji: string;
   gradient: string;
   image?: string; // data URL or asset URL for a dish photo
+  updated_at?: number;
+  archived_at?: number; // hidden from POS/menu; kept so past sales still resolve
 };
 
 
@@ -621,7 +623,8 @@ type Ctx = {
     notifications: AppNotification[];
     treasuries: Record<string, { cash: number; bank: number }>;
   };
-  products: Product[]; // filtered
+  products: Product[]; // filtered, active only
+  archivedProducts: Product[];
   orders: Order[]; // filtered
   transactions: Transaction[]; // filtered
   cart: CartItem[];
@@ -709,6 +712,8 @@ type Ctx = {
   addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
   updateRawStock: (id: string, delta: number) => void;
   addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
+  updateProduct: (id: string, patch: Partial<Omit<Product, "id" | "store_id">>) => void;
+  setProductArchived: (id: string, archived: boolean) => void;
 
   createBatch: (input: { product_id: string; ingredients: BatchIngredient[]; labor_cost: number; plates: number }) => CookingBatch | null;
   logWastage: (batch_id: string, plates: number, reason: string) => void;
@@ -1121,7 +1126,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 
   // Filtered per-tenant views
-  const scopedProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
+  const storeProducts = useMemo(() => currentStoreId ? products.filter((p) => p.store_id === currentStoreId) : [], [products, currentStoreId]);
+  const scopedProducts = useMemo(() => storeProducts.filter((p) => !p.archived_at), [storeProducts]);
+  const archivedProducts = useMemo(() => storeProducts.filter((p) => p.archived_at), [storeProducts]);
   // Customers belong to the whole store GROUP, so every canteen in the group
   // can serve them; staff are scoped to the individual canteen.
   const orgOfCurrent = useMemo(() => orgIdOfId(currentStoreId), [orgIdOfId, currentStoreId]);
@@ -1502,7 +1509,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor, waiterFor, profiles, setWallet, cash, orgIdOfId]);
 
   const value: Ctx = useMemo(() => ({
-    currentUser, sessionReady, profiles: scopedProfiles.map((p) => p.role === "customer" ? { ...p, wallet_balance: walletFor(p, currentStoreId) } : p), allProfiles: profiles, products: scopedProducts,
+    currentUser, sessionReady, profiles: scopedProfiles.map((p) => p.role === "customer" ? { ...p, wallet_balance: walletFor(p, currentStoreId) } : p), allProfiles: profiles, products: scopedProducts, archivedProducts,
     adminData: {
       orders, transactions, tickets, topUpRequests, purchases, expenses,
       wastage, shifts, customDishRequests, notifications, treasuries,
@@ -2087,9 +2094,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
     addProduct(p) {
       if (!currentStoreId) return null;
-      const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId };
+      const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId, updated_at: Date.now() };
       setProducts((prev) => [...prev, prod]);
       return prod;
+    },
+    updateProduct(id, patch) {
+      setProducts((prev) => prev.map((x) => x.id === id && x.store_id === currentStoreId ? { ...x, ...patch, updated_at: Date.now() } : x));
+    },
+    setProductArchived(id, archived) {
+      const now = Date.now();
+      setProducts((prev) => prev.map((x) => x.id === id && x.store_id === currentStoreId ? { ...x, archived_at: archived ? now : undefined, updated_at: now } : x));
     },
     createBatch({ product_id, ingredients, labor_cost, plates }) {
       if (!currentStoreId || plates <= 0 || ingredients.length === 0) return null;
@@ -3124,7 +3138,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, archivedProducts, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is
