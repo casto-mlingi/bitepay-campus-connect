@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
-import { isBeverage, waiterCanTakePayment } from "@/lib/business-rules";
+import { isBeverage, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
@@ -28,7 +28,8 @@ function POS() {
   const [selectedMode, setMode] = useState<Mode>("wallet");
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
-  const mode = walletAllowed ? selectedMode : "cash";
+  const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
+  const mode = walletOnly ? "wallet" : walletAllowed ? selectedMode : "cash";
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
   const [customer, setCustomer] = useState<Profile | null>(null);
@@ -346,7 +347,7 @@ function POS() {
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
               <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : "Wallet"}
             </button>}
-            <button onClick={() => setMode("cash")}
+            {!walletOnly && <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "cash" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletAllowed ? "" : "col-span-2"}`}>
               <Banknote className="w-4 h-4" /> Cash / Lipa Namba
             </button>
