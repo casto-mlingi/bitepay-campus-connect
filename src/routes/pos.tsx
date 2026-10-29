@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
-import { isBeverage, waiterCanTakePayment } from "@/lib/business-rules";
+import { isBeverage, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
@@ -28,7 +28,8 @@ function POS() {
   const [selectedMode, setMode] = useState<Mode>("wallet");
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
-  const mode = walletAllowed ? selectedMode : "cash";
+  const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
+  const mode = walletOnly ? "wallet" : walletAllowed ? selectedMode : "cash";
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
   const [customer, setCustomer] = useState<Profile | null>(null);
@@ -154,6 +155,7 @@ function POS() {
 
   const doWalletSale = () => {
     if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
+    if (walletOnly && walletShort > 0) { showToast("Wallet balance is not enough — save the bill for the cashier"); return; }
     if (!walletAllowed || !freshCustomer || !lines.length) return;
     if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
@@ -176,6 +178,7 @@ function POS() {
   };
 
   const doCashSale = (saveChange: boolean) => {
+    if (walletOnly) { showToast("Waiters take wallet payments only — save the bill for the cashier"); return; }
     if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (lines.length === 0) return;
     if (!Number.isFinite(cashReceived) || cashReceived < total) { showToast("Enter the full amount received"); return; }
@@ -343,13 +346,13 @@ function POS() {
         <div className="rounded-2xl border-2 border-success/40 p-3 space-y-3">
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
             {walletAllowed && <button onClick={() => setMode("wallet")}
-              className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+              className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletOnly ? "col-span-2" : ""}`}>
               <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : "Wallet"}
             </button>}
-            <button onClick={() => setMode("cash")}
+            {!walletOnly && <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "cash" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletAllowed ? "" : "col-span-2"}`}>
               <Banknote className="w-4 h-4" /> Cash / Lipa Namba
-            </button>
+            </button>}
           </div>
 
           {mode === "wallet" ? (
@@ -389,7 +392,10 @@ function POS() {
                   <button onClick={() => { setCustomer(null); setQuery(""); }} className="p-2 hover:bg-background rounded" aria-label="Remove customer"><X className="w-4 h-4" /></button>
                 </div>
               )}
-              {freshCustomer && walletShort > 0 && (
+              {freshCustomer && walletShort > 0 && walletOnly && (
+                <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm font-medium text-destructive">Wallet short by {formatTZS(walletShort)}. Ask the customer to top up, or save the bill so the cashier can collect it.</div>
+              )}
+              {freshCustomer && walletShort > 0 && !walletOnly && (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
                   <div className="text-sm font-semibold text-amber-800">Wallet short by {formatTZS(walletShort)} — collect the rest</div>
                   <Input type="number" value={splitCash || ""} aria-label="Remaining amount received" min={0} max={total} inputMode="numeric" onChange={(e) => setSplitCash(Math.max(0, wholeAmount(Number(e.target.value)) || 0))} className="h-11 font-semibold bg-background" />

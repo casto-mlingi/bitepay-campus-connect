@@ -1,3 +1,4 @@
+import { waiterPaymentMode, type WaiterPaymentMode } from "@/lib/business-rules";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Save, Store as StoreIcon, Sparkles, ArrowUpRight, Clock, Smartphone, X, CheckCircle2 } from "lucide-react";
@@ -46,7 +47,7 @@ function SettingsPage() {
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
   const [waiterTables, setWaiterTables] = useState<boolean>(store?.enable_waiter_tables ?? false);
-  const [waiterPay, setWaiterPay] = useState<boolean>(store?.allow_waiter_payments ?? true);
+  const [waiterPay, setWaiterPay] = useState<WaiterPaymentMode>(waiterPaymentMode(store));
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
   const [debtLimit, setDebtLimit] = useState(store?.customer_debt_limit ?? 0);
   const [loyalty, setLoyalty] = useState(store?.loyalty_percentage ?? 1);
@@ -59,7 +60,7 @@ function SettingsPage() {
     setServiceRate(store.service_rate ?? 5);
     setCommissionRate(store.commission_rate ?? 0);
     setWaiterTables(store.enable_waiter_tables ?? false);
-    setWaiterPay(store.allow_waiter_payments ?? true);
+    setWaiterPay(waiterPaymentMode(store));
     setDeliveryFee(store.delivery_fee ?? 0);
     setBusinessType(store.business_type ?? "canteen");
     setDebtLimit(store.customer_debt_limit ?? 0);
@@ -73,7 +74,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, allow_waiter_payments: waiterPay, delivery_fee: Math.max(0, deliveryFee) });
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -191,13 +192,17 @@ function SettingsPage() {
           </div>
           <input type="checkbox" checked={waiterTables} onChange={(e) => setWaiterTables(e.target.checked)} className="w-5 h-5 accent-primary" />
         </label>
-        <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
-          <div>
-            <div className="font-semibold text-sm">Waiters can receive payments</div>
-            <div className="text-xs text-muted-foreground">On = waiters collect cash, Lipa Namba or wallet payments at the table. Off = waiters only save bills; the cashier takes every payment at the counter.</div>
+        <div className="p-3 rounded-lg border space-y-2">
+          <div className="font-semibold text-sm">Waiter payments</div>
+          <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Waiter payments">
+            {([["none", "Save bill only", "Cashier takes every payment"], ["wallet", "Wallet only", "Scan customer QR; no cash, no debt"], ["all", "All payments", "Wallet, cash and Lipa Namba"]] as const).map(([value, label, hint]) => (
+              <label key={value} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer ${waiterPay === value ? "border-primary bg-primary/5" : ""}`}>
+                <input type="radio" name="waiter-pay" checked={waiterPay === value} onChange={() => setWaiterPay(value)} className="mt-0.5 w-4 h-4 accent-primary" />
+                <span><span className="block text-sm font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+              </label>
+            ))}
           </div>
-          <input type="checkbox" checked={waiterPay} onChange={(e) => setWaiterPay(e.target.checked)} className="w-5 h-5 accent-primary" />
-        </label>
+        </div>
         <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
           <div>
             <div className="font-semibold text-sm">Mobile Money (Lipa Namba) tender</div>

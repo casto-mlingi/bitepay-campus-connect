@@ -87,6 +87,8 @@ export type Store = {
   enable_waiter_tables?: boolean;
   /** Allow waiters to accept payments at the table. Off = waiters save bills; the cashier collects payment. */
   allow_waiter_payments?: boolean;
+  /** none = save bills only; wallet = QR wallet payments only, no cash and no debt; all = every payment. */
+  waiter_payment_mode?: "none" | "wallet" | "all";
   /** Flat fee added when a customer chooses delivery. 0 = free delivery. */
   delivery_fee?: number;
   enable_mobile_tender: boolean;
