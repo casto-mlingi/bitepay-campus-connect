@@ -1,61 +1,41 @@
-# Owner Onboarding & Staff Management
+# Plan: Everything discussed since the last build (credit-saving order)
 
-Right now the app ships with pre-seeded demo staff (`u2`–`u4`). You want a real first-run flow: the **store owner** creates their account, sets up the store, and then invites staff members with specific roles. Role gates already partially exist (cashier / supervisor / owner) — this pass makes them meaningful end-to-end.
+Four small batches, done in order. Each one reuses screens and rules the app already has, so nothing gets rebuilt. No existing records are deleted or changed.
 
-## 1. First-run owner setup
+## Batch 1: POS stock limits (small, high value)
+- Each product card shows **remaining = stock minus what's already in the current bill and in open saved bills**.
+- Tapping a product or "+" stops at the remaining amount and shows a short "Only X left" message.
+- Reducing or removing an item puts the stock back on the card right away.
+- Stock is only actually deducted when the sale is completed, using the same per-order stock rows as today, so offline phones still merge correctly.
 
-- On app boot, if there is no `owner` profile in the store, `/` redirects to a new **`/setup`** route (a 2-step wizard):
-  1. **Store details** — store name, location, contact phone, currency label (default TZS), low-balance threshold.
-  2. **Owner account** — full name, phone, password, staff PIN (4-digit).
-- Submitting creates the owner profile (`role: staff`, `staff_role: owner`) and a `store` record in the store, then auto-signs the owner in and routes to `/staff`.
-- Existing demo seed profiles are removed. The login screen "demo" quick-fill is replaced by a "First time? **Set up your store**" link.
+## Batch 2: Finished goods edit and delete
+- Inventory gets Edit (name, price, photo, category) and Delete on each finished good.
+- Delete **hides** the item from POS (archive) and never removes it, so past sales and receipts stay correct. Archived items can be restored.
 
-## 2. Staff management (owner + supervisor)
+## Batch 3: Guided first setup (extends the current setup page)
+1. Business name, location, type (Canteen / Restaurant / Bar / Hotel), WhatsApp number
+2. Waiter payments (Save bill only / Wallet only / All), tables on/off, mobile money on/off
+3. Debt limit (0 / 20k / 50k / custom) and loyalty % (0 = off)
+4. Opening drawer cash and bank/mobile balance
+5. **Raw materials**: one-tap starter list for the business type, with checkboxes to keep or untick, plus "add your own"
+6. **Finished goods (POS menu)**: starter dishes/drinks with editable prices, plus "add your own"
+7. Owner account and PIN, then finish
 
-- New route **`/team`** (nav item "Team", visible to supervisor+; only owner can create/delete owners).
-- Lists all staff with: name, phone, role badge, status (active/disabled), last sign-in.
-- Actions:
-  - **Add member** modal — name, phone, temp password, role (cashier / supervisor / owner), staff PIN.
-  - **Edit role** — change role or disable account (owner-only for owner-role edits).
-  - **Reset PIN / password** — owner or the member themselves.
-  - **Remove** — soft-disable (can't sign in), owner-only.
-- Cashiers cannot see /team.
+Everything is saved in the same single registration step that already exists, so a cut-off setup can't leave a half-made store. "Skip" is allowed on steps 5 and 6.
 
-## 3. Role-gated features (single source of truth)
+## Batch 4: Launch guide after sign-in, and installable app
+- A checklist card on the owner home screen: add raw materials, add finished goods, add staff, set opening cash, make your first sale. Each item links to its page and turns green when done (worked out from real data, nothing extra stored). It can be shrunk and disappears once everything is done.
+- Install as an app: add the missing app info file and icons, plus iPhone home-screen tags. After you publish, you can make the Android APK for free at pwabuilder.com.
 
-Centralize permissions in `store.tsx` as a `PERMISSIONS` map keyed by role, and expose `can(perm)` on the store. Nav items and page bodies use `can(...)` instead of ad-hoc `hasStaffRole`.
-
-| Feature                          | Cashier | Supervisor | Owner |
-|----------------------------------|:-------:|:----------:|:-----:|
-| POS sales / refunds              |    ✓    |     ✓      |   ✓   |
-| Shift open/close                 |    ✓    |     ✓      |   ✓   |
-| Customers list & top-up request approval |    ✓    |     ✓      |   ✓   |
-| Inventory read                   |    ✓    |     ✓      |   ✓   |
-| Inventory edits / batches / wastage |         |     ✓      |   ✓   |
-| Finance dashboard & journal      |         |     ✓      |   ✓   |
-| Purchases / expenses / transfers |         |     ✓      |   ✓   |
-| Analytics                        |         |     ✓      |   ✓   |
-| Team management                  |         |    ✓ (view / add cashier) |   ✓ (full)   |
-| Store settings                   |         |            |   ✓   |
-| Delete owner / change store name |         |            |   ✓   |
-
-Pages hit by unauthorized users show a friendly "You don't have access to this area — ask your store manager" card instead of blanking.
-
-## 4. Store settings (owner only)
-
-Small **`/settings`** route (nav item, owner only) to edit the store details captured at setup, plus toggle features (e.g. enable/disable mobile-money tender). Values live in the same `store` object added in step 1.
-
-## 5. Small polish
-
-- Staff shell header shows the store name next to the BitePay logo.
-- Signup on `/` stays **customer-only** (the current customer signup); staff accounts can only be created by an owner/supervisor from `/team`, never via public signup.
-- All new routes get proper `head()` meta.
+## How this saves credits
+- Four batches, each finished in one go, with no rework in between.
+- Reuse what already exists: the current setup page, Inventory forms, the business and staff rules, and the stock-row logic.
+- Tests only for the rules: stock cap, keeping archived items, the setup steps saving together, and checklist completion. Then one quick browser check per batch.
+- No new backend tables. Only optional fields are added (archived flag, starter-pack data).
 
 ## Technical notes
-
-- All state stays in `src/lib/store.tsx` (localStorage-backed) — no backend changes.
-- New types: `Store`, `PERMISSIONS: Record<StaffRole, Permission[]>`, `Permission` union.
-- New store fields: `store: Store | null`, `hasOwner: boolean` (derived).
-- New actions: `completeSetup(store, ownerInput)`, `addStaff(input)`, `updateStaff(id, patch)`, `disableStaff(id)`, `resetStaffCredential(id, kind, value)`, `updateStore(patch)`, `can(perm)`.
-- Files touched: `src/lib/store.tsx`, `src/routes/index.tsx`, `src/routes/__root.tsx` (redirect guard), `src/components/staff-shell.tsx`. New files: `src/routes/setup.tsx`, `src/routes/team.tsx`, `src/routes/settings.tsx`, `src/components/access-denied.tsx`.
-- Existing demo quick-fill buttons and seeded staff profiles are removed; a single demo customer stays for convenience.
+- Remaining stock is a selector in the store using `availablePlates`, the active cart and open tabs where status = open.
+- Products get `archived_at?: string`. POS filters it out, while reports and receipts still resolve it.
+- Starter packs live in a static module, split by business type, and are passed into the onboarding transaction in `src/lib/onboarding.ts`.
+- The checklist reads only from store state.
+- `public/manifest.webmanifest` gets 192/512 icons, and `apple-touch-icon` plus meta tags go in `__root.tsx`.
