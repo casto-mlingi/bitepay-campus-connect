@@ -1,3 +1,4 @@
+import { maxLineQty, remainingStock } from "@/lib/pos-stock";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered } from "lucide-react";
@@ -114,15 +115,22 @@ function POS() {
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
   }, [query, profiles, freshCustomer, customerFilter, qrOnly]);
 
+  const lineItems = lines.map((l) => ({ product_id: l.product.id, qty: l.qty }));
+  const capFor = (id: string) => maxLineQty(availablePlates(id), id, openBills, billId);
   const addLine = (p: Product) => {
-    const plates = availablePlates(p.id);
-    if (plates !== null && plates <= 0) { showToast(`${p.name} is out of stock`); return; }
+    const cap = capFor(p.id);
+    const have = lines.find((l) => l.product.id === p.id)?.qty ?? 0;
+    if (have + 1 > cap) { showToast(cap <= 0 ? `${p.name} is out of stock` : `Only ${cap} ${p.name} left`); return; }
     setLines((prev) => {
       const f = prev.find((l) => l.product.id === p.id);
       return f ? prev.map((l) => l.product.id === p.id ? { ...l, qty: l.qty + 1 } : l) : [...prev, { product: p, qty: 1 }];
     });
   };
-  const setLineQty = (id: string, qty: number) => setLines((prev) => qty <= 0 ? prev.filter((l) => l.product.id !== id) : prev.map((l) => l.product.id === id ? { ...l, qty } : l));
+  const setLineQty = (id: string, qty: number) => {
+    const cap = capFor(id);
+    if (qty > cap) { showToast(`Only ${cap} left`); qty = cap; }
+    setLines((prev) => qty <= 0 ? prev.filter((l) => l.product.id !== id) : prev.map((l) => l.product.id === id ? { ...l, qty } : l));
+  };
 
   const pickCustomer = (c: Profile) => {
     setQuery("");
@@ -544,11 +552,11 @@ function POS() {
 
           <div className="mt-3 grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
             {filtered.map((p) => {
-              const plates = availablePlates(p.id);
+              const plates = remainingStock(availablePlates(p.id), p.id, lineItems, openBills, billId);
               const soldOut = plates !== null && plates <= 0;
               const inBill = lines.find((l) => l.product.id === p.id)?.qty ?? 0;
               return (
-                <button key={p.id} onClick={() => addLine(p)} disabled={soldOut}
+                <button key={p.id} onClick={() => addLine(p)} disabled={soldOut && !inBill}
                   className={`relative bg-surface border-2 rounded-2xl p-2 text-left transition active:scale-[0.97] ${inBill ? "border-primary" : "border-border hover:border-primary/50"} ${soldOut ? "opacity-40 grayscale cursor-not-allowed" : ""}`}>
                   {inBill > 0 && <span className="absolute top-1 right-1 z-10 min-w-7 h-7 px-1.5 rounded-full bg-primary text-primary-foreground text-sm font-bold grid place-items-center">{inBill}</span>}
                   {p.image ? (
