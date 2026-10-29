@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { canApproveRefund, hasTableService, isBeverage, validScanGrant, newOrderId, waiterCanTakePayment, type ScanGrant } from "./business-rules";
+import { canApproveRefund, hasTableService, isBeverage, validScanGrant, newOrderId, waiterCanTakePayment, waiterWalletOnly, waiterPaymentMode, type ScanGrant } from "./business-rules";
 describe("business and waiter payment rules", () => {
   it("a refund credit note gets a different ID than the original order across sessions", () => { const original = newOrderId(); const refund = newOrderId(); assert.notEqual(original, refund); });
   it("bar supports food and beverage categories", () => { assert.equal(isBeverage("Beer"), true); assert.equal(isBeverage("Food"), false); });
@@ -14,6 +14,14 @@ describe("business and waiter payment rules", () => {
     assert.equal(waiterCanTakePayment("waiter", undefined), true);
     assert.equal(waiterCanTakePayment("cashier", { allow_waiter_payments: false }), true);
     assert.equal(waiterCanTakePayment("owner", { allow_waiter_payments: false }), true);
+  });
+  it("wallet-only mode lets waiters take wallet payments but not cash or debt", () => {
+    const store = { waiter_payment_mode: "wallet" as const };
+    assert.equal(waiterCanTakePayment("waiter", store), true);
+    assert.equal(waiterWalletOnly("waiter", store), true);
+    assert.equal(waiterWalletOnly("cashier", store), false);
+    assert.equal(waiterCanTakePayment("waiter", { waiter_payment_mode: "none" }), false);
+    assert.equal(waiterPaymentMode({ allow_waiter_payments: false }), "none");
   });
   const grant: ScanGrant = { customerId: "c", staffId: "w", storeId: "s", expiresAt: 200, pinVerified: true };
   it("waiter wallet payments require a scanned customer grant", () => { assert.equal(validScanGrant(undefined, "c", "w", "s", 100), false); assert.equal(validScanGrant(grant, "c", "w", "s", 100), true); });
