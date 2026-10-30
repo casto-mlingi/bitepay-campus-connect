@@ -8,6 +8,15 @@ import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { registerOwnerAndStore } from "@/lib/auth.functions";
 import { saveSessionToken } from "@/lib/session-token";
+import { STARTER_GOODS, STARTER_RAW, type StarterGood, type StarterRaw } from "@/lib/starter-pack";
+import type { BusinessType } from "@/lib/business-rules";
+import { Package, Settings2, UtensilsCrossed, Plus, Trash2 } from "lucide-react";
+
+const STEP_LABELS = ["Store", "Service", "Credit", "Cash", "Stock", "Menu", "Owner"];
+const TYPES: { id: BusinessType; label: string; emoji: string }[] = [
+  { id: "canteen", label: "Canteen", emoji: "🍛" }, { id: "restaurant", label: "Restaurant", emoji: "🍽️" },
+  { id: "bar", label: "Bar", emoji: "🍺" }, { id: "hotel", label: "Hotel", emoji: "🏨" },
+];
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
@@ -25,7 +34,24 @@ function SetupWizard() {
   const { completeSetup, stores, allProfiles, currentUser } = useStore();
   const registerFn = useServerFn(registerOwnerAndStore);
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState(1);
+  const [businessType, setBusinessType] = useState<BusinessType>("canteen");
+  const [waiterMode, setWaiterMode] = useState<"none" | "wallet" | "all">("none");
+  const [tables, setTables] = useState(false);
+  const [mobileTender, setMobileTender] = useState(true);
+  const [debtLimit, setDebtLimit] = useState(0);
+  const [loyalty, setLoyalty] = useState(0);
+  const [raws, setRaws] = useState<(StarterRaw & { on: boolean })[]>([]);
+  const [goods, setGoods] = useState<(StarterGood & { on: boolean })[]>([]);
+  const [newRaw, setNewRaw] = useState("");
+  const [newGood, setNewGood] = useState({ name: "", price: 0 });
+  useEffect(() => {
+    setRaws(STARTER_RAW[businessType].map((r) => ({ ...r, on: true })));
+    setGoods(STARTER_GOODS[businessType].map((g) => ({ ...g, on: true })));
+    setTables(businessType !== "canteen");
+  }, [businessType]);
+  const next = (e?: React.FormEvent) => { e?.preventDefault(); setError(""); setStep((n) => n + 1); };
+  const back = () => { setError(""); setStep((n) => n - 1); };
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -61,11 +87,17 @@ function SetupWizard() {
     setStep(2);
   };
 
+  const goCash = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (debtLimit < 0 || loyalty < 0 || loyalty > 100) return setError("Check the debt limit and loyalty %");
+    next();
+  };
+
   const goStep3 = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (openingCash < 0 || openingBank < 0) return setError("Opening balances cannot be negative");
-    setStep(3);
+    setStep(5);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -90,7 +122,13 @@ function SetupWizard() {
       return setError(err instanceof Error && err.message.includes("already exists") ? err.message : "Could not confirm your store. Check your connection and retry with the same details.");
     }
     const res = completeSetup({
-      store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: true },
+      store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: mobileTender,
+        business_type: businessType, waiter_payment_mode: waiterMode, allow_waiter_payments: waiterMode !== "none", enable_waiter_tables: tables,
+        customer_debt_limit: debtLimit, loyalty_percentage: loyalty },
+      starter: {
+        raw: raws.filter((r) => r.on).map((r) => ({ name: r.name, category: r.category, unit: r.unit, stock: 0, avg_cost: 0, low_threshold: 0 })),
+        products: goods.filter((g) => g.on && g.price > 0).map((g, i) => ({ name: g.name, category: g.category, price: g.price, emoji: g.emoji, description: "", gradient: GRAD[i % GRAD.length] })),
+      },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
       opening_bank: openingBank,
@@ -111,13 +149,9 @@ function SetupWizard() {
             <ChefHat className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Set up BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Three quick steps to get your store running.</p>
-          <div className="flex items-center gap-2 mt-5">
-            <StepDot n={1} active={step === 1} done={step > 1} label="Store" />
-            <div className="w-6 h-px bg-white/40" />
-            <StepDot n={2} active={step === 2} done={step > 2} label="Liquidity" />
-            <div className="w-6 h-px bg-white/40" />
-            <StepDot n={3} active={step === 3} done={false} label="Owner" />
+          <p className="mt-1.5 text-white/85 text-sm max-w-xs">A few easy steps — you can change everything later in Settings.</p>
+          <div className="flex items-center gap-1.5 mt-5 flex-wrap justify-center">
+            {STEP_LABELS.map((l, i) => <StepDot key={l} n={i + 1} active={step === i + 1} done={step > i + 1} label={l} />)}
           </div>
         </div>
       </div>
@@ -136,13 +170,20 @@ function SetupWizard() {
               <FormRow label="Location">
                 <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Main Campus, Block C" className="h-11 rounded-xl" />
               </FormRow>
-              <FormRow label="Contact phone" required>
+              <FormRow label="WhatsApp number" required>
                 <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0712 000 000" className="h-11 rounded-xl" />
               </FormRow>
               <FormRow label="Admin email" required>
                 <Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="owner@canteen.co.tz" className="h-11 rounded-xl" />
               </FormRow>
 
+              <FormRow label="Type of business" required>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYPES.map((t) => (
+                    <button key={t.id} type="button" onClick={() => setBusinessType(t.id)} className={`h-14 rounded-xl border-2 font-semibold ${businessType === t.id ? "border-primary bg-primary/10" : "border-border"}`}>{t.emoji} {t.label}</button>
+                  ))}
+                </div>
+              </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Currency">
                   <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="TZS" className="h-11 rounded-xl" />
@@ -161,6 +202,82 @@ function SetupWizard() {
           )}
 
           {step === 2 && (
+            <form onSubmit={next} className="space-y-4">
+              <StepTitle icon={<Settings2 className="w-5 h-5 text-primary" />} title="How you serve" />
+              <FormRow label="Can waiters receive payments?">
+                <div className="grid gap-2">
+                  {([["none", "No — save bill only", "Cashier collects all money"], ["wallet", "Wallet only", "Waiters scan customer QR, no cash"], ["all", "All payments", "Waiters take cash, mobile and wallet"]] as const).map(([id, l, d]) => (
+                    <button key={id} type="button" onClick={() => setWaiterMode(id)} className={`text-left p-3 rounded-xl border-2 ${waiterMode === id ? "border-primary bg-primary/10" : "border-border"}`}><div className="font-semibold">{l}</div><div className="text-xs text-muted-foreground">{d}</div></button>
+                  ))}
+                </div>
+              </FormRow>
+              <Toggle label="Use table numbers" hint="Pick tables on bills and link them to waiters" on={tables} set={setTables} />
+              <Toggle label="Accept mobile money (Lipa Namba)" hint="Shows a Mobile option at the till" on={mobileTender} set={setMobileTender} />
+              <NavButtons back={back} />
+            </form>
+          )}
+
+          {step === 3 && (
+            <form onSubmit={goCash} className="space-y-4">
+              <StepTitle icon={<Wallet className="w-5 h-5 text-primary" />} title="Customer credit & rewards" />
+              <FormRow label="Most a customer can owe (debt limit)">
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  {[0, 20000, 50000, 100000].map((v) => <button key={v} type="button" onClick={() => setDebtLimit(v)} className={`h-11 rounded-xl border-2 text-sm font-semibold ${debtLimit === v ? "border-primary bg-primary/10" : "border-border"}`}>{v === 0 ? "None" : `${v / 1000}k`}</button>)}
+                </div>
+                <Input type="number" min={0} value={debtLimit} onChange={(e) => setDebtLimit(Math.max(0, Math.round(Number(e.target.value) || 0)))} className="h-11 rounded-xl" />
+              </FormRow>
+              <p className="text-xs text-muted-foreground -mt-2">0 means customers must always pay in full.</p>
+              <FormRow label="Loyalty reward % on wallet purchases">
+                <div className="grid grid-cols-4 gap-2">
+                  {[0, 1, 2, 5].map((v) => <button key={v} type="button" onClick={() => setLoyalty(v)} className={`h-11 rounded-xl border-2 text-sm font-semibold ${loyalty === v ? "border-primary bg-primary/10" : "border-border"}`}>{v === 0 ? "Off" : `${v}%`}</button>)}
+                </div>
+              </FormRow>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <NavButtons back={back} />
+            </form>
+          )}
+
+          {step === 5 && (
+            <form onSubmit={next} className="space-y-4">
+              <StepTitle icon={<Package className="w-5 h-5 text-primary" />} title="Raw materials (kitchen stock)" />
+              <p className="text-sm text-muted-foreground -mt-1">Tick what you use. Quantities start at 0 — record your first purchase in Inventory to add stock.</p>
+              <ul className="space-y-1.5 max-h-72 overflow-y-auto">
+                {raws.map((r, i) => (
+                  <li key={r.name + i}><label className="flex items-center gap-3 p-2.5 rounded-xl border"><input type="checkbox" className="w-5 h-5" checked={r.on} onChange={(e) => setRaws((p) => p.map((x, j) => j === i ? { ...x, on: e.target.checked } : x))} /><span className="flex-1">{r.name}</span><span className="text-xs text-muted-foreground">{r.unit}</span></label></li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <Input value={newRaw} onChange={(e) => setNewRaw(e.target.value)} placeholder="Add your own, e.g. Flour" className="h-11 rounded-xl" />
+                <Button type="button" variant="outline" className="h-11" onClick={() => { if (newRaw.trim()) { setRaws((p) => [...p, { name: newRaw.trim(), category: "Other", unit: "kg", on: true }]); setNewRaw(""); } }}><Plus className="w-4 h-4" /></Button>
+              </div>
+              <NavButtons back={back} skip={() => { setRaws((p) => p.map((x) => ({ ...x, on: false }))); next(); }} />
+            </form>
+          )}
+
+          {step === 6 && (
+            <form onSubmit={next} className="space-y-4">
+              <StepTitle icon={<UtensilsCrossed className="w-5 h-5 text-primary" />} title="What you sell (POS menu)" />
+              <p className="text-sm text-muted-foreground -mt-1">These appear on the till. Set your prices — you can edit, add photos or delete them later in Inventory.</p>
+              <ul className="space-y-1.5 max-h-72 overflow-y-auto">
+                {goods.map((g, i) => (
+                  <li key={g.name + i} className="flex items-center gap-2 p-2 rounded-xl border">
+                    <input type="checkbox" className="w-5 h-5" checked={g.on} onChange={(e) => setGoods((p) => p.map((x, j) => j === i ? { ...x, on: e.target.checked } : x))} />
+                    <span className="flex-1 truncate">{g.emoji} {g.name}</span>
+                    <Input type="number" min={0} value={g.price} onChange={(e) => setGoods((p) => p.map((x, j) => j === i ? { ...x, price: Math.max(0, Math.round(Number(e.target.value) || 0)) } : x))} className="h-10 w-24 rounded-lg" />
+                    <button type="button" aria-label="Remove" onClick={() => setGoods((p) => p.filter((_, j) => j !== i))} className="p-2 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <Input value={newGood.name} onChange={(e) => setNewGood({ ...newGood, name: e.target.value })} placeholder="Item name" className="h-11 rounded-xl" />
+                <Input type="number" min={0} value={newGood.price || ""} onChange={(e) => setNewGood({ ...newGood, price: Math.max(0, Math.round(Number(e.target.value) || 0)) })} placeholder="Price" className="h-11 w-24 rounded-xl" />
+                <Button type="button" variant="outline" className="h-11" onClick={() => { if (newGood.name.trim() && newGood.price > 0) { setGoods((p) => [...p, { name: newGood.name.trim(), category: "Other", price: newGood.price, emoji: "🍽️", on: true }]); setNewGood({ name: "", price: 0 }); } }}><Plus className="w-4 h-4" /></Button>
+              </div>
+              <NavButtons back={back} skip={() => { setGoods((p) => p.map((x) => ({ ...x, on: false }))); next(); }} />
+            </form>
+          )}
+
+          {step === 4 && (
             <form onSubmit={goStep3} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <Wallet className="w-5 h-5 text-primary" />
@@ -177,13 +294,13 @@ function SetupWizard() {
               <p className="text-xs text-muted-foreground -mt-2">Money in your bank account or Lipa Namba wallet. Mobile-money top-ups & sales settle here.</p>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="button" variant="outline" onClick={back} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
                 <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
               </div>
             </form>
           )}
 
-          {step === 3 && (
+          {step === 7 && (
             <form onSubmit={submit} className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-5 h-5 text-primary" />
@@ -209,7 +326,7 @@ function SetupWizard() {
               </FormRow>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(2)} className="h-12 rounded-xl" disabled={submitting}><ArrowLeft className="w-4 h-4" /></Button>
+                <Button type="button" variant="outline" onClick={back} className="h-12 rounded-xl" disabled={submitting}><ArrowLeft className="w-4 h-4" /></Button>
                 <Button type="submit" disabled={submitting} className="flex-1 h-12 rounded-xl text-base font-semibold">
                   {submitting ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating…</>) : (<>Create store <CheckCircle2 className="ml-2 w-4 h-4" /></>)}
                 </Button>
@@ -219,6 +336,31 @@ function SetupWizard() {
         </div>
         <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — first-run setup</p>
       </div>
+    </div>
+  );
+}
+
+const GRAD = ["from-orange-400 to-red-500", "from-emerald-400 to-teal-500", "from-sky-400 to-indigo-500"];
+
+function StepTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return <div className="flex items-center gap-2 mb-1">{icon}<h2 className="text-xl font-bold">{title}</h2></div>;
+}
+
+function Toggle({ label, hint, on, set }: { label: string; hint: string; on: boolean; set: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer">
+      <input type="checkbox" className="w-5 h-5" checked={on} onChange={(e) => set(e.target.checked)} />
+      <span><span className="font-semibold block">{label}</span><span className="text-xs text-muted-foreground">{hint}</span></span>
+    </label>
+  );
+}
+
+function NavButtons({ back, skip }: { back: () => void; skip?: () => void }) {
+  return (
+    <div className="flex gap-2">
+      <Button type="button" variant="outline" onClick={back} className="h-12 rounded-xl"><ArrowLeft className="w-4 h-4" /></Button>
+      {skip && <Button type="button" variant="ghost" onClick={skip} className="h-12 rounded-xl">Skip</Button>}
+      <Button type="submit" className="flex-1 h-12 rounded-xl text-base font-semibold">Continue <ArrowRight className="ml-2 w-4 h-4" /></Button>
     </div>
   );
 }
