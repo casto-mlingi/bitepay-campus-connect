@@ -185,21 +185,29 @@ const GRADIENTS = [
 ];
 
 function MenuPanel() {
-  const { products, addProduct } = useStore();
+  const { products, archivedProducts, addProduct, updateProduct, setProductArchived } = useStore();
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<Product, "id" | "store_id">>({
     name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined,
   });
   const [uploading, setUploading] = useState(false);
 
-  const reset = () =>
-    setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined });
+  const reset = () => { setEditingId(null);
+    setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined }); };
+
+  const startEdit = (p: Product) => {
+    setEditingId(p.id);
+    setForm({ name: p.name, description: p.description, price: p.price, category: p.category, emoji: p.emoji, gradient: p.gradient, image: p.image });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (uploading) return;
     if (!form.name.trim() || form.price <= 0) return;
-    addProduct(form);
+    if (editingId) updateProduct(editingId, form); else addProduct(form);
     reset();
     setShowForm(false);
   };
@@ -256,7 +264,7 @@ function MenuPanel() {
               className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               title={uploading ? "Finish the photo step before saving" : ""}
             >
-              {uploading ? "Processing photo…" : "Save Dish"}
+              {uploading ? "Processing photo…" : editingId ? "Save changes" : "Save Dish"}
             </button>
           </div>
 
@@ -285,9 +293,27 @@ function MenuPanel() {
                   <div className="text-sm font-mono font-bold text-primary">{formatTZS(p.price)}</div>
                 </div>
                 {p.description && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</div>}
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={() => startEdit(p)} className="flex-1 h-10 rounded-lg border text-sm font-semibold">Edit</button>
+                  <button type="button" onClick={() => { if (window.confirm(`Remove ${p.name} from the POS? Past sales stay saved and you can restore it later.`)) setProductArchived(p.id, true); }} className="flex-1 h-10 rounded-lg border border-destructive/40 text-destructive text-sm font-semibold">Delete</button>
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {archivedProducts.length > 0 && (
+        <div className="bg-surface border rounded-2xl p-4">
+          <div className="font-semibold mb-2">Removed items ({archivedProducts.length})</div>
+          <ul className="divide-y">
+            {archivedProducts.map((p) => (
+              <li key={p.id} className="flex items-center justify-between py-2 gap-2">
+                <span className="truncate">{p.emoji} {p.name} · {formatTZS(p.price)}</span>
+                <button type="button" onClick={() => setProductArchived(p.id, false)} className="h-9 px-3 rounded-lg border text-sm font-semibold">Restore</button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
