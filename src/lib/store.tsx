@@ -675,7 +675,7 @@ type Ctx = {
   logout: () => void;
   hasStaffRole: (min: StaffRole) => boolean;
   can: (perm: Permission) => boolean;
-  completeSetup: (input: { store: Omit<Store, "id" | "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number; canonicalIds?: { storeId: string; ownerId: string } }) => Ok | Fail;
+  completeSetup: (input: { store: Omit<Store, "id" | "created_at" | "subscription">; owner: Omit<AddStaffInput, "role">; opening_cash?: number; opening_bank?: number; canonicalIds?: { storeId: string; ownerId: string }; starter?: { raw: Omit<RawMaterial, "id" | "store_id">[]; products: Omit<Product, "id" | "store_id">[] } }) => Ok | Fail;
   updateStore: (patch: Partial<Omit<Store, "id" | "created_at">>) => void;
   addStaff: (input: AddStaffInput) => Ok | Fail;
   updateStaff: (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "staff_role">>) => Ok | Fail;
@@ -1567,7 +1567,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     markNotificationsRead(userId) { setNotifications((prev) => prev.map((n) => n.user_id === userId ? { ...n, read: true } : n)); },
     dismissNotification(id) { setNotifications((prev) => prev.filter((n) => n.id !== id)); },
     can, hasStaffRole,
-    completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0, canonicalIds }) {
+    completeSetup({ store: s, owner, opening_cash = 0, opening_bank = 0, canonicalIds, starter }) {
       if (!s.name.trim() || !s.contact_phone.trim()) return { ok: false, reason: "Store name and contact phone are required" };
       if (!owner.full_name.trim() || !owner.phone.trim() || !owner.password) return { ok: false, reason: "All owner fields are required" };
       if (!/^\d{4,6}$/.test(owner.staff_pin ?? "")) return { ok: false, reason: "Staff PIN must be 4–6 digits" };
@@ -1595,6 +1595,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProfiles((prev) => prev.some((p) => p.id === ownerId) ? prev : [...prev, ownerProfile]);
 
       setTreasuries((prev) => ({ [storeId]: { cash: opening_cash, bank: opening_bank }, ...prev }));
+      // Owner-chosen starter items only (never automatic); stock starts at 0 until a real purchase.
+      if (starter?.raw.length) setRawMaterials((prev) => prev.some((r) => r.store_id === storeId) ? prev : [...prev, ...starter.raw.map((r) => ({ ...r, id: uid("r"), store_id: storeId }))]);
+      if (starter?.products.length) setProducts((prev) => prev.some((x) => x.store_id === storeId) ? prev : [...prev, ...starter.products.map((x) => ({ ...x, id: uid("p"), store_id: storeId, updated_at: now }))]);
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
