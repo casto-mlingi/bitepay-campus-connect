@@ -5,6 +5,7 @@ import { useStore, formatTZS, type Order, type OrderStatus, type CustomDishReque
 import { StaffShell } from "@/components/staff-shell";
 import { ReceivablesCard } from "@/components/receivables-card";
 import { RefundRequests } from "@/components/refund-requests";
+import { LaunchGuide } from "@/components/launch-guide";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -49,6 +50,7 @@ function StaffDashboard() {
 
   return (
     <StaffShell active="orders">
+      <LaunchGuide />
       <div className="flex items-end justify-between mb-4 md:mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Live Orders</h1>

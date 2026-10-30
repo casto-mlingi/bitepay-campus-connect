@@ -136,7 +136,7 @@ function SetupWizard() {
     });
     if (!res.ok) { setSubmitting(false); return setError(res.reason); }
     setSubmitting(false);
-    navigate({ to: "/" });
+    navigate({ to: "/staff" });
   };
 
   return (
