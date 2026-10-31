@@ -31,3 +31,7 @@
 - POS completion actions pass the change disposition directly to the sale handler rather than setting a toggle first, preventing stale selection state from changing the financial outcome.
 - Wallet reads use a group-level opening anchor plus unique subsequent transaction rows; a group wallet never adds its legacy display balance, preserving deductions across device merges without inventing missing history.
 - Witnessed shift closes are verified and frozen server-side; drawer float and safe handovers are locations of existing cash, not new revenue or expenses.
+- POS stock reservation (pos-stock) counts the active bill plus other open saved bills; real stock deductions still happen only at sale completion.
+- Products are archived (archived_at) instead of deleted so historical orders and receipts keep resolving.
+- First-run starter raw materials/products are owner-selected in setup and inserted by completeSetup with zero stock; nothing is seeded automatically.
+- The owner launch checklist is derived from live records only (launch-guide), never stored.
