@@ -64,3 +64,8 @@
 - [x] Automatic nightly commission payout (Labor expense + waiter balances)
 - [x] Dish photos to file storage + rebuilt sync retry
 - [x] Cooked-stock waste log reconciled per batch
+- [x] POS stock limits with saved-bill reservations
+- [x] Finished goods edit / delete (archive) / restore
+- [x] 7-step first setup with raw materials and menu starter pack
+- [x] Owner launch checklist and installable-app icons
+- [ ] Generate APK at pwabuilder.com after publishing (owner action)
