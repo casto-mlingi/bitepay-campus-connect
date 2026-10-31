@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { launchSteps } from "./launch-guide";
 
 test("new store has every launch step open", () => {

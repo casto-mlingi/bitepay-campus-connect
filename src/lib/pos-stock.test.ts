@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { maxLineQty, remainingStock } from "./pos-stock";
 
 const bills = [{ id: "b1", items: [{ product_id: "p", qty: 2 }] }, { id: "b2", items: [{ product_id: "p", qty: 1 }] }];
