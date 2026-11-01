@@ -1,6 +1,8 @@
-export type BusinessType = "canteen" | "restaurant" | "hotel" | "bar";
-export const BUSINESS_LABELS: Record<BusinessType, string> = { canteen: "College canteen", restaurant: "Restaurant", hotel: "Hotel", bar: "Bar & food" };
-export function hasTableService(type: BusinessType = "canteen") { return type !== "canteen"; }
+export type BusinessType = "canteen" | "restaurant" | "hotel" | "bar" | "shop" | "hardware" | "supermarket" | "wholesale";
+export const BUSINESS_LABELS: Record<BusinessType, string> = { canteen: "College canteen", restaurant: "Restaurant", hotel: "Hotel", bar: "Bar & food", shop: "Retail shop / Duka", hardware: "Hardware store", supermarket: "Supermarket / Mini-mart", wholesale: "Wholesale / Jumla" };
+export const BUSINESS_GROUPS: { label: string; types: BusinessType[] }[] = [{ label: "Hospitality & food", types: ["canteen", "restaurant", "hotel", "bar"] }, { label: "Retail & trade", types: ["shop", "hardware", "supermarket", "wholesale"] }];
+export function isRetail(type?: BusinessType) { return type === "shop" || type === "hardware" || type === "supermarket" || type === "wholesale"; }
+export function hasTableService(type: BusinessType = "canteen") { return type === "restaurant" || type === "hotel" || type === "bar"; }
 export function isBeverage(category: string) { return /drink|beverage|beer|wine|spirit|cocktail|juice|soda|water|coffee|tea/i.test(category); }
 export function canApproveRefund(role?: string) { return role === "owner" || role === "supervisor"; }
 export type WaiterPaymentMode = "none" | "wallet" | "all";
