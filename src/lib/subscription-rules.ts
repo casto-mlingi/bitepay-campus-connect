@@ -13,7 +13,7 @@ export const PLAN_FEATURES: Record<SubscriptionPlan, string[]> = {
   enterprise: ["Unlimited stores", "Complete business-appropriate system"],
 };
 export type PlanStore = { id: string; owner_user_id?: string; created_at: number; subscription: { plan: SubscriptionPlan; status: string; expires_at: number; monthly_price?: number } };
-export function ownerPackage(stores: PlanStore[], ownerId: string, now = Date.now()) {
+export function ownerPackage<T extends PlanStore>(stores: T[], ownerId: string, now = Date.now()) {
   const owned = stores.filter((s) => (s.owner_user_id ?? s.id) === ownerId).sort((a, b) => a.created_at - b.created_at);
   const active = owned.filter((s) => s.subscription.status === "active" && s.subscription.expires_at > now);
   const rank: Record<SubscriptionPlan, number> = { trial: 4, starter: 0, growth: 1, pro: 2, enterprise: 3 };

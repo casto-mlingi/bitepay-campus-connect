@@ -1,3 +1,7 @@
+import { isRetail } from "@/lib/business-rules";
+import { TRADE_UNITS } from "@/lib/retail-stock";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil, Eye, History, Check, X, Ban } from "lucide-react";
@@ -26,9 +30,11 @@ export const Route = createFileRoute("/inventory")({
 type Tab = "raw" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
-  const { currentUser, sessionReady, customDishRequests } = useStore();
+  const { currentUser, sessionReady, customDishRequests, store } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("raw");
+  const retail = isRetail(store?.business_type);
+  const currentTab = retail ? "menu" : tab;
   const pendingRequests = customDishRequests.filter((r) => r.status === "confirmed").length;
 
   useEffect(() => {
@@ -42,20 +48,20 @@ function InventoryPage() {
     <StaffShell active="inventory">
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2"><UtensilsCrossed className="w-7 h-7 text-primary" /> Store & Inventory</h1>
-        <p className="text-muted-foreground">Raw materials, finished dishes, and batch costing.</p>
+        <p className="text-muted-foreground">{retail ? "Products, stock and purchase records." : "Raw materials, finished dishes, and batch costing."}</p>
       </div>
 
       <div className="flex gap-1 mb-6 border-b overflow-x-auto">
-        <TabBtn active={tab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />
-        <TabBtn active={tab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label="Menu / Dishes" />
-        <TabBtn active={tab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
-        <TabBtn active={tab === "requests"} onClick={() => setTab("requests")} icon={<ClipboardList className="w-4 h-4" />} label={`Menu Requests${pendingRequests ? ` (${pendingRequests})` : ""}`} />
+        {!retail && <TabBtn active={currentTab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />}
+        <TabBtn active={currentTab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label={retail ? "Products" : "Menu / Dishes"} />
+        {!retail && <><TabBtn active={currentTab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
+        <TabBtn active={currentTab === "requests"} onClick={() => setTab("requests")} icon={<ClipboardList className="w-4 h-4" />} label={`Menu Requests${pendingRequests ? ` (${pendingRequests})` : ""}`} /></>}
       </div>
 
-      {tab === "raw" && <RawMaterialsPanel />}
-      {tab === "menu" && <MenuPanel />}
-      {tab === "batches" && <BatchesPanel />}
-      {tab === "requests" && <MenuRequestsPanel />}
+      {currentTab === "raw" && <RawMaterialsPanel />}
+      {currentTab === "menu" && <MenuPanel />}
+      {currentTab === "batches" && <BatchesPanel />}
+      {currentTab === "requests" && <MenuRequestsPanel />}
     </StaffShell>
   );
 }
@@ -185,7 +191,8 @@ const GRADIENTS = [
 ];
 
 function MenuPanel() {
-  const { products, archivedProducts, addProduct, updateProduct, setProductArchived } = useStore();
+  const { products, archivedProducts, addProduct, updateProduct, setProductArchived, store, availablePlates, can } = useStore();
+  const retail = isRetail(store?.business_type);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<Product, "id" | "store_id">>({
@@ -198,7 +205,7 @@ function MenuPanel() {
 
   const startEdit = (p: Product) => {
     setEditingId(p.id);
-    setForm({ name: p.name, description: p.description, price: p.price, category: p.category, emoji: p.emoji, gradient: p.gradient, image: p.image });
+    setForm({ name: p.name, description: p.description, price: p.price, category: p.category, emoji: p.emoji, gradient: p.gradient, image: p.image, unit: p.unit, sku: p.sku, barcode: p.barcode, cost_price: p.cost_price, opening_stock: p.opening_stock, low_stock_threshold: p.low_stock_threshold });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -215,9 +222,9 @@ function MenuPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">{products.length} dishes on the menu</div>
+        <div className="text-sm text-muted-foreground">{products.length} {retail ? "products" : "dishes on the menu"}</div>
         <button onClick={() => setShowForm((v) => !v)} className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-primary/90">
-          <Plus className="w-4 h-4" /> Add Dish
+          <Plus className="w-4 h-4" /> {retail ? "Add product" : "Add Dish"}
         </button>
       </div>
 
@@ -233,7 +240,7 @@ function MenuPanel() {
 
 
           <label className="col-span-2 md:col-span-4 text-sm">
-            <div className="text-muted-foreground mb-1">Dish Name</div>
+            <div className="text-muted-foreground mb-1">{retail ? "Product name" : "Dish Name"}</div>
             <input required placeholder="e.g. Pilau" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </label>
           <label className="col-span-2 md:col-span-2 text-sm">
@@ -256,6 +263,7 @@ function MenuPanel() {
               ))}
             </div>
           </label>
+          {retail && <><label className="col-span-2 text-sm">Sale unit<select aria-label="Sale unit" value={form.unit ?? "pcs"} onChange={(e) => setForm({ ...form, unit: e.target.value as Product["unit"] })} className="w-full h-11 border rounded-md bg-background px-3">{TRADE_UNITS.map((u) => <option key={u}>{u}</option>)}</select></label><label className="col-span-2 text-sm">SKU<input aria-label="SKU" value={form.sku ?? ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Barcode<input aria-label="Barcode" value={form.barcode ?? ""} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Cost per unit<input aria-label="Cost per unit" type="number" min={0} value={form.cost_price ?? 0} onChange={(e) => setForm({ ...form, cost_price: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Opening stock<input aria-label="Opening stock" disabled={!!editingId} type="number" min={0} value={form.opening_stock ?? 0} onChange={(e) => setForm({ ...form, opening_stock: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Low-stock alert<input aria-label="Low-stock alert" type="number" min={0} value={form.low_stock_threshold ?? 0} onChange={(e) => setForm({ ...form, low_stock_threshold: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label></>}
           <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
             <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 py-2 rounded-lg border text-sm font-semibold">Cancel</button>
             <button
@@ -264,16 +272,17 @@ function MenuPanel() {
               className="px-4 py-2 bg-foreground text-background rounded-lg font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               title={uploading ? "Finish the photo step before saving" : ""}
             >
-              {uploading ? "Processing photo…" : editingId ? "Save changes" : "Save Dish"}
+              {uploading ? "Processing photo…" : editingId ? "Save changes" : retail ? "Save product" : "Save Dish"}
             </button>
           </div>
 
         </form>
       )}
 
+      {retail && <Button asChild variant="outline"><Link to="/finance">Record stock purchase</Link></Button>}
       {products.length === 0 ? (
         <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">
-          No dishes yet. Add your first finished product — it will show up in the POS, customer menu, and the cooking batch dropdown.
+          {retail ? "No products yet" : "No dishes yet. Add your first finished product — it will show up in the POS, customer menu, and the cooking batch dropdown."}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -292,6 +301,7 @@ function MenuPanel() {
                   </div>
                   <div className="text-sm font-mono font-bold text-primary">{formatTZS(p.price)}</div>
                 </div>
+                {retail && <p className={`text-sm mt-2 ${(availablePlates(p.id) ?? 0) <= (p.low_stock_threshold ?? 0) ? "text-destructive" : "text-muted-foreground"}`}>{availablePlates(p.id)} {p.unit ?? "pcs"} in stock · {p.sku ?? p.barcode ?? ""}</p>}
                 {p.description && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</div>}
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={() => startEdit(p)} className="flex-1 h-10 rounded-lg border text-sm font-semibold">Edit</button>

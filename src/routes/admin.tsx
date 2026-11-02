@@ -5,6 +5,7 @@ import {
   Plus, Minus, Pause, Play, CheckCircle2, AlertTriangle, ChefHat, Database, RefreshCw, LayoutGrid,
   CreditCard, MoreHorizontal, Search, Download, Gift, Clock, CalendarClock, Boxes, History, Building2,
 } from "lucide-react";
+import { STORE_LIMIT, PLAN_FEATURES } from "@/lib/subscription-rules";
 import { useStore, formatTZS, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan, type TicketStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -750,7 +751,7 @@ function MoreSection({ log, adminName, stats, storeCount }: { log: SystemLogEntr
 }
 
 function PlanPricingPanel() {
-  const plans: SubscriptionPlan[] = ["trial", "starter", "pro", "enterprise"];
+  const plans: SubscriptionPlan[] = ["trial", "starter", "growth", "pro", "enterprise"];
   return (
     <div className="bg-white border rounded-2xl p-5">
       <h3 className="font-bold">Plan pricing</h3>
@@ -846,7 +847,7 @@ function SubscriptionTab({ plan, status, expiresAt, daysLeft, onAddDays, onChang
   onAddDays: (d: number) => void; onChangePlan: (p: SubscriptionPlan) => void; onSetStatus: (s: "active" | "suspended") => void;
 }) {
   const [customDays, setCustomDays] = useState(30);
-  const plans: SubscriptionPlan[] = ["trial", "starter", "pro", "enterprise"];
+  const plans: SubscriptionPlan[] = ["trial", "starter", "growth", "pro", "enterprise"];
   return (
     <div className="space-y-4">
       <div className="bg-white border rounded-2xl p-5">
@@ -888,7 +889,7 @@ function SubscriptionTab({ plan, status, expiresAt, daysLeft, onAddDays, onChang
               className={`text-left p-4 rounded-xl border-2 transition ${plan === p ? "border-primary bg-primary/5" : "border-transparent bg-slate-50 hover:border-slate-300"}`}>
               <p className="font-bold">{PLAN_LABEL[p]}</p>
               <p className="text-2xl font-extrabold mt-1">{PLAN_PRICE[p] === 0 ? "Free" : formatTZS(PLAN_PRICE[p])}</p>
-              <p className="text-xs text-muted-foreground mt-1">{p === "trial" ? "14-day evaluation" : p === "starter" ? "1 outlet, basic reports" : p === "pro" ? "Multi-cashier, analytics" : "Unlimited, priority support"}</p>
+              <p className="text-xs text-muted-foreground mt-1">{STORE_LIMIT[p] === Infinity ? "Unlimited stores" : `${STORE_LIMIT[p]} stores`} · {PLAN_FEATURES[p][1]}</p>
               {plan === p && <p className="text-xs font-bold text-primary mt-2">CURRENT</p>}
             </button>
           ))}

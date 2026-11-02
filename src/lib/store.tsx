@@ -11,7 +11,10 @@ import { saveSessionToken, getSessionToken } from "@/lib/session-token";
 import { savePassword, registerCustomer } from "@/lib/password.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { hasTableService, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
+import { hasTableService, isRetail, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
+import { ownerPackage, businessFeatures, storeCreationReason, PLAN_PRICE, PLAN_LABEL, type SubscriptionPlan } from "./subscription-rules";
+import { retailStock, type TradeUnit } from "./retail-stock";
+export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
 import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
@@ -50,7 +53,6 @@ export type Profile = {
 export const defaultPasswordFor = (phone: string) => (phone.replace(/\D/g, "").slice(-4) || "0000");
 
 
-export type SubscriptionPlan = "trial" | "starter" | "pro" | "enterprise";
 export type SubscriptionStatus = "active" | "suspended" | "expired";
 export type Subscription = {
   plan: SubscriptionPlan;
@@ -167,14 +169,6 @@ export type SubscriptionPayment = {
   note?: string;
 };
 
-export const PLAN_PRICE: Record<SubscriptionPlan, number> = { trial: 0, starter: 25000, pro: 60000, enterprise: 150000 };
-export const PLAN_LABEL: Record<SubscriptionPlan, string> = { trial: "Free Trial", starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
-export const PLAN_FEATURES: Record<SubscriptionPlan, string[]> = {
-  trial: ["All features for 14 days", "Unlimited staff", "Unlimited customers"],
-  starter: ["Up to 3 staff", "1,000 customers", "POS + Wallet + Inventory"],
-  pro: ["Unlimited staff", "Unlimited customers", "Multi-tender + Analytics + Batch costing"],
-  enterprise: ["Everything in Pro", "Priority support", "Custom onboarding & SLA"],
-};
 
 export type TopUpRequestStatus = "pending" | "approved" | "rejected";
 export type TopUpRequest = {
@@ -305,6 +299,12 @@ export type Product = {
   image?: string; // data URL or asset URL for a dish photo
   updated_at?: number;
   archived_at?: number; // hidden from POS/menu; kept so past sales still resolve
+  unit?: TradeUnit;
+  sku?: string;
+  barcode?: string;
+  cost_price?: number;
+  opening_stock?: number;
+  low_stock_threshold?: number;
 };
 
 
@@ -501,6 +501,7 @@ export type WastageLog = {
 
 export type PaymentMethod = "cash" | "bank";
 export type Purchase = {
+  product_id?: string;
   shift_id?: string;
   id: string;
   store_id: string;
@@ -723,7 +724,7 @@ type Ctx = {
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
-  recordPurchase: (input: { supplier: string; raw_id: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number; vendor_id?: string; on_credit?: boolean; terms_days?: number }) => Purchase | null;
+  recordPurchase: (input: { supplier: string; raw_id: string; product_id?: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number; vendor_id?: string; on_credit?: boolean; terms_days?: number }) => Purchase | null;
   vendors: Vendor[];
   vendorPayments: VendorPayment[];
   saveVendor: (input: { id?: string; name: string; phone?: string; terms_days: number }) => Vendor | null;
@@ -1059,7 +1060,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sessionReady =
     restoreDone && (restoreTimedOut || !restoredUid || currentUserId !== restoredUid || !!rawUser);
   const availableCanteens = useMemo(
-    () => stores.filter((s) => s.subscription.status === "active"),
+    () => stores.filter((s) => s.subscription.status === "active" && !isRetail(s.business_type)),
     [stores],
   );
   // For customers, the "active" store is whichever canteen they picked (or a sane default).
@@ -1210,9 +1211,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const can = useCallback((perm: Permission) => {
     if (!currentUser || currentUser.role !== "staff") return false;
+    const features = businessFeatures(store?.business_type, store?.subscription.plan);
+    if (!features.staffPermissions && ["team.manage_all", "team.manage_cashier"].includes(perm)) return false;
     const role = currentUser.staff_role ?? "cashier";
     return PERMISSIONS[role].includes(perm);
-  }, [currentUser]);
+  }, [currentUser, store]);
 
   const pushNotification = useCallback((n: Omit<AppNotification, "id" | "created_at" | "read">) => {
     setNotifications((prev) => [{ ...n, id: uid("n"), created_at: Date.now(), read: false }, ...prev]);
@@ -1400,7 +1403,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const attributionFor = useCallback((table_no?: string) => {
     if (!table_no || !currentStoreId) return null;
     const s2 = stores.find((x) => x.id === currentStoreId);
-    if (!s2?.enable_waiter_tables && !hasTableService(s2?.business_type)) return null;
+    if (isRetail(s2?.business_type) || (!s2?.enable_waiter_tables && !hasTableService(s2?.business_type))) return null;
     const t = tableAssignments.find((x) => x.store_id === currentStoreId && x.table_no.toLowerCase() === table_no.trim().toLowerCase());
     return t ?? null;
   }, [tableAssignments, currentStoreId, stores]);
@@ -1596,8 +1599,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       setTreasuries((prev) => ({ [storeId]: { cash: opening_cash, bank: opening_bank }, ...prev }));
       // Owner-chosen starter items only (never automatic); stock starts at 0 until a real purchase.
-      if (starter?.raw.length) setRawMaterials((prev) => prev.some((r) => r.store_id === storeId) ? prev : [...prev, ...starter.raw.map((r) => ({ ...r, id: uid("r"), store_id: storeId }))]);
-      if (starter?.products.length) setProducts((prev) => prev.some((x) => x.store_id === storeId) ? prev : [...prev, ...starter.products.map((x) => ({ ...x, id: uid("p"), store_id: storeId, updated_at: now }))]);
+      if (starter?.raw.length) setRawMaterials((prev) => prev.some((r) => r.store_id === storeId) ? prev : [...prev, ...starter.raw.map((r, i) => ({ ...r, id: `setup-raw-${storeId}-${i}`, store_id: storeId }))]);
+      if (starter?.products.length) setProducts((prev) => prev.some((x) => x.store_id === storeId) ? prev : [...prev, ...starter.products.map((x, i) => ({ ...x, id: `setup-product-${storeId}-${i}`, store_id: storeId, updated_at: now }))]);
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
@@ -1622,18 +1625,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (opening_cash < 0 || opening_bank < 0) return { ok: false, reason: "Opening balances cannot be negative" };
       const dupStore = duplicateStoreReason(stores, s);
       if (dupStore) return { ok: false, reason: dupStore };
+      const capReason = storeCreationReason(stores, rawUser.id);
+      if (capReason) return { ok: false, reason: capReason };
+      const account = ownerPackage(stores, rawUser.id);
+      if (!account.billing) return { ok: false, reason: "No account package found" };
 
       const now = Date.now();
       const storeId = uid("s");
       // The free trial applies to the first store only — additional stores start
       // on a paid plan immediately, billed to the same owner account.
-      const paidPlan: SubscriptionPlan = plan === "trial" ? "starter" : plan;
       const newStore: Store = {
         id: storeId, ...s, name: s.name.trim(), owner_user_id: rawUser.id, created_at: now,
-        subscription: {
-          plan: paidPlan, started_at: now, expires_at: now + 30 * 86400000,
-          status: "active", monthly_price: PLAN_PRICE[paidPlan],
-        },
+        subscription: { ...account.billing.subscription },
       };
       setStores((prev) => [...prev, newStore]);
       setProfiles((prev) => prev.map((p) => p.id === rawUser.id
@@ -1653,6 +1656,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addStaff({ full_name, phone, password, role, staff_pin }) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
       if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!businessFeatures(store?.business_type, store?.subscription.plan).staffPermissions) return { ok: false, reason: "Staff permissions require Growth. Upgrade in Settings; existing staff stay saved." };
       if (!canAssignStaffRole(role, can("team.manage_all"))) return { ok: false, reason: "Only the owner can add supervisors or owners" };
       const error = validateStaffInput({ full_name, phone, password, role, staff_pin });
       if (error) return { ok: false, reason: error };
@@ -1878,6 +1882,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!sid) return null;
       const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
       const st = stores.find((x) => x.id === sid);
+      if (isRetail(st?.business_type)) return null;
       const rate = st?.service_rate ?? 5;
       const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
       const fee = deliveryType === "delivery" ? Math.max(0, st?.delivery_fee ?? 0) : 0;
@@ -2096,13 +2101,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
     addProduct(p) {
-      if (!currentStoreId) return null;
+      if (!currentStoreId || !can("inventory.edit") || !Number.isSafeInteger(p.price) || p.price <= 0 || !Number.isFinite(p.opening_stock ?? 0) || (p.opening_stock ?? 0) < 0 || !Number.isSafeInteger(p.cost_price ?? 0) || (p.cost_price ?? 0) < 0) return null;
       const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId, updated_at: Date.now() };
       setProducts((prev) => [...prev, prod]);
       return prod;
     },
     updateProduct(id, patch) {
-      setProducts((prev) => prev.map((x) => x.id === id && x.store_id === currentStoreId ? { ...x, ...patch, updated_at: Date.now() } : x));
+      if (!can("inventory.edit") || patch.price != null && (!Number.isSafeInteger(patch.price) || patch.price <= 0) || patch.cost_price != null && (!Number.isSafeInteger(patch.cost_price) || patch.cost_price < 0)) return;
+      // Opening quantities are immutable; subsequent receipts use procurement rows.
+      const { opening_stock, ...editable } = patch;
+      setProducts((prev) => prev.map((x) => x.id === id && x.store_id === currentStoreId ? { ...x, ...editable, updated_at: Date.now() } : x));
     },
     setProductArchived(id, archived) {
       const now = Date.now();
@@ -2261,20 +2269,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, plates_remaining: Math.max(0, x.plates_remaining - plates) } : x));
       setWastage((prev) => [{ id: uid("w"), store_id: currentStoreId, batch_id, product_name: prod?.name ?? b.product_id, plates, reason, created_at: Date.now() }, ...prev]);
     },
-    recordPurchase({ supplier, raw_id, qty, total_cost, payment_method, date, vendor_id, on_credit, terms_days }) {
+    recordPurchase({ supplier, raw_id, product_id, qty, total_cost, payment_method, date, vendor_id, on_credit, terms_days }) {
       if (!currentStoreId || !can("finance.edit") || !Number.isFinite(qty) || qty <= 0 || !Number.isSafeInteger(total_cost) || total_cost < 0) return null;
+      const product = product_id ? products.find((p) => p.id === product_id && p.store_id === currentStoreId && !p.archived_at) : undefined;
       const raw = rawMaterials.find((r) => r.id === raw_id && r.store_id === currentStoreId);
-      if (!raw) return null;
-      const newStock = raw.stock + qty;
-      const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
-      setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
+      if (!raw && !product) return null;
+      if (raw && !product) {
+        const newStock = raw.stock + qty;
+        const newAvg = newStock > 0 ? Math.round((raw.avg_cost * raw.stock + total_cost) / newStock) : raw.avg_cost;
+        setRawMaterials((prev) => prev.map((r) => r.id === raw_id ? { ...r, stock: newStock, avg_cost: newAvg } : r));
+      }
       if (!on_credit) {
         if (payment_method === "bank") adjustBank((b) => b - total_cost);
         else adjustCash((c) => c - total_cost);
       }
       const when = date ?? Date.now();
       const purchase: Purchase = {
-        id: `PO-${Date.now()}`, store_id: currentStoreId, date: when, supplier, raw_id, raw_name: raw.name,
+        id: uid("PO"), store_id: currentStoreId, date: when, supplier, raw_id: product ? "" : raw_id, raw_name: product?.name ?? raw?.name ?? "", ...(product ? { product_id: product.id } : {}),
         qty, total_cost, payment_method, shift_id: activeShift?.id,
         ...(vendor_id ? { vendor_id } : {}),
         ...(on_credit ? { on_credit: true, due_date: dueDate(when, terms_days ?? 0) } : {}),
@@ -2305,6 +2316,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return true;
     },
     availablePlates(product_id) {
+      if (isRetail(store?.business_type)) {
+        const p = products.find((x) => x.id === product_id && x.store_id === currentStoreId);
+        return p ? retailStock(p, scopedPurchases, scopedOrders) : 0;
+      }
       const rel = batches.filter((b) => b.product_id === product_id && b.store_id === currentStoreId);
       if (rel.length === 0) return null;
       return rel.reduce((s, b) => s + b.plates_remaining, 0);
@@ -2692,7 +2707,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     // ---- Waiter tables & sections ----
-    waiterTablesEnabled: !!store?.enable_waiter_tables || hasTableService(store?.business_type),
+    waiterTablesEnabled: !isRetail(store?.business_type) && (!!store?.enable_waiter_tables || hasTableService(store?.business_type)),
     tableAssignments: scopedTables,
     assignTable({ section, table_no, waiter_id }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Staff only" };
@@ -3085,7 +3100,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     changePlan(plan, storeId) {
       const targetId = storeId ?? currentStoreId;
       if (!targetId) return;
-      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : s));
+      const target = stores.find((s) => s.id === targetId);
+      setStores((prev) => prev.map((s) => target && orgIdOf(s) === orgIdOf(target) ? { ...s, subscription: { ...s.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : s));
       setAdminAuditLog((prev) => [{ id: uid("au"), action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
     },
     setSubscriptionStatus(status, storeId) {
@@ -3122,7 +3138,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (action === "approve") {
         const nowMs = Date.now();
         setStores((prev) => prev.map((s) => {
-          if (s.id !== row.store_id) return s;
+          const target = prev.find((x) => x.id === row.store_id);
+          if (!target || orgIdOf(s) !== orgIdOf(target)) return s;
           const base = Math.max(s.subscription.expires_at, nowMs);
           return { ...s, subscription: { ...s.subscription, plan: row.plan, monthly_price: PLAN_PRICE[row.plan], expires_at: base + 30 * 86400000, status: "active" } };
         }));

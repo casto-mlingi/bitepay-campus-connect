@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { isRetail } from "@/lib/business-rules";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Clock, ChefHat, PackageCheck, CheckCircle2, MapPin, ShoppingBag, ArrowRight, Sparkles, Check, X } from "lucide-react";
 import { useStore, formatTZS, type Order, type OrderStatus, type CustomDishRequest } from "@/lib/store";
@@ -29,7 +30,7 @@ const nextLabel: Record<OrderStatus, string | null> = {
 };
 
 function StaffDashboard() {
-  const { currentUser, sessionReady, orders, advanceOrder, tableAssignments, waiterTablesEnabled } = useStore();
+  const { currentUser, sessionReady, orders, advanceOrder, tableAssignments, waiterTablesEnabled, store } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const boardRef = useRef<HTMLDivElement>(null);
@@ -48,6 +49,7 @@ function StaffDashboard() {
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
+  if (isRetail(store?.business_type)) return <StaffShell active="orders"><LaunchGuide /><div className="mb-4 flex justify-between items-center gap-3"><h1 className="text-2xl font-bold">Sales</h1><Button asChild><Link to="/pos">Open POS</Link></Button></div><ReceivablesCard /><RefundRequests /><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="py-3">Receipt</th><th>Customer</th><th>Amount</th><th>Date</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id} className="border-b"><td className="py-3">{o.receipt_no ?? o.id}</td><td>{o.customer_name}</td><td>{formatTZS(o.total_amount)}</td><td>{new Date(o.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{orders.length === 0 && <p className="py-8 text-muted-foreground">No sales yet</p>}</div></StaffShell>;
   return (
     <StaffShell active="orders">
       <LaunchGuide />

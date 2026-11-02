@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
-import { isBeverage, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
+import { isBeverage, isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
+import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 
@@ -26,7 +27,9 @@ function POS() {
     availablePlates, activeShift, isOnline, pendingSales, enqueueSale, syncOutbox, hasStaffRole, verifyWalletPin,
     waiterTablesEnabled, waiterForTable, can, store, scanWalletCustomer, requestRefund, tableAssignments, openBills, saveBill, closeBill } = useStore();
   const navigate = useNavigate();
-  const [selectedMode, setMode] = useState<Mode>("wallet");
+  const retail = isRetail(store?.business_type);
+  const features = businessFeatures(store?.business_type, store?.subscription.plan);
+  const [selectedMode, setMode] = useState<Mode>("cash");
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
   const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
@@ -70,7 +73,7 @@ function POS() {
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
   const [itemSearch, setItemSearch] = useState("");
-  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")) && (!itemSearch.trim() || p.name.toLowerCase().includes(itemSearch.trim().toLowerCase())));
+  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")) && (!itemSearch.trim() || `${p.name} ${p.sku ?? ""} ${p.barcode ?? ""}`.toLowerCase().includes(itemSearch.trim().toLowerCase())));
   const isWaiter = currentUser?.staff_role === "waiter";
   const canTakePayment = waiterCanTakePayment(currentUser?.staff_role, store);
   const servers = profiles.filter((p) => p.role === "staff" && !p.disabled);
@@ -104,6 +107,7 @@ function POS() {
     if (id === billId) { setLines([]); setBillId(null); setBillLabel(""); }
     showToast("Saved bill removed");
   };
+  useEffect(() => { if (retail) setPrepare(false); }, [retail]);
   const total = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
   const change = Math.max(0, cashReceived - total);
 
@@ -264,7 +268,7 @@ function POS() {
         <h2 className="font-bold text-xl truncate">{billId ? `Bill · ${billLabel}` : "New bill"}</h2>
         {billId && <span className="shrink-0 text-xs font-bold uppercase bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Saved</span>}
       </div>
-      <div className="block text-sm font-medium">Table
+      {!retail && <div className="block text-sm font-medium">Table
         <div className="mt-1 grid grid-cols-2 gap-2">
           <select
             aria-label="Choose a table"
@@ -289,11 +293,11 @@ function POS() {
             if (t) setWaiterId(t.waiter_id);
           }} placeholder="Or type e.g. 4" className="h-12 text-base" />
         </div>
-      </div>
+      </div>}
       <label className="block text-sm font-medium">Customer name
         <Input value={billLabel} onChange={(e) => setBillLabel(e.target.value)} placeholder="Optional" className="mt-1 h-12 text-base" />
       </label>
-      {!isWaiter && (
+      {!retail && !isWaiter && (
         <label className="block text-sm font-medium">Waiter who served
           <select value={waiterId} onChange={(e) => setWaiterId(e.target.value)} className="mt-1 w-full h-12 rounded-md border bg-background px-3 text-base">
             <option value="">{tableNo.trim() && waiterForTable(tableNo) ? `Table waiter · ${waiterForTable(tableNo)?.waiter_name}` : "No waiter (counter sale)"}</option>
@@ -305,7 +309,7 @@ function POS() {
       {/* 2. Items */}
       <div className="border-t pt-3">
         {lines.length === 0 ? (
-          <div className="text-base text-muted-foreground py-8 text-center">Tap a drink or dish to add it</div>
+          <div className="text-base text-muted-foreground py-8 text-center">{retail ? "No products in this bill" : "Tap a drink or dish to add it"}</div>
         ) : (
           <ul className="divide-y max-h-[40vh] overflow-y-auto">
             {lines.map((l) => (
@@ -326,7 +330,7 @@ function POS() {
           </ul>
         )}
       </div>
-      <Input aria-label="Kitchen / bar notes" value={kitchenNote} onChange={(e) => setKitchenNote(e.target.value)} placeholder="Note for kitchen / bar (optional)" className="h-11" />
+      {!retail && <Input aria-label="Kitchen / bar notes" value={kitchenNote} onChange={(e) => setKitchenNote(e.target.value)} placeholder="Note for kitchen / bar (optional)" className="h-11" />}
 
       <div className="flex items-center justify-between text-2xl font-bold border-t pt-3">
         <span>Total</span><span>{formatTZS(total)}</span>
@@ -335,7 +339,7 @@ function POS() {
       {/* 3. Big simple actions */}
       <div className="grid grid-cols-2 gap-2">
         <Button disabled={!lines.length} onClick={doSaveBill} className="h-14 text-base font-bold col-span-2 sm:col-span-1">
-          <Save className="w-5 h-5 mr-2" /> Save bill
+          <Save className="w-5 h-5 mr-2" /> {retail ? "Hold sale" : "Save bill"}
         </Button>
         <Button disabled={!lines.length} variant="outline" className="h-14 text-base font-semibold col-span-2 sm:col-span-1" onClick={() => printBill({ items: toItems(), customerName: billLabel || freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}>
           <Printer className="w-5 h-5 mr-2" /> Print bill
@@ -449,7 +453,7 @@ function POS() {
               </div>
             </>
           )}
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send to kitchen / bar after payment</label>
+          {!retail && <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />Send to kitchen / bar after payment</label>}
           {!activeShift && <p className="text-sm text-amber-800">Open a shift before taking payment.</p>}
         </div>
       )}
@@ -486,7 +490,7 @@ function POS() {
 
       {can("customers.topup") && freshCustomer && !qrOnly && (
         <details className="rounded-xl border p-3">
-          <summary className="text-sm font-semibold cursor-pointer">Top up {freshCustomer.full_name}'s wallet</summary>
+          <summary className="text-sm font-semibold cursor-pointer">{features.prepaidWallet ? `Top up ${freshCustomer.full_name}'s wallet` : `Settle debt / add credit · ${freshCustomer.full_name}`}</summary>
           <div className="mt-2 space-y-2">
             <TenderPicker tender={topupTender} onChange={setTopupTender} />
             {topupTender === "mobile" && <Input value={topupRef} onChange={(e) => setTopupRef(e.target.value)} placeholder="Lipa Namba code" className="font-mono" />}
@@ -525,7 +529,7 @@ function POS() {
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <div className="relative">
               <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder="Find a drink or dish" className="pl-10 h-12 text-base" />
+              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
             </div>
             <Button variant="outline" onClick={() => setShowTabs(true)} className="h-12 px-4 text-base font-semibold relative">
               <ListOrdered className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Saved bills</span>
@@ -569,7 +573,7 @@ function POS() {
                   <div className="mt-2 font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
                   <div className="flex items-center justify-between gap-1 mt-0.5">
                     <span className="font-bold text-primary text-sm">{formatTZS(p.price)}</span>
-                    {plates !== null && <span className={`text-xs font-semibold ${soldOut ? "text-destructive" : "text-muted-foreground"}`}>{soldOut ? "Sold out" : `${plates} left`}</span>}
+                    {plates !== null && <span className={`text-xs font-semibold ${soldOut ? "text-destructive" : "text-muted-foreground"}`}>{soldOut ? "Sold out" : `${plates} ${p.unit ?? (retail ? "pcs" : "")} left`}</span>}
                   </div>
                 </button>
               );

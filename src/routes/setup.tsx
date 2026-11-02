@@ -9,14 +9,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { registerOwnerAndStore } from "@/lib/auth.functions";
 import { saveSessionToken } from "@/lib/session-token";
 import { STARTER_GOODS, STARTER_RAW, type StarterGood, type StarterRaw } from "@/lib/starter-pack";
-import type { BusinessType } from "@/lib/business-rules";
+import { BUSINESS_GROUPS, BUSINESS_LABELS, isRetail, hasTableService, type BusinessType } from "@/lib/business-rules";
 import { Package, Settings2, UtensilsCrossed, Plus, Trash2 } from "lucide-react";
 
 const STEP_LABELS = ["Store", "Service", "Credit", "Cash", "Stock", "Menu", "Owner"];
-const TYPES: { id: BusinessType; label: string; emoji: string }[] = [
-  { id: "canteen", label: "Canteen", emoji: "🍛" }, { id: "restaurant", label: "Restaurant", emoji: "🍽️" },
-  { id: "bar", label: "Bar", emoji: "🍺" }, { id: "hotel", label: "Hotel", emoji: "🏨" },
-];
+
 
 export const Route = createFileRoute("/setup")({
   component: SetupWizard,
@@ -48,10 +45,11 @@ function SetupWizard() {
   useEffect(() => {
     setRaws(STARTER_RAW[businessType].map((r) => ({ ...r, on: true })));
     setGoods(STARTER_GOODS[businessType].map((g) => ({ ...g, on: true })));
-    setTables(businessType !== "canteen");
+    setTables(hasTableService(businessType));
   }, [businessType]);
-  const next = (e?: React.FormEvent) => { e?.preventDefault(); setError(""); setStep((n) => n + 1); };
-  const back = () => { setError(""); setStep((n) => n - 1); };
+  const retail = isRetail(businessType);
+  const next = (e?: React.FormEvent) => { e?.preventDefault(); setError(""); setStep((n) => retail && n === 4 ? 6 : n + 1); };
+  const back = () => { setError(""); setStep((n) => retail && n === 6 ? 4 : n - 1); };
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -97,7 +95,7 @@ function SetupWizard() {
     e.preventDefault();
     setError("");
     if (openingCash < 0 || openingBank < 0) return setError("Opening balances cannot be negative");
-    setStep(5);
+    setStep(retail ? 6 : 5);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -112,9 +110,13 @@ function SetupWizard() {
     let canonicalIds;
     try {
       canonicalIds = await registerFn({ data: {
-        store: { name: storeName.trim(), location: location.trim(), contact_phone: contactPhone.trim(), admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold },
+        store: { name: storeName.trim(), location: location.trim(), contact_phone: contactPhone.trim(), admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, business_type: businessType, enable_mobile_tender: mobileTender, waiter_payment_mode: retail ? "none" : waiterMode, allow_waiter_payments: !retail && waiterMode !== "none", enable_waiter_tables: !retail && tables, customer_debt_limit: debtLimit, loyalty_percentage: loyalty },
         owner: { full_name: ownerName.trim(), phone: ownerPhone.trim(), password: ownerPassword, staff_pin: ownerPin },
         opening_cash: openingCash, opening_bank: openingBank,
+        starter: {
+          raw: raws.filter((r) => r.on).map((r) => ({ name: r.name, category: r.category, unit: r.unit, stock: 0 as const, avg_cost: 0 as const, low_threshold: 0 })),
+          products: goods.filter((g) => g.on && g.price > 0).map((g, i) => ({ name: g.name, category: g.category, price: g.price, emoji: g.emoji, unit: g.unit, opening_stock: 0 as const, description: "", gradient: GRAD[i % GRAD.length] })),
+        },
       }});
       saveSessionToken(canonicalIds.token);
     } catch (err) {
@@ -123,11 +125,11 @@ function SetupWizard() {
     }
     const res = completeSetup({
       store: { name: storeName, location, contact_phone: contactPhone, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, enable_mobile_tender: mobileTender,
-        business_type: businessType, waiter_payment_mode: waiterMode, allow_waiter_payments: waiterMode !== "none", enable_waiter_tables: tables,
+        business_type: businessType, waiter_payment_mode: retail ? "none" : waiterMode, allow_waiter_payments: !retail && waiterMode !== "none", enable_waiter_tables: !retail && tables,
         customer_debt_limit: debtLimit, loyalty_percentage: loyalty },
       starter: {
         raw: raws.filter((r) => r.on).map((r) => ({ name: r.name, category: r.category, unit: r.unit, stock: 0, avg_cost: 0, low_threshold: 0 })),
-        products: goods.filter((g) => g.on && g.price > 0).map((g, i) => ({ name: g.name, category: g.category, price: g.price, emoji: g.emoji, description: "", gradient: GRAD[i % GRAD.length] })),
+        products: goods.filter((g) => g.on && g.price > 0).map((g, i) => ({ name: g.name, category: g.category, price: g.price, emoji: g.emoji, unit: g.unit, opening_stock: 0, description: "", gradient: GRAD[i % GRAD.length] })),
       },
       owner: { full_name: ownerName, phone: ownerPhone, password: ownerPassword, staff_pin: ownerPin },
       opening_cash: openingCash,
@@ -151,7 +153,7 @@ function SetupWizard() {
           <h1 className="text-3xl font-extrabold tracking-tight">Set up BitePay</h1>
           <p className="mt-1.5 text-white/85 text-sm max-w-xs">A few easy steps — you can change everything later in Settings.</p>
           <div className="flex items-center gap-1.5 mt-5 flex-wrap justify-center">
-            {STEP_LABELS.map((l, i) => <StepDot key={l} n={i + 1} active={step === i + 1} done={step > i + 1} label={l} />)}
+            {STEP_LABELS.map((l, i) => <StepDot key={l} n={i + 1} active={step === i + 1} done={step > i + 1} label={retail && l === "Menu" ? "Products" : l} />)}
           </div>
         </div>
       </div>
@@ -178,11 +180,7 @@ function SetupWizard() {
               </FormRow>
 
               <FormRow label="Type of business" required>
-                <div className="grid grid-cols-2 gap-2">
-                  {TYPES.map((t) => (
-                    <button key={t.id} type="button" onClick={() => setBusinessType(t.id)} className={`h-14 rounded-xl border-2 font-semibold ${businessType === t.id ? "border-primary bg-primary/10" : "border-border"}`}>{t.emoji} {t.label}</button>
-                  ))}
-                </div>
+                {BUSINESS_GROUPS.map((group) => <fieldset key={group.label} className="mb-3"><legend className="text-sm font-medium mb-2">{group.label}</legend><div className="grid grid-cols-2 gap-2">{group.types.map((type) => <Button key={type} type="button" variant={businessType === type ? "default" : "outline"} onClick={() => setBusinessType(type)} className="h-auto min-h-14 whitespace-normal">{BUSINESS_LABELS[type]}</Button>)}</div></fieldset>)}
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Currency">
@@ -204,14 +202,14 @@ function SetupWizard() {
           {step === 2 && (
             <form onSubmit={next} className="space-y-4">
               <StepTitle icon={<Settings2 className="w-5 h-5 text-primary" />} title="How you serve" />
-              <FormRow label="Can waiters receive payments?">
+              {!retail && <><FormRow label="Can waiters receive payments?">
                 <div className="grid gap-2">
                   {([["none", "No — save bill only", "Cashier collects all money"], ["wallet", "Wallet only", "Waiters scan customer QR, no cash"], ["all", "All payments", "Waiters take cash, mobile and wallet"]] as const).map(([id, l, d]) => (
                     <button key={id} type="button" onClick={() => setWaiterMode(id)} className={`text-left p-3 rounded-xl border-2 ${waiterMode === id ? "border-primary bg-primary/10" : "border-border"}`}><div className="font-semibold">{l}</div><div className="text-xs text-muted-foreground">{d}</div></button>
                   ))}
                 </div>
               </FormRow>
-              <Toggle label="Use table numbers" hint="Pick tables on bills and link them to waiters" on={tables} set={setTables} />
+              <Toggle label="Use table numbers" hint="Pick tables on bills and link them to waiters" on={tables} set={setTables} /></>}
               <Toggle label="Accept mobile money (Lipa Namba)" hint="Shows a Mobile option at the till" on={mobileTender} set={setMobileTender} />
               <NavButtons back={back} />
             </form>
@@ -256,8 +254,8 @@ function SetupWizard() {
 
           {step === 6 && (
             <form onSubmit={next} className="space-y-4">
-              <StepTitle icon={<UtensilsCrossed className="w-5 h-5 text-primary" />} title="What you sell (POS menu)" />
-              <p className="text-sm text-muted-foreground -mt-1">These appear on the till. Set your prices — you can edit, add photos or delete them later in Inventory.</p>
+              <StepTitle icon={<UtensilsCrossed className="w-5 h-5 text-primary" />} title={retail ? "Products you sell" : "What you sell (POS menu)"} />
+              <p className="text-sm text-muted-foreground -mt-1">Example prices only. Quantities start at zero. Set your prices — you can edit, add photos or delete them later in Inventory.</p>
               <ul className="space-y-1.5 max-h-72 overflow-y-auto">
                 {goods.map((g, i) => (
                   <li key={g.name + i} className="flex items-center gap-2 p-2 rounded-xl border">

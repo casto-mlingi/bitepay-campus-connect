@@ -3,6 +3,27 @@ import { strict as assert } from "node:assert";
 import { assertPreservesRecords, isLocalSyncHost, scopedSnapshotUpdate } from "./snapshot-safety";
 
 describe("customer data preservation", () => {
+  it("owner cannot self-upgrade a subscription through sync", () => {
+    const base = { stores: [{ id: "a", owner_user_id: "p", subscription: { plan: "starter", expires_at: 9999999999999, status: "active" } }], profiles: [{ id: "p", role: "staff", staff_role: "owner", store_id: "a" }] };
+    const next = scopedSnapshotUpdate(base, { stores: [{ ...base.stores[0], subscription: { ...base.stores[0].subscription, plan: "enterprise" } }] }, "p", new Set(["a"]));
+    assert.deepEqual((next.stores as typeof base.stores)[0].subscription, base.stores[0].subscription);
+  });
+  it("server enforces Starter one-store cap even when new branch requests Enterprise", () => {
+    const base = { stores: [{ id: "a", created_at: 1, owner_user_id: "p", subscription: { plan: "starter", expires_at: 9999999999999, status: "active" } }], profiles: [{ id: "p", role: "staff", staff_role: "owner", store_id: "a" }] };
+    assert.throws(() => scopedSnapshotUpdate(base, { stores: [{ id: "b", created_at: 2, owner_user_id: "p", subscription: { plan: "enterprise" } }] }, "p", new Set(["a"])), /1 store/);
+  });
+  it("Growth branch inherits verified billing and membership without touching old balances", () => {
+    const base = { stores: [{ id: "a", created_at: 1, owner_user_id: "p", subscription: { plan: "growth", expires_at: 9999999999999, status: "active" } }], profiles: [{ id: "p", role: "staff", staff_role: "owner", store_id: "a", memberships: [{ store_id: "a", staff_role: "owner" }] }], treasuries: { a: { cash: 5000 } } };
+    const next = scopedSnapshotUpdate(base, { stores: [{ id: "b", created_at: 2, owner_user_id: "p", subscription: { plan: "enterprise" } }], profiles: [{ ...base.profiles[0], store_id: "b" }], treasuries: { b: { cash: 2000 } } }, "p", new Set(["a"]));
+    assert.deepEqual((next.stores as typeof base.stores)[1].subscription, base.stores[0].subscription);
+    assert.equal((next.profiles as typeof base.profiles)[0].memberships.length, 2);
+    assert.deepEqual((next.treasuries as typeof base.treasuries).a, { cash: 5000 });
+  });
+  it("opening stock cannot be inflated by later sync", () => {
+    const base = { products: [{ id: "p", store_id: "a", opening_stock: 5 }] };
+    const next = scopedSnapshotUpdate(base, { products: [{ ...base.products[0], opening_stock: 100 }] }, "owner", new Set(["a"]));
+    assert.equal((next.products as typeof base.products)[0].opening_stock, 5);
+  });
   it("cashier cannot change loyalty, manager can set zero", () => {
     const base = { stores: [{ id: "a", loyalty_percentage: 1 }], profiles: [{ id: "p", staff_role: "cashier", store_id: "a" }] };
     assert.throws(() => scopedSnapshotUpdate(base, { stores: [{ id: "a", loyalty_percentage: 0 }] }, "p", new Set(["a"])));

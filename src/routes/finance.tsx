@@ -1,3 +1,6 @@
+import { isRetail } from "@/lib/business-rules";
+import { retailStock, retailUnitCost } from "@/lib/retail-stock";
+import { businessFeatures } from "@/lib/subscription-rules";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -29,7 +32,7 @@ type Tab = "treasury" | "receivables" | "payables" | "procurement" | "expenses" 
 function FinancePage() {
   const {
     currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
-    recordPurchase, recordExpense, hasStaffRole, vendorPayments, transactions, fundTransfers,
+    recordPurchase, recordExpense, hasStaffRole, vendorPayments, transactions, fundTransfers, products, store,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
@@ -48,14 +51,16 @@ function FinancePage() {
     () => batches.reduce((s, b) => s + b.plates_remaining * b.unit_cost, 0),
     [batches]
   );
-  const totalInventoryValue = rawInventoryValue + finishedGoodsValue;
+  const retail = isRetail(store?.business_type);
+  const retailInventoryValue = products.reduce((n, p) => n + retailStock(p, purchases, orders) * retailUnitCost(p, purchases), 0);
+  const totalInventoryValue = rawInventoryValue + finishedGoodsValue + (retail ? retailInventoryValue : 0);
   const walletLiabilities = useMemo(
     () => profiles.filter((p) => p.role === "customer").reduce((s, p) => s + Math.max(0, p.wallet_balance), 0),
     [profiles]
   );
 
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
-  const cogs = batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
+  const cogs = retail ? orders.reduce((n, o) => n + o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0), 0) : batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
   const grossProfit = grossRevenue - cogs;
   const opex = expenses.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
   const netProfit = grossProfit - opex;
@@ -464,7 +469,8 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
 }
 
 function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
-  const { rawMaterials, purchases, cash, bank, vendors } = useStore();
+  const { rawMaterials, purchases, cash, bank, vendors, products, store } = useStore();
+  const retail = isRetail(store?.business_type);
   const [supplier, setSupplier] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [onCredit, setOnCredit] = useState(false);
@@ -477,7 +483,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const res = onSubmit({ supplier: vendor?.name ?? supplier, raw_id: rawId, qty, total_cost: totalCost, payment_method: method, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7 });
+    const res = onSubmit({ supplier: vendor?.name ?? supplier, raw_id: retail ? "" : rawId, product_id: retail ? rawId : undefined, qty, total_cost: totalCost, payment_method: method, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7 });
     if (res) {
       setMsg(onCredit ? `✓ ${res.id} saved as a supplier bill — ${formatTZS(totalCost)} owed` : `✓ ${res.id} recorded — ${method === "bank" ? "bank" : "cash"} reduced by ${formatTZS(totalCost)}`);
       setSupplier(""); setVendorId(""); setOnCredit(false); setRawId(""); setQty(1); setTotalCost(0); setMethod("cash");
@@ -518,18 +524,18 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
           </div>
           {onCredit && <p className="text-xs text-muted-foreground mt-1">Stock is added now. Due in {vendor?.terms_days ?? 7} days — pay it from Suppliers & Bills.</p>}
         </Field>
-        <Field label="Raw Material">
+        <Field label={retail ? "Product" : "Raw Material"}>
           <select required value={rawId} onChange={(e) => setRawId(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border bg-background">
-            <option value="">Select material…</option>
-            {rawMaterials.map((r) => (
+            <option value="">{retail ? "Select product…" : "Select material…"}</option>
+            {(retail ? products.map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases) })) : rawMaterials).map((r) => (
               <option key={r.id} value={r.id}>{r.name} ({r.unit}) — current avg {formatTZS(r.avg_cost)}</option>
             ))}
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Quantity">
-            <input required type="number" min={1} value={qty} onChange={(e) => setQty(Number(e.target.value))}
+            <input required type="number" min={0.001} step="any" value={qty} onChange={(e) => setQty(Number(e.target.value))}
               className="w-full px-3 py-2 rounded-lg border bg-background" />
           </Field>
           <Field label="Total Cost (TZS)">

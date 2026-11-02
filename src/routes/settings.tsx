@@ -3,14 +3,15 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Save, Store as StoreIcon, Sparkles, ArrowUpRight, Clock, Smartphone, X, CheckCircle2 } from "lucide-react";
 import { useStore, PLAN_LABEL, PLAN_PRICE, PLAN_FEATURES, BILLING_LIPA, formatTZS, type SubscriptionPlan } from "@/lib/store";
+import { ownerPackage, STORE_LIMIT, PAID_PLANS, businessFeatures } from "@/lib/subscription-rules";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelcomSettingsCard } from "@/components/selcom-settings-card";
-import { BUSINESS_LABELS, type BusinessType } from "@/lib/business-rules";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BUSINESS_LABELS, BUSINESS_GROUPS, isRetail, type BusinessType } from "@/lib/business-rules";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 
 
 export const Route = createFileRoute("/settings")({
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { currentUser, sessionReady, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments } = useStore();
+  const { currentUser, sessionReady, store, can, updateStore, subscriptionDaysLeft, submitSubscriptionPayment, subscriptionPayments, stores } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showPlans, setShowPlans] = useState(false);
@@ -79,8 +80,11 @@ function SettingsPage() {
     setTimeout(() => setToast(""), 1800);
   };
 
+  const retail = isRetail(businessType);
+  const account = ownerPackage(stores, store?.owner_user_id ?? store?.id ?? "");
+  const features = businessFeatures(businessType, account.plan);
   const daysLeft = subscriptionDaysLeft();
-  const sub = store?.subscription;
+  const sub = account.billing?.subscription ?? store?.subscription;
   const expiresOn = sub ? new Date(sub.expires_at).toLocaleDateString() : "";
 
   const pickPlan = (p: SubscriptionPlan) => {
@@ -102,6 +106,8 @@ function SettingsPage() {
           <div className="mt-2 flex items-end justify-between gap-4 flex-wrap">
             <div>
               <div className="text-3xl font-extrabold">{PLAN_LABEL[sub.plan]}</div>
+              <p className="text-sm mt-1">{account.owned.length} / {account.limit === Infinity ? "Unlimited" : account.limit} stores · {PLAN_PRICE[sub.plan].toLocaleString()} / month</p>
+              <p className="text-xs mt-1">Customer credit & debt · Suppliers · Inventory · Shift reports{features.prepaidWallet ? " · Prepaid wallets" : ""}{features.kitchen ? " · Hospitality tools preserved" : ""}</p>
               <div className="text-sm opacity-90 flex items-center gap-1.5 mt-1"><Clock className="w-3.5 h-3.5" />
                 {sub.status === "suspended" ? "Suspended — contact support" :
                  daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left · renews ${expiresOn}` : `Expired on ${expiresOn}`}
@@ -115,17 +121,17 @@ function SettingsPage() {
             </div>
           </div>
           {showPlans && (
-            <div className="mt-5 grid sm:grid-cols-3 gap-3">
-              {(["starter", "pro", "enterprise"] as SubscriptionPlan[]).map((p) => (
-                <button key={p} onClick={() => pickPlan(p)} disabled={sub.plan === p}
-                  className={`text-left bg-white/10 hover:bg-white/20 disabled:opacity-60 rounded-xl p-4 border border-white/20 ${sub.plan === p ? "ring-2 ring-white" : ""}`}>
+            <div className="mt-5 grid sm:grid-cols-2 gap-3">
+              {PAID_PLANS.map((p) => (
+                <Button variant="outline" key={p} onClick={() => pickPlan(p)} disabled={sub.plan === p}
+                  className={`h-auto block text-left bg-primary text-primary-foreground disabled:opacity-60 rounded-lg p-4 border ${sub.plan === p ? "ring-2 ring-white" : ""}`}>
                   <div className="font-bold">{PLAN_LABEL[p]}</div>
                   <div className="text-xs opacity-90 mt-0.5">TZS {PLAN_PRICE[p].toLocaleString()} / month</div>
                   <ul className="mt-2 space-y-1 text-xs opacity-90">
                     {PLAN_FEATURES[p].map((f) => <li key={f}>· {f}</li>)}
                   </ul>
                   <div className="mt-2 text-xs font-semibold">{sub.plan === p ? "Current plan" : "Choose"}</div>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -146,7 +152,7 @@ function SettingsPage() {
         <Row label="Business type">
           <Select value={businessType} onValueChange={(v) => setBusinessType(v as BusinessType)}>
             <SelectTrigger aria-label="Business type"><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(BUSINESS_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+            <SelectContent>{BUSINESS_GROUPS.map((g) => <SelectGroup key={g.label}><SelectLabel>{g.label}</SelectLabel>{g.types.map((t) => <SelectItem key={t} value={t}>{BUSINESS_LABELS[t]}</SelectItem>)}</SelectGroup>)}</SelectContent>
           </Select>
         </Row>
         <Row label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Row>
@@ -165,7 +171,7 @@ function SettingsPage() {
               onChange={(e) => setServiceRate(Number(e.target.value) || 0)} className="w-24 text-right" />
           </div>
         </div>
-        <div className="p-3 rounded-lg border">
+        {!retail && <><div className="p-3 rounded-lg border">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="font-semibold text-sm">Delivery cost</div>
@@ -203,7 +209,7 @@ function SettingsPage() {
             ))}
           </div>
         </div>
-        <label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
+        </>}<label className="flex items-center justify-between p-3 rounded-lg border cursor-pointer">
           <div>
             <div className="font-semibold text-sm">Mobile Money (Lipa Namba) tender</div>
             <div className="text-xs text-muted-foreground">Enable mobile-money as a POS tender option.</div>
@@ -221,7 +227,7 @@ function SettingsPage() {
           plan={payPlan}
           onClose={() => setPayPlan(null)}
           onSubmit={(receipt, payer) => {
-            const r = submitSubscriptionPayment({ plan: payPlan, receipt_no: receipt, payer_name: payer });
+            const r = submitSubscriptionPayment({ plan: payPlan, storeId: account.billing?.id, receipt_no: receipt, payer_name: payer });
             if (!r.ok) { setToast(r.reason); setTimeout(() => setToast(""), 2600); return; }
             setPayPlan(null);
             setShowPlans(false);
