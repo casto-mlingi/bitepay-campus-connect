@@ -72,6 +72,7 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
         const allowed = (r: Record<string, unknown>) => role === "customer"
           ? field === "profiles" ? r.id === userId : ["orders", "topUpRequests", "notifications", "payLaterRequests"].includes(field) && (r.customer_id === userId || r.user_id === userId)
           : field === "stores" ? authorizedStores.has(String(r.id))
+          : field === "subscriptionPayments" ? storeIds.has(String(r.store_id)) && (r.submitted_by_id === userId || !!existing)
           : field === "profiles" ? r.id === userId || storeIds.has(String(r.store_id))
           : authorizedStores.has(String(r.store_id));
         if (allowed(row) && (!existing || allowed(existing))) {
@@ -88,6 +89,10 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
             if (branch) next.subscription = branch.subscription;
           }
           if (field === "products" && existing) next.opening_stock = existing.opening_stock;
+          if (field === "subscriptionPayments") {
+            next.status = existing?.status ?? "pending";
+            if (existing) { next.reviewed_at = existing.reviewed_at; next.note = existing.note; }
+          }
           if (field === "profiles" && existing && row.id === userId && newBranches.length) {
             const memberships = Array.isArray(existing.memberships) ? existing.memberships : [];
             next.memberships = [...memberships, ...newBranches.map((s) => ({ store_id: s.id, staff_role: "owner" }))];

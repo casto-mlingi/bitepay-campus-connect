@@ -4,6 +4,14 @@ import { addCanonicalOnboarding } from "./onboarding";
 
 const data = { store: { name: "New canteen", location: "Campus", contact_phone: "0700000000", admin_email: "owner@example.test", currency: "TZS", low_balance_threshold: 3000 }, owner: { full_name: "Owner", phone: "0700000001", password: "test-only-password", staff_pin: "1234" }, opening_cash: 15000, opening_bank: 20000 };
 describe("canonical store registration", () => {
+  it("owner-selected retail starter goods and business type commit together at zero stock", () => {
+    const input = { ...data, store: { ...data.store, business_type: "hardware" }, starter: { raw: [], products: [{ name: "Cement", price: 18000, unit: "bag" }] } };
+    const first = addCanonicalOnboarding({}, input, { storeId: "db-store", ownerId: "db-owner" }, 1000);
+    assert.equal(first.stores[0].business_type, "hardware");
+    assert.equal(first.products?.[0].opening_stock, 0);
+    assert.equal(first.products?.[0].id, "setup-product-db-store-0");
+    assert.equal(addCanonicalOnboarding(first, input, { storeId: "db-store", ownerId: "db-owner" }, 2000).products?.length, 1);
+  });
   it("preserves existing canteens and sales while saving the new owner's canonical IDs", () => {
     const previous = { stores: [{ id: "old-store" }], profiles: [{ id: "old-owner" }], orders: [{ id: "old-sale", total_amount: 5000 }], treasuries: { "old-store": { cash: 42000, bank: 1000 } } };
     const next = addCanonicalOnboarding(previous, data, { storeId: "db-store", ownerId: "db-owner" }, 1000);

@@ -24,8 +24,8 @@ export function addCanonicalOnboarding<T extends Record<string, unknown>>(previo
     treasuries: { [ids.storeId]: { cash: data.opening_cash, bank: data.opening_bank },
       ...(previous.treasuries as Record<string, unknown> ?? {}) },
     ...(data.starter ? {
-      rawMaterials: [...(Array.isArray(previous.rawMaterials) ? previous.rawMaterials : []), ...data.starter.raw.map((r, i) => ({ ...r, id: `setup-raw-${ids.storeId}-${i}`, store_id: ids.storeId, stock: 0, updated_at: now }))],
-      products: [...(Array.isArray(previous.products) ? previous.products : []), ...data.starter.products.map((p, i) => ({ ...p, id: `setup-product-${ids.storeId}-${i}`, store_id: ids.storeId, opening_stock: 0, updated_at: now }))],
+      rawMaterials: [...(Array.isArray(previous.rawMaterials) ? previous.rawMaterials : []), ...data.starter.raw.map((r, i) => ({ ...r, id: `setup-raw-${ids.storeId}-${i}`, store_id: ids.storeId, stock: 0, updated_at: now })).filter((r) => !(Array.isArray(previous.rawMaterials) ? previous.rawMaterials : []).some((old) => old.id === r.id))],
+      products: [...(Array.isArray(previous.products) ? previous.products : []), ...data.starter.products.map((p, i) => ({ ...p, id: `setup-product-${ids.storeId}-${i}`, store_id: ids.storeId, opening_stock: 0, updated_at: now })).filter((p) => !(Array.isArray(previous.products) ? previous.products : []).some((old) => old.id === p.id))],
     } : {}),
   };
 }
