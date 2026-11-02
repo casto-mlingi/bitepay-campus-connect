@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Building2, Plus, ArrowRight, Check, Clock, ShieldAlert } from "lucide-react";
 import { useStore, duplicateStoreReason, PLAN_LABEL, PLAN_PRICE, type SubscriptionPlan } from "@/lib/store";
+import { BUSINESS_GROUPS, BUSINESS_LABELS, type BusinessType } from "@/lib/business-rules";
+import { ownerPackage, storeCreationReason } from "@/lib/subscription-rules";
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
@@ -13,9 +15,9 @@ export const Route = createFileRoute("/stores")({
   head: () => ({
     meta: [
       { title: "My stores — BitePay Staff" },
-      { name: "description", content: "Switch between the canteens you manage and open a new store on its own subscription." },
+      { name: "description", content: "Manage hospitality and retail branches within your BitePay account package." },
       { property: "og:title", content: "My stores — BitePay Staff" },
-      { property: "og:description", content: "Switch between the canteens you manage and open a new store on its own subscription." },
+      { property: "og:description", content: "Manage hospitality and retail branches within your BitePay account package." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -27,7 +29,7 @@ function daysLeft(expires: number) {
 }
 
 function StoresPage() {
-  const { currentUser, sessionReady, myStores, myRoleAt, currentStoreId, switchStore, createStore } = useStore();
+  const { currentUser, sessionReady, myStores, myRoleAt, currentStoreId, switchStore, createStore, stores } = useStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -39,6 +41,8 @@ function StoresPage() {
 
   if (!currentUser || currentUser.role !== "staff") return null;
 
+  const account = ownerPackage(stores, currentUser.id);
+  const capReason = storeCreationReason(stores, currentUser.id);
   const isOwnerSomewhere = myStores.some((s) => myRoleAt(s.id) === "owner");
 
   const open = (id: string) => {
@@ -52,15 +56,16 @@ function StoresPage() {
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><Building2 className="w-7 h-7 text-primary" /> My stores</h1>
-          <p className="text-muted-foreground">Each store keeps its own data, staff and subscription.</p>
+          <p className="text-muted-foreground">Each store keeps separate records under your account package.</p>
         </div>
         {isOwnerSomewhere && (
-          <Button onClick={() => setShowNew((v) => !v)} className="h-11 rounded-xl">
+          <Button onClick={() => { if (capReason) { setToast(capReason); return; } setShowNew((v) => !v); }} className="h-11 rounded-xl">
             <Plus className="w-4 h-4 mr-1.5" /> New store
           </Button>
         )}
       </div>
 
+      {isOwnerSomewhere && <p className="mb-4 text-sm text-muted-foreground">{PLAN_LABEL[account.plan]} · {account.owned.length} of {account.limit === Infinity ? "unlimited" : account.limit} stores{capReason && <> · {capReason}</>}</p>}
       {showNew && isOwnerSomewhere && (
         <NewStoreForm
           onCancel={() => setShowNew(false)}
@@ -124,7 +129,7 @@ function NewStoreForm({
   onCancel,
 }: {
   onCreate: (input: {
-    store: { name: string; location: string; contact_phone: string; admin_email: string; currency: string; low_balance_threshold: number; enable_mobile_tender: boolean };
+    store: { name: string; location: string; contact_phone: string; admin_email: string; currency: string; low_balance_threshold: number; enable_mobile_tender: boolean; business_type: BusinessType };
     plan: SubscriptionPlan;
     opening_cash: number;
     opening_bank: number;
@@ -139,9 +144,10 @@ function NewStoreForm({
   const [low, setLow] = useState(3000);
   const [cash, setCash] = useState(0);
   const [bank, setBank] = useState(0);
-  const [plan, setPlan] = useState<SubscriptionPlan>("starter");
+  const [businessType, setBusinessType] = useState<BusinessType>("shop");
   const [error, setError] = useState("");
-  const { stores } = useStore();
+  const { stores, currentUser } = useStore();
+  const account = ownerPackage(stores, currentUser?.id ?? "");
 
   return (
     <form
@@ -152,8 +158,8 @@ function NewStoreForm({
         const dup = duplicateStoreReason(stores, { contact_phone: contact, admin_email: adminEmail });
         if (dup) return setError(dup);
         onCreate({
-          store: { name, location, contact_phone: contact, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: low, enable_mobile_tender: true },
-          plan, opening_cash: cash, opening_bank: bank,
+          store: { name, location, contact_phone: contact, admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: low, enable_mobile_tender: true, business_type: businessType },
+          plan: account.plan, opening_cash: cash, opening_bank: bank,
         });
       }}
       className="bg-surface border rounded-2xl p-6 mb-6 space-y-4 max-w-3xl"
@@ -161,7 +167,7 @@ function NewStoreForm({
       <div>
         <h2 className="font-bold text-lg">Open another store</h2>
         <p className="text-sm text-muted-foreground">
-          Each canteen you open is a separate store with its own data and its own monthly subscription — the free trial only applies to your first store. Phone and admin email must be unique across all stores.
+          Branches share your approved account package and expiry date. Phone and admin email must be unique across stores.
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
@@ -174,18 +180,7 @@ function NewStoreForm({
         <Field label="Opening cash"><Input type="number" value={cash} onChange={(e) => setCash(Number(e.target.value) || 0)} /></Field>
         <Field label="Opening bank"><Input type="number" value={bank} onChange={(e) => setBank(Number(e.target.value) || 0)} /></Field>
       </div>
-      <div>
-        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Subscription plan</Label>
-        <div className="mt-2 grid sm:grid-cols-3 gap-3">
-          {(["starter", "pro", "enterprise"] as SubscriptionPlan[]).map((p) => (
-            <button type="button" key={p} onClick={() => setPlan(p)}
-              className={`text-left border rounded-xl p-3 hover:bg-muted/50 ${plan === p ? "ring-2 ring-primary border-primary" : ""}`}>
-              <div className="font-bold text-sm">{PLAN_LABEL[p]}</div>
-              <div className="text-xs text-muted-foreground">TZS {PLAN_PRICE[p].toLocaleString()} / month</div>
-            </button>
-          ))}
-        </div>
-      </div>
+      <Field label="Business type"><select aria-label="Business type" value={businessType} onChange={(e) => setBusinessType(e.target.value as BusinessType)} className="h-12 w-full border rounded-md bg-background px-3">{BUSINESS_GROUPS.map((g) => <optgroup key={g.label} label={g.label}>{g.types.map((t) => <option key={t} value={t}>{BUSINESS_LABELS[t]}</option>)}</optgroup>)}</select></Field>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" className="h-11 rounded-xl flex-1">Create store</Button>
