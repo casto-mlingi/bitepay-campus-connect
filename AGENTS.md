@@ -35,3 +35,6 @@
 - Products are archived (archived_at) instead of deleted so historical orders and receipts keep resolving.
 - First-run starter raw materials/products are owner-selected in setup and inserted by completeSetup with zero stock; nothing is seeded automatically.
 - The owner launch checklist is derived from live records only (launch-guide), never stored.
+- Account packages, prices, owner-group store caps and business eligibility live in subscription-rules; existing hospitality tools remain grandfathered to avoid daily-work regressions.
+- Retail stock is derived from immutable opening quantities, purchase rows and signed sale/refund quantities in retail-stock, never a mutable display balance, so offline merges retain deductions.
+- New branches inherit verified account billing at the locked snapshot boundary; staff snapshot uploads cannot modify subscriptions or opening-stock anchors, preventing self-upgrades and stock inflation.
