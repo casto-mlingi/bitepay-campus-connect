@@ -6,13 +6,14 @@ import { launchSteps } from "@/lib/launch-guide";
 
 /** Owner-only launch checklist; disappears once every step is done. */
 export function LaunchGuide() {
-  const { currentUser, rawMaterials, products, profiles, cash, bank, orders } = useStore();
+  const { currentUser, rawMaterials, products, profiles, cash, bank, orders, store } = useStore();
   const [open, setOpen] = useState(true);
   useEffect(() => { setOpen(localStorage.getItem("bp-launch-guide") !== "min"); }, []);
   if (currentUser?.role !== "staff" || currentUser.staff_role !== "owner") return null;
 
   const steps = launchSteps({
     rawCount: rawMaterials.length,
+    businessType: store?.business_type,
     productCount: products.length,
     staffCount: profiles.filter((p) => p.role === "staff" && p.staff_role !== "owner").length,
     cash, bank,

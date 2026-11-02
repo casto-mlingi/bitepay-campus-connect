@@ -1,3 +1,4 @@
+import { ownerPackage, storeCreationReason, type PlanStore } from "./subscription-rules";
 export type SnapshotData = Record<string, unknown>;
 
 export function isLocalSyncHost(host: string): boolean {
@@ -28,6 +29,23 @@ export function assertPreservesRecords(previous: SnapshotData, next: SnapshotDat
 /** Ignore stale copies belonging to other stores; clients cannot replace them. */
 export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotData, userId: string, storeIds: Set<string>, role = "staff"): SnapshotData {
   const result = { ...previous };
+  // Authorize new branches against the locked server snapshot, never client-selected plans.
+  const authorizedStores = new Set(storeIds);
+  const oldStores = (Array.isArray(previous.stores) ? previous.stores : []) as PlanStore[];
+  const incomingStores = (Array.isArray(incoming.stores) ? incoming.stores : []) as PlanStore[];
+  const actor = (previous.profiles as Record<string, unknown>[] | undefined)?.find((p) => p.id === userId);
+  const newBranches: PlanStore[] = [];
+  for (const row of incomingStores) {
+    if (oldStores.some((s) => s.id === row.id) || row.owner_user_id !== userId) continue;
+    if (role !== "staff" || !oldStores.some((s) => s.owner_user_id === userId) || !actor) throw new Error("Only a verified owner can create a branch");
+    const error = storeCreationReason([...oldStores, ...newBranches], userId);
+    if (error) throw new Error(error);
+    const account = ownerPackage(oldStores, userId);
+    if (!account.billing) throw new Error("Account package unavailable");
+    const branch = { ...row, subscription: { ...account.billing.subscription } };
+    newBranches.push(branch);
+    authorizedStores.add(row.id);
+  }
   for (const [field, value] of Object.entries(incoming)) {
     if (Array.isArray(value)) {
       const old = Array.isArray(previous[field]) ? previous[field] : [];
@@ -53,9 +71,9 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
         }
         const allowed = (r: Record<string, unknown>) => role === "customer"
           ? field === "profiles" ? r.id === userId : ["orders", "topUpRequests", "notifications", "payLaterRequests"].includes(field) && (r.customer_id === userId || r.user_id === userId)
-          : field === "stores" ? storeIds.has(String(r.id))
+          : field === "stores" ? authorizedStores.has(String(r.id))
           : field === "profiles" ? r.id === userId || storeIds.has(String(r.store_id))
-          : storeIds.has(String(r.store_id));
+          : authorizedStores.has(String(r.store_id));
         if (allowed(row) && (!existing || allowed(existing))) {
           const next = field === "stores" && existing && row.customer_debt_limit == null
             ? { ...row, customer_debt_limit: existing.customer_debt_limit }
@@ -64,13 +82,24 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
             : row;
           if (field === "profiles" && existing?.wallet_anchors) next.wallet_anchors = { ...(row.wallet_anchors ?? {}), ...existing.wallet_anchors };
           if (field === "stores" && existing && row.loyalty_percentage == null) next.loyalty_percentage = existing.loyalty_percentage;
+          if (field === "stores" && existing) next.subscription = existing.subscription;
+          if (field === "stores" && !existing) {
+            const branch = newBranches.find((s) => s.id === row.id);
+            if (branch) next.subscription = branch.subscription;
+          }
+          if (field === "products" && existing) next.opening_stock = existing.opening_stock;
+          if (field === "profiles" && existing && row.id === userId && newBranches.length) {
+            const memberships = Array.isArray(existing.memberships) ? existing.memberships : [];
+            next.memberships = [...memberships, ...newBranches.map((s) => ({ store_id: s.id, staff_role: "owner" }))];
+            if (newBranches.some((s) => s.id === row.store_id)) { next.store_id = row.store_id; next.staff_role = "owner"; }
+          }
           rows.set(row.id, next);
         }
       }
       result[field] = [...rows.values()];
     } else if (field === "treasuries" && role !== "customer" && value && typeof value === "object") {
       const treasury = { ...(previous.treasuries as Record<string, unknown> ?? {}) };
-      for (const [id, balance] of Object.entries(value)) if (storeIds.has(id)) treasury[id] = balance;
+      for (const [id, balance] of Object.entries(value)) if (authorizedStores.has(id)) treasury[id] = balance;
       result.treasuries = treasury;
     }
     // Device-specific scalars (active shift, receipt counters) are not shared authority.
