@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity, HandCoins, Grid2X2, ReceiptText } from "lucide-react";
+import { isRetail } from "@/lib/business-rules";
+import { businessFeatures } from "@/lib/subscription-rules";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
@@ -11,6 +13,8 @@ export type StaffTab = "orders" | "me" | "pos" | "inventory" | "analytics" | "fi
 export function StaffShell({ children, active }: { children: ReactNode; active?: StaffTab }) {
   const { currentUser, logout, activeShift, isOnline, pendingSales, hasStaffRole, can, store, subscriptionDaysLeft, isSubscriptionBlocked, topUpRequests, myStores, currentStoreId, switchStore, waiterTablesEnabled } = useStore();
 
+  const retail = isRetail(store?.business_type);
+  const features = businessFeatures(store?.business_type, store?.subscription.plan);
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
@@ -38,7 +42,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 bg-surface border-b">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 min-w-0 flex-1">
             <Link to="/staff" className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-lg bg-primary grid place-items-center text-white">
                 <ChefHat className="w-5 h-5" />
@@ -59,12 +63,12 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               </select>
             )}
 
-            <nav className="hidden md:flex items-center gap-1">
-              <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Live Orders" active={active === "orders"} />
+            <nav className="hidden md:flex items-center gap-1 overflow-x-auto min-w-0">
+              <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Live Orders"} active={active === "orders"} />
               <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
               <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
               {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />}
-              {can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
+              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
               {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
               {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
               {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
@@ -111,12 +115,12 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           </div>
         </div>
         <div className="md:hidden max-w-7xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto">
-          <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label="Orders" active={active === "orders"} />
+          <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Orders"} active={active === "orders"} />
           <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
           {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
           <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
           {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />}
-              {can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
+              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
           {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
           {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
           {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
@@ -130,7 +134,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-4 md:py-6 pb-28 md:pb-6">{children}</main>
       {active !== "pos" && (
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
-          <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label="Orders" active={active === "orders"} />
+          <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label={retail ? "Sales" : "Orders"} active={active === "orders"} />
           <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label="POS" active={false} />
           <BottomLink to="/my-performance" icon={<Activity className="w-5 h-5" />} label="My stats" active={active === "me"} />
           <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label="Shift" active={active === "shift"} />
