@@ -110,9 +110,13 @@ function SetupWizard() {
     let canonicalIds;
     try {
       canonicalIds = await registerFn({ data: {
-        store: { name: storeName.trim(), location: location.trim(), contact_phone: contactPhone.trim(), admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold },
+        store: { name: storeName.trim(), location: location.trim(), contact_phone: contactPhone.trim(), admin_email: adminEmail.trim().toLowerCase(), currency, low_balance_threshold: lowThreshold, business_type: businessType, enable_mobile_tender: mobileTender, waiter_payment_mode: retail ? "none" : waiterMode, allow_waiter_payments: !retail && waiterMode !== "none", enable_waiter_tables: !retail && tables, customer_debt_limit: debtLimit, loyalty_percentage: loyalty },
         owner: { full_name: ownerName.trim(), phone: ownerPhone.trim(), password: ownerPassword, staff_pin: ownerPin },
         opening_cash: openingCash, opening_bank: openingBank,
+        starter: {
+          raw: raws.filter((r) => r.on).map((r) => ({ name: r.name, category: r.category, unit: r.unit, stock: 0 as const, avg_cost: 0 as const, low_threshold: 0 })),
+          products: goods.filter((g) => g.on && g.price > 0).map((g, i) => ({ name: g.name, category: g.category, price: g.price, emoji: g.emoji, unit: g.unit, opening_stock: 0 as const, description: "", gradient: GRAD[i % GRAD.length] })),
+        },
       }});
       saveSessionToken(canonicalIds.token);
     } catch (err) {

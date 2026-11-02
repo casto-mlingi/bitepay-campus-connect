@@ -12,7 +12,7 @@ import { savePassword, registerCustomer } from "@/lib/password.functions";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { hasTableService, isRetail, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
-import { ownerPackage, storeCreationReason, PLAN_PRICE, PLAN_LABEL, type SubscriptionPlan } from "./subscription-rules";
+import { ownerPackage, businessFeatures, storeCreationReason, PLAN_PRICE, PLAN_LABEL, type SubscriptionPlan } from "./subscription-rules";
 import { retailStock, type TradeUnit } from "./retail-stock";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
@@ -1060,7 +1060,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sessionReady =
     restoreDone && (restoreTimedOut || !restoredUid || currentUserId !== restoredUid || !!rawUser);
   const availableCanteens = useMemo(
-    () => stores.filter((s) => s.subscription.status === "active"),
+    () => stores.filter((s) => s.subscription.status === "active" && !isRetail(s.business_type)),
     [stores],
   );
   // For customers, the "active" store is whichever canteen they picked (or a sane default).
@@ -1211,9 +1211,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const can = useCallback((perm: Permission) => {
     if (!currentUser || currentUser.role !== "staff") return false;
+    const features = businessFeatures(store?.business_type, store?.subscription.plan);
+    if (!features.staffPermissions && ["team.manage_all", "team.manage_cashier"].includes(perm)) return false;
     const role = currentUser.staff_role ?? "cashier";
     return PERMISSIONS[role].includes(perm);
-  }, [currentUser]);
+  }, [currentUser, store]);
 
   const pushNotification = useCallback((n: Omit<AppNotification, "id" | "created_at" | "read">) => {
     setNotifications((prev) => [{ ...n, id: uid("n"), created_at: Date.now(), read: false }, ...prev]);
@@ -1597,8 +1599,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       setTreasuries((prev) => ({ [storeId]: { cash: opening_cash, bank: opening_bank }, ...prev }));
       // Owner-chosen starter items only (never automatic); stock starts at 0 until a real purchase.
-      if (starter?.raw.length) setRawMaterials((prev) => prev.some((r) => r.store_id === storeId) ? prev : [...prev, ...starter.raw.map((r) => ({ ...r, id: uid("r"), store_id: storeId }))]);
-      if (starter?.products.length) setProducts((prev) => prev.some((x) => x.store_id === storeId) ? prev : [...prev, ...starter.products.map((x) => ({ ...x, id: uid("p"), store_id: storeId, updated_at: now }))]);
+      if (starter?.raw.length) setRawMaterials((prev) => prev.some((r) => r.store_id === storeId) ? prev : [...prev, ...starter.raw.map((r, i) => ({ ...r, id: `setup-raw-${storeId}-${i}`, store_id: storeId }))]);
+      if (starter?.products.length) setProducts((prev) => prev.some((x) => x.store_id === storeId) ? prev : [...prev, ...starter.products.map((x, i) => ({ ...x, id: `setup-product-${storeId}-${i}`, store_id: storeId, updated_at: now }))]);
       setCurrentUserId(ownerProfile.id);
       return { ok: true };
     },
@@ -1654,6 +1656,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addStaff({ full_name, phone, password, role, staff_pin }) {
       if (!can("team.view")) return { ok: false, reason: "Not allowed" };
       if (!currentStoreId) return { ok: false, reason: "No store context" };
+      if (!businessFeatures(store?.business_type, store?.subscription.plan).staffPermissions) return { ok: false, reason: "Staff permissions require Growth. Upgrade in Settings; existing staff stay saved." };
       if (!canAssignStaffRole(role, can("team.manage_all"))) return { ok: false, reason: "Only the owner can add supervisors or owners" };
       const error = validateStaffInput({ full_name, phone, password, role, staff_pin });
       if (error) return { ok: false, reason: error };
@@ -1879,6 +1882,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!sid) return null;
       const subtotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
       const st = stores.find((x) => x.id === sid);
+      if (isRetail(st?.business_type)) return null;
       const rate = st?.service_rate ?? 5;
       const extra = Math.max(0, Math.round(subtotal * (rate / 100)));
       const fee = deliveryType === "delivery" ? Math.max(0, st?.delivery_fee ?? 0) : 0;
@@ -3096,7 +3100,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     changePlan(plan, storeId) {
       const targetId = storeId ?? currentStoreId;
       if (!targetId) return;
-      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : s));
+      const target = stores.find((s) => s.id === targetId);
+      setStores((prev) => prev.map((s) => target && orgIdOf(s) === orgIdOf(target) ? { ...s, subscription: { ...s.subscription, plan, monthly_price: PLAN_PRICE[plan] } } : s));
       setAdminAuditLog((prev) => [{ id: uid("au"), action: "change_plan", detail: `Plan → ${PLAN_LABEL[plan]}`, created_at: Date.now() }, ...prev]);
     },
     setSubscriptionStatus(status, storeId) {
@@ -3133,7 +3138,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (action === "approve") {
         const nowMs = Date.now();
         setStores((prev) => prev.map((s) => {
-          if (s.id !== row.store_id) return s;
+          const target = prev.find((x) => x.id === row.store_id);
+          if (!target || orgIdOf(s) !== orgIdOf(target)) return s;
           const base = Math.max(s.subscription.expires_at, nowMs);
           return { ...s, subscription: { ...s.subscription, plan: row.plan, monthly_price: PLAN_PRICE[row.plan], expires_at: base + 30 * 86400000, status: "active" } };
         }));

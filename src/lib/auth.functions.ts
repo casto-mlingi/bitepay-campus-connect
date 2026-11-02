@@ -23,6 +23,13 @@ const StoreInput = z.object({
   admin_email: z.string().email().optional(),
   currency: z.string().min(1).max(8).default("TZS"),
   low_balance_threshold: z.number().nonnegative().default(2000),
+  business_type: z.enum(["canteen", "restaurant", "hotel", "bar", "shop", "hardware", "supermarket", "wholesale"]).optional(),
+  waiter_payment_mode: z.enum(["none", "wallet", "all"]).optional(),
+  allow_waiter_payments: z.boolean().optional(),
+  enable_waiter_tables: z.boolean().optional(),
+  enable_mobile_tender: z.boolean().optional(),
+  customer_debt_limit: z.number().int().nonnegative().optional(),
+  loyalty_percentage: z.number().min(0).max(100).optional(),
 });
 const OwnerInput = z.object({
   full_name: z.string().min(2).max(80),
@@ -35,6 +42,10 @@ const RegisterInput = z.object({
   owner: OwnerInput,
   opening_cash: z.number().nonnegative().default(0),
   opening_bank: z.number().nonnegative().default(0),
+  starter: z.object({
+    raw: z.array(z.object({ name: z.string().min(1), category: z.string(), unit: z.enum(["kg", "liters", "pcs"]), stock: z.literal(0), avg_cost: z.literal(0), low_threshold: z.number().nonnegative() })),
+    products: z.array(z.object({ name: z.string().min(1), category: z.string(), price: z.number().int().positive(), emoji: z.string(), description: z.string(), gradient: z.string(), unit: z.enum(["pcs", "packet", "kg", "liters", "bag", "box", "carton", "crate", "bale", "meter", "jerrican"]).optional(), opening_stock: z.literal(0) })),
+  }).optional(),
 });
 type RegisterInputT = z.infer<typeof RegisterInput>;
 
