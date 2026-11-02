@@ -7,9 +7,9 @@ import { ListFilter, useListFilter } from "@/components/list-filter";
 export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({ meta: [
-    { title: "BitePay — Prepaid Wallets for Canteens & Hotels" },
-    { name: "description", content: "BitePay is the all-in-one prepaid wallet, POS and kitchen-costing platform for college canteens, hostels and small hotels." },
-    { property: "og:title", content: "BitePay — Prepaid Wallets for Canteens & Hotels" },
+    { title: "BitePay — POS for Hospitality, Shops & Wholesale" },
+    { name: "description", content: "BitePay manages sales, stock, customer credit and suppliers for hospitality, shops, hardware stores, supermarkets and wholesale businesses." },
+    { property: "og:title", content: "BitePay — POS for Hospitality, Shops & Wholesale" },
     { property: "og:description", content: "Top-up once, order in seconds. Full POS, inventory, batch costing and treasury for operators." },
     { property: "og:type", content: "website" },
   
