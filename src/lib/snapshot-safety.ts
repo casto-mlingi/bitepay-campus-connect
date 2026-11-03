@@ -83,7 +83,7 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
             : row;
           if (field === "profiles" && existing?.wallet_anchors) next.wallet_anchors = { ...(row.wallet_anchors ?? {}), ...existing.wallet_anchors };
           if (field === "stores" && existing && row.loyalty_percentage == null) next.loyalty_percentage = existing.loyalty_percentage;
-          if (field === "stores" && existing) next.subscription = existing.subscription;
+          if (field === "stores" && existing) { next.subscription = existing.subscription; next.owner_user_id = existing.owner_user_id; }
           if (field === "stores" && !existing) {
             const branch = newBranches.find((s) => s.id === row.id);
             if (branch) next.subscription = branch.subscription;
