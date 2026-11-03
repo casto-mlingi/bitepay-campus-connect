@@ -29,7 +29,8 @@ function POS() {
   const navigate = useNavigate();
   const retail = isRetail(store?.business_type);
   const features = businessFeatures(store?.business_type, store?.subscription.plan);
-  const [selectedMode, setMode] = useState<Mode>(retail ? "cash" : "wallet");
+  const [selectedMode, setMode] = useState<Mode>("wallet");
+  useEffect(() => { setMode(retail ? "cash" : "wallet"); }, [retail]);
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
   const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
