@@ -529,7 +529,7 @@ function POS() {
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <div className="relative">
               <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
+              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} aria-label="Find product" onKeyDown={(e) => { if (retail && e.key === "Enter") { e.preventDefault(); const code = itemSearch.trim().toLowerCase(); const p = products.find((p) => p.barcode?.toLowerCase() === code || p.sku?.toLowerCase() === code); if (p) { addLine(p); setItemSearch(""); } } }} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
             </div>
             <Button variant="outline" onClick={() => setShowTabs(true)} className="h-12 px-4 text-base font-semibold relative">
               <ListOrdered className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Saved bills</span>

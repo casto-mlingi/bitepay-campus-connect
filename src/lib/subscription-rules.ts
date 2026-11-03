@@ -17,7 +17,7 @@ export function ownerPackage<T extends PlanStore>(stores: T[], ownerId: string, 
   const owned = stores.filter((s) => (s.owner_user_id ?? s.id) === ownerId).sort((a, b) => a.created_at - b.created_at);
   const active = owned.filter((s) => s.subscription.status === "active" && s.subscription.expires_at > now);
   const rank: Record<SubscriptionPlan, number> = { trial: 4, starter: 0, growth: 1, pro: 2, enterprise: 3 };
-  const billing = [...active].sort((a, b) => STORE_LIMIT[b.subscription.plan] - STORE_LIMIT[a.subscription.plan] || rank[b.subscription.plan] - rank[a.subscription.plan])[0] ?? owned[0];
+  const billing = [...active].sort((a, b) => (STORE_LIMIT[b.subscription.plan] === Infinity ? Number.MAX_SAFE_INTEGER : STORE_LIMIT[b.subscription.plan]) - (STORE_LIMIT[a.subscription.plan] === Infinity ? Number.MAX_SAFE_INTEGER : STORE_LIMIT[a.subscription.plan]) || rank[b.subscription.plan] - rank[a.subscription.plan])[0] ?? owned[0];
   return { owned, billing, plan: billing?.subscription.plan ?? "starter", limit: billing ? STORE_LIMIT[billing.subscription.plan] : 1, active: active.length > 0 };
 }
 export function storeCreationReason(stores: PlanStore[], ownerId: string, now = Date.now()): string | null {
