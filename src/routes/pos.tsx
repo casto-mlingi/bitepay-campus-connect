@@ -29,7 +29,7 @@ function POS() {
   const navigate = useNavigate();
   const retail = isRetail(store?.business_type);
   const features = businessFeatures(store?.business_type, store?.subscription.plan);
-  const [selectedMode, setMode] = useState<Mode>("cash");
+  const [selectedMode, setMode] = useState<Mode>(retail ? "cash" : "wallet");
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
   const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
@@ -359,7 +359,7 @@ function POS() {
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
             {walletAllowed && <button onClick={() => setMode("wallet")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletOnly ? "col-span-2" : ""}`}>
-              <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : "Wallet"}
+              <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : features.prepaidWallet ? "Wallet" : "Customer credit / debt"}
             </button>}
             {!walletOnly && <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "cash" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletAllowed ? "" : "col-span-2"}`}>

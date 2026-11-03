@@ -1436,11 +1436,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cashPart = settlement.received;
     const walletPart = settlement.walletPaid;
     const walletCharge = settlement.walletCharge;
+    if (isRetail(store?.business_type)) {
+      const quantities = new Map<string, number>();
+      for (const i of items) quantities.set(i.product_id, (quantities.get(i.product_id) ?? 0) + i.qty);
+      for (const [productId, qty] of quantities) {
+        const p = products.find((p) => p.id === productId && p.store_id === currentStoreId && !p.archived_at);
+        if (!p || qty > retailStock(p, purchases.filter((r) => r.store_id === currentStoreId), orders.filter((o) => o.store_id === currentStoreId))) return { ok: false, reason: "Not enough product stock" };
+      }
+      prepare = false;
+    }
+    const cost_amount = isRetail(store?.business_type) ? Math.round(items.reduce((n, i) => { const p = products.find((p) => p.id === i.product_id); return n + (p ? retailUnitCost(p, purchases.filter((r) => r.store_id === currentStoreId)) * i.qty : 0); }, 0)) : undefined;
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
     const loyalty = loyaltyReward(total, store?.loyalty_percentage ?? 1, settlement.balanceAfter);
     const order: Order = {
-      id, store_id: currentStoreId, customer_id: cust.id, customer_name: cust.full_name, items,
+      id, cost_amount, store_id: currentStoreId, customer_id: cust.id, customer_name: cust.full_name, items,
       total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: cashPart, wallet_paid: walletPart, wallet_charge: walletCharge, debt_added: settlement.debtAdded, wallet_balance_after: settlement.balanceAfter + loyalty, loyalty_earned: loyalty, cash_delta: tender === "cash" ? cashPart : 0, bank_delta: tender === "mobile" ? cashPart : 0,
       tender: cashPart > 0 ? tender : undefined, reference: cashPart > 0 && tender === "mobile" ? reference : undefined,
@@ -1465,14 +1475,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const post = { ...cust, wallet_balance: custWallet - walletCharge + loyalty, store_id: currentStoreId };
     pushNudgeIfLow(post);
     return { ok: true, order };
-  }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor, waiterFor, stores]);
+  }, [can, profiles, currentUser, activeShift, pushNudgeIfLow, currentStoreId, adjustBank, adjustCash, setWallet, consumePlates, attributionFor, waiterFor, stores, products, purchases, orders, store]);
 
 
   const _executeCashSale = useCallback((items: OrderItem[], cashReceived: number, customerName: string, tender: "cash" | "mobile", reference?: string, table_no?: string, kitchen_note?: string, prepare = false, waiterId?: string, changeCustomer?: { phone: string; name?: string }): SaleResult => {
     if (!can("pos.sell")) return { ok: false, reason: "Not allowed to sell" };
     if (!currentStoreId) return { ok: false, reason: "No store context" };
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    if (!items.length || items.some((i) => !Number.isFinite(i.price) || i.price < 0 || !Number.isSafeInteger(i.qty) || i.qty <= 0)) return { ok: false, reason: "Invalid basket" };
+    if (!items.length || items.some((i) => !Number.isFinite(i.price) || i.price < 0 || !Number.isFinite(i.qty) || i.qty <= 0)) return { ok: false, reason: "Invalid basket" };
     const settlement = cashSettlement(total, cashReceived, tender, !!changeCustomer, cash);
     if (!settlement.ok) return settlement;
     let changeProfile: Profile | undefined;
@@ -1485,10 +1495,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (existing && (existing.role !== "customer" || existing.disabled)) return { ok: false, reason: "This phone cannot receive customer change" };
       changeProfile = existing ?? { id: uid("u"), full_name: changeCustomer.name?.trim() || phone, phone, password: defaultPasswordFor(phone), default_password: defaultPasswordFor(phone), must_change_password: true, wallet_balance: 0, wallet_anchors: { [orgIdOfId(currentStoreId) ?? currentStoreId]: { balance: 0, transaction_ids: [] } }, wallets: { [orgIdOfId(currentStoreId) ?? currentStoreId]: 0 }, role: "customer", store_id: currentStoreId, created_at: Date.now() };
     }
+    if (isRetail(store?.business_type)) {
+      const quantities = new Map<string, number>();
+      for (const i of items) quantities.set(i.product_id, (quantities.get(i.product_id) ?? 0) + i.qty);
+      for (const [productId, qty] of quantities) {
+        const p = products.find((p) => p.id === productId && p.store_id === currentStoreId && !p.archived_at);
+        if (!p || qty > retailStock(p, purchases.filter((r) => r.store_id === currentStoreId), orders.filter((o) => o.store_id === currentStoreId))) return { ok: false, reason: "Not enough product stock" };
+      }
+      prepare = false;
+    }
+    const cost_amount = isRetail(store?.business_type) ? Math.round(items.reduce((n, i) => { const p = products.find((p) => p.id === i.product_id); return n + (p ? retailUnitCost(p, purchases.filter((r) => r.store_id === currentStoreId)) * i.qty : 0); }, 0)) : undefined;
     const id = nextOrderId();
     const receipt_no = nextReceiptNo();
     const order: Order = {
-      id, store_id: currentStoreId, customer_id: changeProfile?.id ?? "walkin", customer_name: changeProfile?.full_name ?? customerName, items,
+      id, cost_amount, store_id: currentStoreId, customer_id: changeProfile?.id ?? "walkin", customer_name: changeProfile?.full_name ?? customerName, items,
       total_amount: total, status: prepare ? "new" : "completed", kitchen_note: kitchen_note?.trim() || undefined, delivery_type: "pickup", payment_status: "paid",
       created_at: Date.now(), receipt_no, cash_paid: total, wallet_paid: 0, tender, amount_received: settlement.received, change_returned: settlement.changeReturned, change_saved: settlement.changeSaved, change_debt_settled: changeProfile ? Math.min(settlement.changeSaved, Math.max(0, -walletFor(changeProfile, currentStoreId))) : 0, cash_delta: settlement.cashDelta, bank_delta: settlement.bankDelta, wallet_balance_after: changeProfile ? walletFor(changeProfile, currentStoreId) + settlement.changeSaved : undefined,
       reference: tender === "mobile" ? reference : undefined,
@@ -1510,7 +1530,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTransactions((prev) => [{ id: uid("change"), store_id: currentStoreId, customer_id: target.id, order_id: id, type: "topup", balance_before: walletFor(target, currentStoreId), amount: settlement.changeSaved, description: `Change saved · ${receipt_no}`, created_at: Date.now(), tender, by_name: currentUser?.full_name }, ...prev]);
     }
     return { ok: true, order };
-  }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor, waiterFor, profiles, setWallet, cash, orgIdOfId]);
+  }, [can, currentUser, activeShift, currentStoreId, adjustBank, adjustCash, consumePlates, attributionFor, waiterFor, profiles, setWallet, cash, orgIdOfId, products, purchases, orders, store]);
 
   const value: Ctx = useMemo(() => ({
     currentUser, sessionReady, profiles: scopedProfiles.map((p) => p.role === "customer" ? { ...p, wallet_balance: walletFor(p, currentStoreId) } : p), allProfiles: profiles, products: scopedProducts, archivedProducts,
@@ -1867,6 +1887,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     logout() { saveSessionToken(null); void logoutSession(); setCurrentUserId(null); setSelectedCanteenId(null); setCart([]); },
     addToCart(p) {
+      if (isRetail(stores.find((s) => s.id === p.store_id)?.business_type)) return;
       setCart((prev) => {
         const found = prev.find((c) => c.product.id === p.id);
         if (found) return prev.map((c) => c.product.id === p.id ? { ...c, qty: c.qty + 1 } : c);
@@ -2030,6 +2051,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...original, id, receipt_no,
         items: original.items.map((i) => ({ ...i, qty: -i.qty })),
         total_amount: -original.total_amount,
+        cost_amount: original.cost_amount == null ? undefined : -original.cost_amount,
         cash_paid: -(original.cash_paid ?? 0),
         wallet_paid: -(original.wallet_paid ?? 0),
         loyalty_earned: -(original.loyalty_earned ?? 0),
@@ -3095,7 +3117,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const base = Math.max(target.subscription.expires_at, nowMs);
       const newExpiry = base + days * 86400000;
       const newStatus: SubscriptionStatus = newExpiry > nowMs ? "active" : "expired";
-      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, expires_at: newExpiry, status: newStatus } } : s));
+      setStores((prev) => prev.map((s) => orgIdOf(s) === orgIdOf(target) ? { ...s, subscription: { ...s.subscription, expires_at: newExpiry, status: newStatus } } : s));
       setAdminAuditLog((prev) => [{ id: uid("au"), action: "extend_subscription", detail: `${days > 0 ? "+" : ""}${days} days on ${target.name}`, created_at: Date.now() }, ...prev]);
     },
     changePlan(plan, storeId) {
@@ -3108,7 +3130,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSubscriptionStatus(status, storeId) {
       const targetId = storeId ?? currentStoreId;
       if (!targetId) return;
-      setStores((prev) => prev.map((s) => s.id === targetId ? { ...s, subscription: { ...s.subscription, status } } : s));
+      const target = stores.find((s) => s.id === targetId);
+      setStores((prev) => prev.map((s) => target && orgIdOf(s) === orgIdOf(target) ? { ...s, subscription: { ...s.subscription, status } } : s));
       setAdminAuditLog((prev) => [{ id: uid("au"), action: "status_change", detail: `Status → ${status}`, created_at: Date.now() }, ...prev]);
     },
     adminAuditLog,
