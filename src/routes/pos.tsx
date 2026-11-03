@@ -29,7 +29,8 @@ function POS() {
   const navigate = useNavigate();
   const retail = isRetail(store?.business_type);
   const features = businessFeatures(store?.business_type, store?.subscription.plan);
-  const [selectedMode, setMode] = useState<Mode>("cash");
+  const [selectedMode, setMode] = useState<Mode>("wallet");
+  useEffect(() => { setMode(retail ? "cash" : "wallet"); }, [retail]);
   const qrOnly = can("pos.wallet_qr") && !can("pos.wallet");
   const walletAllowed = can("pos.wallet") || qrOnly;
   const walletOnly = waiterWalletOnly(currentUser?.staff_role, store);
@@ -359,7 +360,7 @@ function POS() {
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
             {walletAllowed && <button onClick={() => setMode("wallet")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "wallet" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletOnly ? "col-span-2" : ""}`}>
-              <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : "Wallet"}
+              <Wallet className="w-4 h-4" /> {qrOnly ? "Scan QR" : features.prepaidWallet ? "Wallet" : "Customer credit / debt"}
             </button>}
             {!walletOnly && <button onClick={() => setMode("cash")}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold ${mode === "cash" ? "bg-background shadow-sm" : "text-muted-foreground"} ${walletAllowed ? "" : "col-span-2"}`}>
@@ -529,7 +530,7 @@ function POS() {
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <div className="relative">
               <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
+              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} aria-label="Find product" onKeyDown={(e) => { if (retail && e.key === "Enter") { e.preventDefault(); const code = itemSearch.trim().toLowerCase(); const p = products.find((p) => p.barcode?.toLowerCase() === code || p.sku?.toLowerCase() === code); if (p) { addLine(p); setItemSearch(""); } } }} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
             </div>
             <Button variant="outline" onClick={() => setShowTabs(true)} className="h-12 px-4 text-base font-semibold relative">
               <ListOrdered className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Saved bills</span>

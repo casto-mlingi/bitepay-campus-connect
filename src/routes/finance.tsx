@@ -52,6 +52,7 @@ function FinancePage() {
     [batches]
   );
   const retail = isRetail(store?.business_type);
+  const features = businessFeatures(store?.business_type, store?.subscription.plan);
   const retailInventoryValue = products.reduce((n, p) => n + retailStock(p, purchases, orders) * retailUnitCost(p, purchases), 0);
   const totalInventoryValue = rawInventoryValue + finishedGoodsValue + (retail ? retailInventoryValue : 0);
   const walletLiabilities = useMemo(
@@ -60,7 +61,7 @@ function FinancePage() {
   );
 
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
-  const cogs = retail ? orders.reduce((n, o) => n + o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0), 0) : batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
+  const cogs = retail ? orders.reduce((n, o) => n + (o.cost_amount ?? o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0)), 0) : batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
   const grossProfit = grossRevenue - cogs;
   const opex = expenses.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
   const netProfit = grossProfit - opex;
@@ -100,6 +101,7 @@ function FinancePage() {
       {tab === "payables" && <PayablesPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal />}
+      {tab === "books" && !features.fullAccounting && <p className="mb-4 border-y py-3 text-sm text-muted-foreground">Full accounting is included in Business Pro. Existing financial records remain readable below.</p>}
       {tab === "books" && (
         <Books
           orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs}

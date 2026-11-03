@@ -80,9 +80,9 @@ function SettingsPage() {
     setTimeout(() => setToast(""), 1800);
   };
 
-  const retail = isRetail(businessType);
+  const retail = isRetail(store?.business_type);
   const account = ownerPackage(stores, store?.owner_user_id ?? store?.id ?? "");
-  const features = businessFeatures(businessType, account.plan);
+  const features = businessFeatures(store?.business_type, account.plan);
   const daysLeft = subscriptionDaysLeft();
   const sub = account.billing?.subscription ?? store?.subscription;
   const expiresOn = sub ? new Date(sub.expires_at).toLocaleDateString() : "";
@@ -107,7 +107,7 @@ function SettingsPage() {
             <div>
               <div className="text-3xl font-extrabold">{PLAN_LABEL[sub.plan]}</div>
               <p className="text-sm mt-1">{account.owned.length} / {account.limit === Infinity ? "Unlimited" : account.limit} stores · {PLAN_PRICE[sub.plan].toLocaleString()} / month</p>
-              <p className="text-xs mt-1">Customer credit & debt · Suppliers · Inventory · Shift reports{features.prepaidWallet ? " · Prepaid wallets" : ""}{features.kitchen ? " · Hospitality tools preserved" : ""}</p>
+              <p className="text-xs mt-1">Customer credit & debt · Suppliers · Inventory · Shift reports{features.prepaidWallet ? " · Prepaid wallets" : ""}{features.kitchen ? " · Hospitality tools" : ""}</p>
               <div className="text-sm opacity-90 flex items-center gap-1.5 mt-1"><Clock className="w-3.5 h-3.5" />
                 {sub.status === "suspended" ? "Suspended — contact support" :
                  daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left · renews ${expiresOn}` : `Expired on ${expiresOn}`}
@@ -151,7 +151,7 @@ function SettingsPage() {
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
         <Row label="Business type">
           <Select value={businessType} onValueChange={(v) => setBusinessType(v as BusinessType)}>
-            <SelectTrigger aria-label="Business type"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Business type"><span>{BUSINESS_LABELS[businessType] ?? BUSINESS_LABELS[store?.business_type ?? "canteen"]}</span></SelectTrigger>
             <SelectContent>{BUSINESS_GROUPS.map((g) => <SelectGroup key={g.label}><SelectLabel>{g.label}</SelectLabel>{g.types.map((t) => <SelectItem key={t} value={t}>{BUSINESS_LABELS[t]}</SelectItem>)}</SelectGroup>)}</SelectContent>
           </Select>
         </Row>

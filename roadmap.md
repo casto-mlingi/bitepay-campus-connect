@@ -1,13 +1,14 @@
 # Roadmap
 
 ## Retail & trade and account packages (Nov 1)
-- [ ] Batch 1: Add shop, hardware, supermarket and wholesale families without changing hospitality defaults.
-- [ ] Batch 2: Centralize business visibility and package eligibility; preserve all hospitality workflows and historical records.
-- [ ] Batch 3: Add trade units, SKU/barcode, costs, opening stock and owner-selected starter goods.
-- [ ] Batch 4: Apply agreed package prices and account-wide store limits.
-- [ ] Batch 5: Enforce branch creation and verified subscription changes without deleting records.
-- [ ] Batch 6: Align setup, Settings, inventory, POS, navigation, finance, admin and launch guide.
-- [ ] Batch 7: Run regressions and check retail/hospitality screens; live account checks depend on an available session.
+- [x] Batch 1: Add shop, hardware, supermarket and wholesale families without changing hospitality defaults.
+- [x] Batch 2: Centralize business visibility and package eligibility; preserve all hospitality workflows and historical records.
+- [x] Batch 3: Add trade units, SKU/barcode, costs, opening stock and owner-selected starter goods.
+- [x] Batch 4: Apply agreed package prices and account-wide store limits.
+- [x] Batch 5: Enforce branch creation and verified subscription changes without deleting records.
+- [x] Batch 6: Align setup, Settings, inventory, POS, navigation, finance, admin and launch guide.
+- [x] Batch 7: Run regressions and isolated retail-sale readback and hospitality screen checks without shared-data writes.
+- [ ] Verify live signed-in registration, branch uploads and admin billing after deployment (requires a real session; local test uploads remain prohibited).
 
 ## Wallet reliability and shift handover (Oct 26)
 - [x] Fix duplicate wallet additions, ledger-backed saved change and customer visibility.
