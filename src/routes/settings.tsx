@@ -151,7 +151,7 @@ function SettingsPage() {
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
         <Row label="Business type">
           <Select value={businessType} onValueChange={(v) => setBusinessType(v as BusinessType)}>
-            <SelectTrigger aria-label="Business type"><SelectValue>{BUSINESS_LABELS[businessType]}</SelectValue></SelectTrigger>
+            <SelectTrigger aria-label="Business type"><span>{BUSINESS_LABELS[businessType] ?? BUSINESS_LABELS[store?.business_type ?? "canteen"]}</span></SelectTrigger>
             <SelectContent>{BUSINESS_GROUPS.map((g) => <SelectGroup key={g.label}><SelectLabel>{g.label}</SelectLabel>{g.types.map((t) => <SelectItem key={t} value={t}>{BUSINESS_LABELS[t]}</SelectItem>)}</SelectGroup>)}</SelectContent>
           </Select>
         </Row>
