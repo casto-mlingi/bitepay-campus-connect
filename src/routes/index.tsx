@@ -1,123 +1,135 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChefHat, ArrowRight, Wallet, QrCode, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3, Sparkles, Check, Smartphone, RefreshCw } from "lucide-react";
-import { useStore, formatTZS } from "@/lib/store";
+import {
+  ArrowRight, Wallet, ClipboardList, ShieldCheck, LifeBuoy, Store as StoreIcon, Utensils, BarChart3,
+  Sparkles, Check, Smartphone, RefreshCw, ShoppingBasket, Hammer, Warehouse, BedDouble, Wine, Coffee,
+  Package, Truck, HandCoins, ScanBarcode, Users, Receipt,
+} from "lucide-react";
+import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ListFilter, useListFilter } from "@/components/list-filter";
+import { BrandLogo } from "@/components/brand-logo";
+import { PLAN_PRICE, STORE_LIMIT } from "@/lib/subscription-rules";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({ meta: [
-    { title: "BitePay — POS for Hospitality, Shops & Wholesale" },
-    { name: "description", content: "BitePay manages sales, stock, customer credit and suppliers for hospitality, shops, hardware stores, supermarkets and wholesale businesses." },
-    { property: "og:title", content: "BitePay — POS for Hospitality, Shops & Wholesale" },
-    { property: "og:description", content: "Top-up once, order in seconds. Full POS, inventory, batch costing and treasury for operators." },
+    { title: "BitePay — POS for Shops, Wholesale & Hospitality" },
+    { name: "description", content: "BitePay runs sales, stock, customer credit, suppliers and accounts for shops, hardware, supermarkets, wholesale, restaurants, bars, hotels and canteens." },
+    { property: "og:title", content: "BitePay — POS for Shops, Wholesale & Hospitality" },
+    { property: "og:description", content: "One simple app for selling, stock, madeni, suppliers and clear money reports — for every kind of business." },
     { property: "og:type", content: "website" },
-  
-      { name: "twitter:card", content: "summary" },] }),
+    { name: "twitter:card", content: "summary" },
+  ] }),
 });
 
+const fmt = (n: number) => n.toLocaleString("en-US");
+
 function HomePage() {
-  const { store, hasOwner, storefront, cart, addToCart, setQty, cartTotal, currentUser } = useStore();
-  const { filter, setFilter, match } = useListFilter();
-  const menu = storefront.products.filter((p) =>
-    match({ text: `${p.name} ${p.category ?? ""}` }));
-  const qtyOf = (id: string) => cart.find((c) => c.product.id === id)?.qty ?? 0;
-  const checkoutHref = currentUser?.role === "customer" ? "/cart" : "/login";
+  const { hasOwner } = useStore();
+  const startHref = hasOwner ? "/login" : "/setup";
+
+  const businesses = [
+    { icon: <StoreIcon className="w-5 h-5" />, name: "Retail shop / Duka" },
+    { icon: <ShoppingBasket className="w-5 h-5" />, name: "Supermarket" },
+    { icon: <Hammer className="w-5 h-5" />, name: "Hardware store" },
+    { icon: <Warehouse className="w-5 h-5" />, name: "Wholesale / Jumla" },
+    { icon: <Utensils className="w-5 h-5" />, name: "Restaurant" },
+    { icon: <Wine className="w-5 h-5" />, name: "Bar & lounge" },
+    { icon: <BedDouble className="w-5 h-5" />, name: "Hotel" },
+    { icon: <Coffee className="w-5 h-5" />, name: "Canteen" },
+  ];
+
+  const features = [
+    { icon: <ScanBarcode className="w-5 h-5" />, title: "Fast checkout (POS)", body: "Sell by tap, search or barcode. Cash, Lipa Namba and wallet with change handled for you." },
+    { icon: <Package className="w-5 h-5" />, title: "Stock that never lies", body: "Every sale and purchase updates stock. Low-stock alerts and units like pcs, kg, bags, cartons." },
+    { icon: <HandCoins className="w-5 h-5" />, title: "Customer credit (madeni)", body: "Set a debt limit, track who owes what and for how long, and collect easily." },
+    { icon: <Truck className="w-5 h-5" />, title: "Suppliers & bills", body: "Record deliveries, pay now or later, and see what you owe each supplier." },
+    { icon: <Wallet className="w-5 h-5" />, title: "Customer wallets", body: "Customers pre-pay or save their change, then pay with a QR scan next time." },
+    { icon: <BarChart3 className="w-5 h-5" />, title: "Clear money reports", body: "Profit, cash, bank and balance sheet in plain words — no accountant needed." },
+    { icon: <ClipboardList className="w-5 h-5" />, title: "Shifts & handovers", body: "Blind cash counts with a witness and a printed shift report stop missing money." },
+    { icon: <Users className="w-5 h-5" />, title: "Staff roles", body: "Owner, manager, cashier and waiter each see only what they should." },
+    { icon: <RefreshCw className="w-5 h-5" />, title: "Works offline", body: "Keep selling without internet. Everything saves on the phone and syncs later." },
+  ];
+
+  const plans = [
+    { key: "starter" as const, name: "Starter", body: "Sales, stock, madeni & supplier bills." },
+    { key: "growth" as const, name: "Growth", body: "Multi-store, staff roles, wallets & recipes.", highlight: true },
+    { key: "pro" as const, name: "Business Pro", body: "Tables, waiters, open bills, kitchen & shifts." },
+    { key: "enterprise" as const, name: "Enterprise", body: "Everything, unlimited stores." },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b">
         <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary grid place-items-center text-white">
-              <ChefHat className="w-4 h-4" />
-            </div>
+            <BrandLogo className="w-8 h-8" />
             <span className="font-extrabold tracking-tight">BitePay</span>
           </div>
-          <nav className="hidden sm:flex items-center gap-6 text-sm text-muted-foreground">
+          <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="#businesses" className="hover:text-foreground">Businesses</a>
             <a href="#features" className="hover:text-foreground">Features</a>
-            <a href="#operators" className="hover:text-foreground">For operators</a>
             <a href="#pricing" className="hover:text-foreground">Pricing</a>
           </nav>
           <div className="flex items-center gap-2">
             <Link to="/login" className="text-sm font-semibold px-3 py-2 rounded-lg hover:bg-muted">Sign in</Link>
-            <Link to="/setup" className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">
-              Create store
-            </Link>
+            <Link to="/setup" className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">Create store</Link>
           </div>
         </div>
       </header>
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-emerald-500/10" />
-        <div className="relative max-w-6xl mx-auto px-5 pt-16 pb-20 grid md:grid-cols-2 gap-10 items-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-primary/5" />
+        <div className="relative max-w-6xl mx-auto px-5 pt-14 pb-16 grid md:grid-cols-2 gap-10 items-center">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-              <Sparkles className="w-3.5 h-3.5" /> Trusted by campus canteens
+              <Sparkles className="w-3.5 h-3.5" /> For shops, wholesale & hospitality
             </span>
             <h1 className="mt-4 text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">
-              Prepaid wallets, POS &amp; kitchen costing — <span className="text-primary">in one app.</span>
+              Sell, track stock &amp; know your profit — <span className="text-primary">in one simple app.</span>
             </h1>
             <p className="mt-4 text-muted-foreground text-lg max-w-lg">
-              {store?.name ? `Welcome to ${store.name}.` : "Skip the queue at the till."} Customers top-up once and order in seconds. Operators get real POS, inventory, batch costing and treasury out of the box.
+              Whether you run a duka, hardware store, supermarket, wholesale, bar, hotel or canteen — BitePay handles sales, stock, customer credit, suppliers and your money reports.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link to="/login">
-                <Button className="h-12 px-6 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90">
-                  Sign in <ArrowRight className="ml-2 w-4 h-4" />
+              <Link to={startHref}>
+                <Button className="h-12 px-6 rounded-xl text-base font-semibold">
+                  {hasOwner ? "Sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>
-              <Link to={hasOwner ? "/login" : "/setup"}>
-                <Button variant="outline" className="h-12 px-6 rounded-xl text-base font-semibold border-2">
-                  <StoreIcon className="mr-2 w-4 h-4" /> {hasOwner ? "Operator sign in" : "Create your store"}
-                </Button>
-              </Link>
+              <a href="#features">
+                <Button variant="outline" className="h-12 px-6 rounded-xl text-base font-semibold border-2">See features</Button>
+              </a>
             </div>
-            <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-emerald-600" /> 14-day free trial</span>
-              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-emerald-600" /> No card required</span>
+            <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-primary" /> 14-day free trial</span>
+              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-primary" /> Works offline</span>
+              <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-primary" /> Pay by mobile money</span>
             </div>
           </div>
 
-          {/* Preview card */}
           <div className="relative">
             <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-[3rem]" />
-            <div className="relative bg-surface border rounded-3xl shadow-2xl shadow-black/10 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-muted-foreground">Wallet balance</p>
-                  <p className="text-3xl font-extrabold mt-1">TZS 12,500</p>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 grid place-items-center text-primary">
-                  <Wallet className="w-6 h-6" />
-                </div>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-2">
-                {[
-                  { icon: <Utensils className="w-4 h-4" />, label: "Order" },
-                  { icon: <QrCode className="w-4 h-4" />, label: "Scan" },
-                  { icon: <ClipboardList className="w-4 h-4" />, label: "History" },
-                ].map((a) => (
-                  <div key={a.label} className="flex flex-col items-center gap-1 py-3 rounded-xl bg-muted">
-                    <span className="text-primary">{a.icon}</span>
-                    <span className="text-xs font-semibold">{a.label}</span>
+            <div className="relative bg-surface border rounded-3xl shadow-2xl p-6">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Today's sales</p>
+              <p className="text-3xl font-extrabold mt-1">485,000</p>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                {[{ k: "Profit", v: "92,400" }, { k: "Madeni", v: "35,000" }, { k: "Low stock", v: "3 items" }].map((s) => (
+                  <div key={s.k} className="py-3 rounded-xl bg-muted">
+                    <p className="text-[11px] text-muted-foreground">{s.k}</p>
+                    <p className="text-sm font-bold">{s.v}</p>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 space-y-2">
+              <div className="mt-4 space-y-1">
                 {[
-                  { name: "Chapati & Beans", when: "12:04", amt: "-1,500" },
-                  { name: "Top-up via M-Pesa", when: "09:22", amt: "+10,000", green: true },
-                  { name: "Chai + Mandazi", when: "08:11", amt: "-1,000" },
+                  { name: "Cement 50kg × 4", amt: "+76,000" },
+                  { name: "Sugar 1kg × 10", amt: "+30,000" },
+                  { name: "Supplier bill — Azam", amt: "-120,000" },
                 ].map((r) => (
                   <div key={r.name} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
-                    <div>
-                      <p className="font-semibold">{r.name}</p>
-                      <p className="text-xs text-muted-foreground">{r.when}</p>
-                    </div>
-                    <span className={`font-bold ${r.green ? "text-emerald-600" : "text-foreground"}`}>{r.amt}</span>
+                    <span className="font-semibold flex items-center gap-2"><Receipt className="w-4 h-4 text-primary" />{r.name}</span>
+                    <span className="font-bold">{r.amt}</span>
                   </div>
                 ))}
               </div>
@@ -126,140 +138,66 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Storefront — order before you sign in */}
-      {storefront.products.length > 0 && (
-        <section id="menu" className="max-w-6xl mx-auto px-5 py-14">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-3xl font-extrabold tracking-tight">Today at {storefront.store?.name ?? "our canteen"}</h2>
-              <p className="text-muted-foreground mt-1">Add what you want now — sign in only when you're ready to pay.</p>
-            </div>
-            <ListFilter filter={filter} onChange={setFilter} showPeriod={false} placeholder="Search the menu…" />
-          </div>
-
-          {menu.length === 0 ? (
-            <p className="mt-8 text-sm text-muted-foreground">Nothing matches that search.</p>
-          ) : (
-            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {menu.map((p) => {
-                const q = qtyOf(p.id);
-                return (
-                  <article key={p.id} className="rounded-2xl border bg-surface overflow-hidden flex flex-col">
-                    <div className="aspect-square bg-muted">
-                      {p.image ? (
-                        <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className={`w-full h-full bg-gradient-to-br ${p.gradient} grid place-items-center text-5xl`}>{p.emoji}</div>
-                      )}
-                    </div>
-                    <div className="p-3 flex-1 flex flex-col">
-                      <h3 className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</h3>
-                      <p className="text-primary font-bold mt-1">{formatTZS(p.price)}</p>
-                      <div className="mt-auto pt-3">
-                        {q === 0 ? (
-                          <Button onClick={() => addToCart(p)} className="w-full h-9 rounded-xl text-sm font-semibold">Add</Button>
-                        ) : (
-                          <div className="flex items-center justify-between bg-muted rounded-xl h-9 px-1">
-                            <button aria-label="Remove one" onClick={() => setQty(p.id, q - 1)} className="w-8 h-8 grid place-items-center font-bold">−</button>
-                            <span className="font-bold text-sm">{q}</span>
-                            <button aria-label="Add one" onClick={() => setQty(p.id, q + 1)} className="w-8 h-8 grid place-items-center rounded-lg bg-primary text-white font-bold">+</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Features */}
-      <section id="features" className="max-w-6xl mx-auto px-5 py-16">
-        <h2 className="text-3xl font-extrabold tracking-tight text-center">Everything a canteen needs.</h2>
-        <p className="text-center text-muted-foreground mt-2 max-w-xl mx-auto">From student wallets to kitchen batch costing, BitePay replaces spreadsheets, cash tins and receipt books.</p>
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            { icon: <Wallet className="w-5 h-5" />, title: "Prepaid wallets", body: "Customers top-up once via mobile money and pay at the till in one tap or QR scan." },
-            { icon: <StoreIcon className="w-5 h-5" />, title: "Walk-in POS", body: "Cash, mobile money and wallet payments with split-tender and printable receipts." },
-            { icon: <Utensils className="w-5 h-5" />, title: "Kitchen batch costing", body: "Log raw materials, cook a batch and BitePay auto-computes cost per plate." },
-            { icon: <BarChart3 className="w-5 h-5" />, title: "Treasury & P&L", body: "Working capital, wallet liabilities, COGS and net profit — updated in real time." },
-            { icon: <ClipboardList className="w-5 h-5" />, title: "Shifts & Z-reports", body: "Open and close shifts per cashier with a settlement journal at end of day." },
-            { icon: <ShieldCheck className="w-5 h-5" />, title: "Role-based access", body: "Owner, supervisor and cashier permissions — each sees only what they should." },
-            { icon: <RefreshCw className="w-5 h-5" />, title: "Shared devices, zero prompts", body: "Many owners can sign in on one tablet. Work saves offline and merges automatically with the cloud — no version questions." },
-          ].map((f) => (
-            <div key={f.title} className="p-5 rounded-2xl border bg-surface hover:shadow-lg transition">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center">{f.icon}</div>
-              <h3 className="mt-3 font-bold">{f.title}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{f.body}</p>
+      {/* Businesses */}
+      <section id="businesses" className="max-w-6xl mx-auto px-5 py-14">
+        <h2 className="text-3xl font-extrabold tracking-tight text-center">Built for your type of business.</h2>
+        <p className="text-center text-muted-foreground mt-2 max-w-xl mx-auto">Pick your business when you sign up — BitePay shows only the tools you need.</p>
+        <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {businesses.map((b) => (
+            <div key={b.name} className="p-4 rounded-2xl border bg-surface flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center shrink-0">{b.icon}</span>
+              <span className="font-semibold text-sm">{b.name}</span>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Operators band */}
-      <section id="operators" className="bg-muted/40 border-y">
-        <div className="max-w-6xl mx-auto px-5 py-16 grid md:grid-cols-2 gap-10 items-center">
-          <div>
-            <h2 className="text-3xl font-extrabold tracking-tight">Run the whole canteen from one screen.</h2>
-            <p className="mt-3 text-muted-foreground">Live Kanban orders, walk-in POS, inventory, cooking batches, procurement and payroll-ready expense logs. Owners see full financials; cashiers see just their till.</p>
-            <ul className="mt-5 space-y-2 text-sm">
-              {["Live order board with prep-time tracking", "PIN-protected wallet top-ups", "Offline-first POS with sync queue", "Daily settlement journal for accountants"].map((t) => (
-                <li key={t} className="flex items-start gap-2"><Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {t}</li>
-              ))}
-            </ul>
-            <div className="mt-6 flex gap-3">
-              <Link to={hasOwner ? "/login" : "/setup"}>
-                <Button className="h-11 rounded-xl bg-primary hover:bg-primary/90 font-semibold">
-                  {hasOwner ? "Operator sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/support">
-                <Button variant="outline" className="h-11 rounded-xl font-semibold border-2">Talk to us</Button>
-              </Link>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { k: "1,200+", v: "Meals served / day" },
-              { k: "< 3s", v: "Average checkout" },
-              { k: "98%", v: "Wallet adoption" },
-              { k: "0", v: "Cash reconciliation errors" },
-            ].map((s) => (
-              <div key={s.v} className="p-5 rounded-2xl bg-surface border">
-                <p className="text-3xl font-extrabold text-primary">{s.k}</p>
-                <p className="text-xs text-muted-foreground mt-1">{s.v}</p>
+      {/* Features */}
+      <section id="features" className="bg-muted/40 border-y">
+        <div className="max-w-6xl mx-auto px-5 py-16">
+          <h2 className="text-3xl font-extrabold tracking-tight text-center">Everything to run your business.</h2>
+          <p className="text-center text-muted-foreground mt-2 max-w-xl mx-auto">Replace notebooks, cash tins and spreadsheets with one easy screen.</p>
+          <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {features.map((f) => (
+              <div key={f.title} className="p-5 rounded-2xl border bg-surface">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary grid place-items-center">{f.icon}</div>
+                <h3 className="mt-3 font-bold">{f.title}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{f.body}</p>
               </div>
             ))}
           </div>
+          <div className="mt-8 p-5 rounded-2xl border bg-surface">
+            <h3 className="font-bold flex items-center gap-2"><Utensils className="w-5 h-5 text-primary" /> Extra for restaurants, bars, hotels & canteens</h3>
+            <ul className="mt-3 grid sm:grid-cols-2 gap-2 text-sm">
+              {["Tables with assigned waiters", "Open bills / saved tabs", "Kitchen order board with alerts", "Raw materials & plate costing"].map((t) => (
+                <li key={t} className="flex items-start gap-2"><Check className="w-4 h-4 text-primary mt-0.5" /> {t}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
-      {/* Pricing teaser */}
-      <section id="pricing" className="max-w-4xl mx-auto px-5 py-16 text-center">
-        <h2 className="text-3xl font-extrabold tracking-tight">Simple pricing.</h2>
+      {/* Pricing */}
+      <section id="pricing" className="max-w-6xl mx-auto px-5 py-16 text-center">
+        <h2 className="text-3xl font-extrabold tracking-tight">Simple monthly pricing (TZS).</h2>
         <p className="text-muted-foreground mt-2">Start with a 14-day free trial. Upgrade with mobile money — no card, no paperwork.</p>
-        <div className="mt-8 grid sm:grid-cols-3 gap-4 text-left">
-          {[
-            { name: "Trial", price: "Free", body: "14 days, all features, one store." },
-            { name: "Starter", price: "TZS 50k / mo", body: "1 outlet, up to 500 wallets.", highlight: true },
-            { name: "Pro", price: "TZS 120k / mo", body: "Multi-outlet, unlimited wallets." },
-          ].map((p) => (
-            <div key={p.name} className={`p-6 rounded-2xl border bg-surface ${p.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{p.name}</p>
-              <p className="text-2xl font-extrabold mt-2">{p.price}</p>
-              <p className="text-sm text-muted-foreground mt-2">{p.body}</p>
-            </div>
-          ))}
+        <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
+          {plans.map((p) => {
+            const limit = STORE_LIMIT[p.key];
+            return (
+              <div key={p.key} className={`p-6 rounded-2xl border bg-surface ${p.highlight ? "border-primary shadow-lg ring-2 ring-primary/20" : ""}`}>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{p.name}</p>
+                <p className="text-2xl font-extrabold mt-2">{fmt(PLAN_PRICE[p.key])}<span className="text-sm font-medium text-muted-foreground"> / mo</span></p>
+                <p className="text-xs font-semibold text-primary mt-1">{limit === Infinity ? "Unlimited stores" : `${limit} store${limit > 1 ? "s" : ""}`}</p>
+                <p className="text-sm text-muted-foreground mt-2">{p.body}</p>
+              </div>
+            );
+          })}
         </div>
 
-        {/* How upgrading works — mobile money + receipt approval */}
         <div className="mt-8 p-6 rounded-2xl border bg-surface text-left">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 grid place-items-center">
-              <Smartphone className="w-4.5 h-4.5" />
-            </div>
+            <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary grid place-items-center"><Smartphone className="w-4 h-4" /></div>
             <h3 className="font-bold">Pay by mobile money, activated after review</h3>
           </div>
           <div className="mt-4 grid sm:grid-cols-3 gap-4 text-sm">
@@ -269,40 +207,24 @@ function HomePage() {
               { n: "3", t: "Submit the receipt", b: "Paste the receipt number; approval activates the plan for 30 days." },
             ].map((s) => (
               <div key={s.n} className="p-4 rounded-xl bg-muted/50">
-                <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold grid place-items-center">{s.n}</span>
+                <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold grid place-items-center">{s.n}</span>
                 <p className="font-semibold mt-2">{s.t}</p>
                 <p className="text-muted-foreground mt-1">{s.b}</p>
               </div>
             ))}
           </div>
         </div>
+
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <Link to={startHref}><Button className="h-11 rounded-xl font-semibold">{hasOwner ? "Sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" /></Button></Link>
+          <Link to="/support"><Button variant="outline" className="h-11 rounded-xl font-semibold border-2">Talk to us</Button></Link>
+        </div>
       </section>
 
-
-      {/* Sticky checkout bar */}
-      {cart.length > 0 && (
-        <div className="sticky bottom-0 z-40 border-t bg-surface/95 backdrop-blur">
-          <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-3">
-            <div className="text-sm">
-              <p className="font-bold">{cart.reduce((n, c) => n + c.qty, 0)} item(s) · {formatTZS(cartTotal)}</p>
-              <p className="text-xs text-muted-foreground">
-                {currentUser?.role === "customer" ? "Pay from your wallet at checkout." : "You'll sign in or create a wallet next."}
-              </p>
-            </div>
-            <Link to={checkoutHref}>
-              <Button className="h-11 px-6 rounded-xl font-semibold">Ready to pay <ArrowRight className="ml-2 w-4 h-4" /></Button>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
       <footer className="border-t bg-surface">
         <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-primary grid place-items-center text-white">
-              <ChefHat className="w-3.5 h-3.5" />
-            </div>
+            <BrandLogo className="w-7 h-7" />
             <span className="font-semibold text-foreground">BitePay</span>
             <span>© {new Date().getFullYear()}</span>
           </div>
