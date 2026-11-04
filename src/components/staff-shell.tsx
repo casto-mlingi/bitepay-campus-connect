@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, LayoutDashboard, Store, Package, BarChart3, Maximize2, Minimize2, Wallet, Users, ClipboardCheck, WifiOff, Wifi, Users2, Settings, Building2, Activity, HandCoins, Grid2X2, ReceiptText } from "lucide-react";
 import { isRetail } from "@/lib/business-rules";
@@ -44,9 +45,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6 min-w-0 flex-1">
             <Link to="/staff" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-primary grid place-items-center text-white">
-                <ChefHat className="w-5 h-5" />
-              </div>
+              <BrandLogo className="w-9 h-9" />
               <div>
                 <div className="font-bold leading-tight">{store?.name ?? "BitePay"}</div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Staff Console</div>

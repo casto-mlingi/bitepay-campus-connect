@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store as StoreIcon, ChevronDown, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -27,9 +28,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
       <header className="sticky top-0 z-40 bg-surface border-b">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-primary grid place-items-center text-white">
-              <ChefHat className="w-4 h-4" />
-            </div>
+            <BrandLogo className="w-8 h-8" />
             <span className="font-bold text-lg hidden xs:inline">BitePay</span>
           </Link>
 
