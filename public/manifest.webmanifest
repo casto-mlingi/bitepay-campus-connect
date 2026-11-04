@@ -1,7 +1,7 @@
 {
   "name": "BitePay",
   "short_name": "BitePay",
-  "description": "Prepaid wallet, POS and stock for canteens, restaurants, bars and hotels.",
+  "description": "Sell, track stock and know your profit — POS, credit and wallets for shops, hardware, supermarkets, wholesale, restaurants, bars, hotels and canteens.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
