@@ -35,9 +35,10 @@ export const getSelcomStatus = createServerFn({ method: "GET" })
 export const saveSelcomSettings = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => z.object({
     store_id: z.string().min(1).max(100),
-    base_url: z.string().url().max(200),
-    api_key: z.string().trim().min(8).max(300),
-    api_secret: z.string().trim().min(8).max(300),
+    base_url: z.enum(["sandbox", "live"]),
+    x_api_key: z.string().trim().max(300).optional(),
+    api_key: z.string().trim().min(4).max(300),
+    api_secret: z.string().trim().min(4).max(300),
     vendor: z.string().trim().min(2).max(100),
     fee_percent: z.number().min(0).max(20).default(0),
     fee_flat: z.number().int().min(0).max(100_000).default(0),
@@ -52,11 +53,11 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     if (existing && existing.api_key !== (data.current_api_key ?? "").trim()) {
       return { ok: false as const, reason: "Enter the current API key to replace the saved keys." };
     }
-    await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor, fee_percent, fee_flat)
-      values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor}, ${data.fee_percent}, ${data.fee_flat})
+    await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor, fee_percent, fee_flat, x_api_key)
+      values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor}, ${data.fee_percent}, ${data.fee_flat}, ${data.x_api_key || null})
       on conflict (store_id) do update set base_url = excluded.base_url, api_key = excluded.api_key,
         api_secret = excluded.api_secret, vendor = excluded.vendor, fee_percent = excluded.fee_percent,
-        fee_flat = excluded.fee_flat, updated_at = now()`;
+        fee_flat = excluded.fee_flat, x_api_key = excluded.x_api_key, updated_at = now()`;
     return { ok: true as const };
   });
 
@@ -72,7 +73,7 @@ export const startSelcomTopup = createServerFn({ method: "POST" })
   }).parse(raw))
   .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db.server");
-    const { loadCreds, selcomPost, ensureSelcomTables, computeFee } = await import("@/lib/selcom.server");
+    const { loadCreds, azamMnoCheckout, ensureSelcomTables, computeFee } = await import("@/lib/selcom.server");
     const msisdn = normalizeMsisdn(data.phone);
     if (!msisdn) return { ok: false as const, reason: "Enter a valid phone number, e.g. 0712 345 678." };
     const prefix = msisdn.slice(3, 5);
@@ -87,23 +88,20 @@ export const startSelcomTopup = createServerFn({ method: "POST" })
     const orderId = `BP${Date.now()}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
     const fee = computeFee(data.amount, creds.fee_percent, creds.fee_flat);
     const total = data.amount + fee;
-    const webhook = Buffer.from(`${data.origin}/api/public/selcom/webhook`).toString("base64");
-    const order = await selcomPost(creds, "/v1/checkout/create-order-minimal", {
-      vendor: creds.vendor, order_id: orderId,
-      buyer_email: "customer@bitepay.app", buyer_name: data.customer_name || "BitePay customer",
-      buyer_phone: msisdn, amount: total, currency: "TZS",
-      webhook, buyer_remarks: "Wallet top-up", merchant_remarks: "BitePay", no_of_items: 1,
-    });
-    if (order.resultcode !== "000") return { ok: false as const, reason: order.message || "Selcom could not create the payment." };
-
     await sql`insert into selcom_payments (order_id, store_id, customer_id, amount, msisdn, network, fee)
       values (${orderId}, ${data.store_id}, ${data.customer_id}, ${data.amount}, ${msisdn}, ${data.network}, ${fee})`;
 
-    const push = await selcomPost(creds, "/v1/checkout/wallet-payment", { transid: orderId, order_id: orderId, msisdn });
-    if (push.resultcode !== "000" && push.resultcode !== "111") {
+    let push: Awaited<ReturnType<typeof azamMnoCheckout>>;
+    try {
+      push = await azamMnoCheckout(creds, { msisdn, amount: total, externalId: orderId, network: data.network });
+    } catch (e) {
+      push = { ok: false, message: e instanceof Error ? e.message : undefined, transactionId: undefined };
+    }
+    if (!push.ok) {
       await sql`update selcom_payments set status = 'FAILED' where order_id = ${orderId}`;
       return { ok: false as const, reason: push.message || "Could not send the payment prompt to your phone." };
     }
+    if (push.transactionId) await sql`update selcom_payments set gateway_ref = ${push.transactionId} where order_id = ${orderId}`;
     return { ok: true as const, order_id: orderId };
   });
 
