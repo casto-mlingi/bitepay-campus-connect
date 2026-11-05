@@ -51,7 +51,7 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     const existing = await loadCreds(sql, data.store_id);
     // Replacing saved keys requires proving you know the current API key.
     if (existing && existing.api_key !== (data.current_api_key ?? "").trim()) {
-      return { ok: false as const, reason: "Enter the current API key to replace the saved keys." };
+      return { ok: false as const, reason: "Enter the current client ID to replace the saved keys." };
     }
     await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor, fee_percent, fee_flat, x_api_key)
       values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor}, ${data.fee_percent}, ${data.fee_flat}, ${data.x_api_key || null})
