@@ -1776,7 +1776,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!sid || !Number.isSafeInteger(amount) || amount <= 0) return false;
       if (transactions.some((t) => t.reference === order_id)) return true;
       setWallet(currentUser.id, sid, amount);
-      setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via Selcom`, balance_before: walletFor(currentUser, sid), tender: "mobile", created_at: Date.now(), reference: order_id }, ...prev]);
+      setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via AzamPay`, balance_before: walletFor(currentUser, sid), tender: "mobile", created_at: Date.now(), reference: order_id }, ...prev]);
       adjustBank((b) => b + amount, sid);
       pushNotification({ store_id: sid, user_id: currentUser.id, title: "Wallet topped up", body: `TZS ${amount.toLocaleString()} added from ${network}.`, kind: "topup" });
       return true;
