@@ -125,7 +125,7 @@ async function publicKey(c: SelcomCreds, fresh = false): Promise<CryptoKey | nul
 /** Verifies AzamPay's RSA signature over {utilityref}{externalreference}{transactionstatus}{operator}. */
 export async function verifyCallbackSignature(c: SelcomCreds, cb: { utilityref: string; externalreference: string; transactionstatus: string; operator: string; signature: string }) {
   const data = new TextEncoder().encode(`${cb.utilityref}${cb.externalreference}${cb.transactionstatus}${cb.operator}`);
-  let sig: Uint8Array;
+  let sig: Uint8Array<ArrayBuffer>;
   try { sig = Uint8Array.from(atob(cb.signature), (ch) => ch.charCodeAt(0)); } catch { return false; }
   for (const fresh of [false, true]) {
     const key = await publicKey(c, fresh).catch(() => null);
