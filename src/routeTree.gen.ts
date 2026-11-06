@@ -34,6 +34,7 @@ import { Route as TeamRouteImport } from './routes/team'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as TopupsRouteImport } from './routes/topups'
 import { Route as ApiPublicAzampayWebhookRouteImport } from './routes/api/public/azampay/webhook'
+import { Route as ApiPublicGatewaySmsRouteImport } from './routes/api/public/gateway/sms'
 import { Route as ApiPublicHealthDbRouteImport } from './routes/api/public/health/db'
 import { Route as ApiPublicImagesIdRouteImport } from './routes/api/public/images/$id'
 import { Route as ApiPublicSelcomWebhookRouteImport } from './routes/api/public/selcom/webhook'
@@ -163,6 +164,11 @@ const ApiPublicAzampayWebhookRoute = ApiPublicAzampayWebhookRouteImport.update({
   path: '/api/public/azampay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicGatewaySmsRoute = ApiPublicGatewaySmsRouteImport.update({
+  id: '/api/public/gateway/sms',
+  path: '/api/public/gateway/sms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHealthDbRoute = ApiPublicHealthDbRouteImport.update({
   id: '/api/public/health/db',
   path: '/api/public/health/db',
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
+  '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
+  '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
+  '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
   '/api/public/health/db': typeof ApiPublicHealthDbRoute
   '/api/public/images/$id': typeof ApiPublicImagesIdRoute
   '/api/public/selcom/webhook': typeof ApiPublicSelcomWebhookRoute
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/topups'
     | '/api/public/azampay/webhook'
+    | '/api/public/gateway/sms'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/topups'
     | '/api/public/azampay/webhook'
+    | '/api/public/gateway/sms'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -358,6 +369,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/topups'
     | '/api/public/azampay/webhook'
+    | '/api/public/gateway/sms'
     | '/api/public/health/db'
     | '/api/public/images/$id'
     | '/api/public/selcom/webhook'
@@ -389,6 +401,7 @@ export interface RootRouteChildren {
   TopupRoute: typeof TopupRoute
   TopupsRoute: typeof TopupsRoute
   ApiPublicAzampayWebhookRoute: typeof ApiPublicAzampayWebhookRoute
+  ApiPublicGatewaySmsRoute: typeof ApiPublicGatewaySmsRoute
   ApiPublicHealthDbRoute: typeof ApiPublicHealthDbRoute
   ApiPublicImagesIdRoute: typeof ApiPublicImagesIdRoute
   ApiPublicSelcomWebhookRoute: typeof ApiPublicSelcomWebhookRoute
@@ -571,6 +584,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAzampayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/gateway/sms': {
+      id: '/api/public/gateway/sms'
+      path: '/api/public/gateway/sms'
+      fullPath: '/api/public/gateway/sms'
+      preLoaderRoute: typeof ApiPublicGatewaySmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/health/db': {
       id: '/api/public/health/db'
       path: '/api/public/health/db'
@@ -621,6 +641,7 @@ const rootRouteChildren: RootRouteChildren = {
   TopupRoute: TopupRoute,
   TopupsRoute: TopupsRoute,
   ApiPublicAzampayWebhookRoute: ApiPublicAzampayWebhookRoute,
+  ApiPublicGatewaySmsRoute: ApiPublicGatewaySmsRoute,
   ApiPublicHealthDbRoute: ApiPublicHealthDbRoute,
   ApiPublicImagesIdRoute: ApiPublicImagesIdRoute,
   ApiPublicSelcomWebhookRoute: ApiPublicSelcomWebhookRoute,
