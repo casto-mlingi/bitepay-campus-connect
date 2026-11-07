@@ -38,3 +38,4 @@
 - Account packages, prices, owner-group store caps and business eligibility live in subscription-rules; existing hospitality tools remain grandfathered to avoid daily-work regressions.
 - Retail stock is derived from immutable opening quantities, purchase rows and signed sale/refund quantities in retail-stock, never a mutable display balance, so offline merges retain deductions.
 - New branches inherit verified account billing at the locked snapshot boundary; staff snapshot uploads cannot modify subscriptions or opening-stock anchors, preventing self-upgrades and stock inflation.
+- BytePay Gateway SMS payments live in gateway tables (devices with hashed secrets, provider+reference-unique SMS rows, expiring checkouts); sms-parser matching only auto-pays an exact amount with one unambiguous checkout so typos and duplicates never double-credit.
