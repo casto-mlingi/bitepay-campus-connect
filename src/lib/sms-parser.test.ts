@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseSms, matchSms, compareReference } from "./sms-parser";
 
 describe("parseSms", () => {
