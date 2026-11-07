@@ -17,6 +17,7 @@ import { Route as CreditRouteImport } from './routes/credit'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as GatewayRouteImport } from './routes/gateway'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as LoginRouteImport } from './routes/login'
@@ -77,6 +78,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GatewayRoute = GatewayRouteImport.update({
+  id: '/gateway',
+  path: '/gateway',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -194,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
+  '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
@@ -225,6 +232,7 @@ export interface FileRoutesByTo {
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
+  '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
   '/finance': typeof FinanceRoute
+  '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/customers'
     | '/dashboard'
     | '/finance'
+    | '/gateway'
     | '/history'
     | '/inventory'
     | '/login'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/customers'
     | '/dashboard'
     | '/finance'
+    | '/gateway'
     | '/history'
     | '/inventory'
     | '/login'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/customers'
     | '/dashboard'
     | '/finance'
+    | '/gateway'
     | '/history'
     | '/inventory'
     | '/login'
@@ -384,6 +396,7 @@ export interface RootRouteChildren {
   CustomersRoute: typeof CustomersRoute
   DashboardRoute: typeof DashboardRoute
   FinanceRoute: typeof FinanceRoute
+  GatewayRoute: typeof GatewayRoute
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
@@ -463,6 +476,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gateway': {
+      id: '/gateway'
+      path: '/gateway'
+      fullPath: '/gateway'
+      preLoaderRoute: typeof GatewayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -624,6 +644,7 @@ const rootRouteChildren: RootRouteChildren = {
   CustomersRoute: CustomersRoute,
   DashboardRoute: DashboardRoute,
   FinanceRoute: FinanceRoute,
+  GatewayRoute: GatewayRoute,
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
