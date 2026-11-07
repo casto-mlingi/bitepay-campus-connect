@@ -222,6 +222,13 @@ function SettingsPage() {
 
       {store && can("settings.manage") && <SelcomSettingsCard storeId={store.id} />}
 
+      {store && can("settings.manage") && (
+        <Link to="/gateway" className="mt-4 flex items-center justify-between rounded-2xl border bg-card p-4 hover:bg-muted">
+          <span className="flex items-center gap-3"><Smartphone className="w-5 h-5 text-primary" /><span><b>BytePay Gateway</b><br /><span className="text-sm text-muted-foreground">Confirm mobile money payments automatically from a counter phone</span></span></span>
+          <ArrowUpRight className="w-4 h-4" />
+        </Link>
+      )}
+
       {payPlan && (
         <PaymentDialog
           plan={payPlan}
