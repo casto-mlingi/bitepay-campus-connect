@@ -1,3 +1,4 @@
+import { LipaNumbersManager } from "@/components/lipa-numbers";
 import { waiterPaymentMode, type WaiterPaymentMode } from "@/lib/business-rules";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
