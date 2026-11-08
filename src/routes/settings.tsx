@@ -220,6 +220,7 @@ function SettingsPage() {
         <Button type="submit" className="w-full h-11 rounded-xl"><Save className="w-4 h-4 mr-2" /> Save settings</Button>
       </form>
 
+      {store && can("settings.manage") && <LipaNumbersManager value={store.lipa_numbers} onSave={(list) => updateStore({ lipa_numbers: list })} />}
       {store && can("settings.manage") && <SelcomSettingsCard storeId={store.id} />}
 
       {store && can("settings.manage") && (

@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { LipaNumbersList } from "@/components/lipa-numbers";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, Clock, XCircle, Hash, Smartphone, ReceiptText } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
@@ -57,6 +58,8 @@ function TopUpPage() {
         <div className="text-white/85 text-sm">Current balance</div>
         <div className="text-3xl font-extrabold">{formatTZS(currentUser.wallet_balance)}</div>
       </div>
+
+      <LipaNumbersList value={store?.lipa_numbers} />
 
       <div className="mt-6 bg-surface border rounded-2xl p-5">
         <label className="text-sm font-semibold">Amount to top-up</label>

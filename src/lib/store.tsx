@@ -83,6 +83,8 @@ export type Store = {
   credit_terms_days?: number;
   customer_debt_limit?: number;
   loyalty_percentage?: number;
+  /** Store Lipa numbers shown to customers on top-up and to cashiers on POS. */
+  lipa_numbers?: import("./lipa-numbers").LipaNumber[];
   /** Default staff commission, in percent of the sales value they handled. */
   commission_rate?: number;
   /** Credit each order to the waiter serving that table/section. */
