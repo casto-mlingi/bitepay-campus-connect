@@ -1,4 +1,5 @@
 import { maxLineQty, remainingStock } from "@/lib/pos-stock";
+import { LipaNumbersList } from "@/components/lipa-numbers";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered } from "lucide-react";
@@ -434,6 +435,7 @@ function POS() {
                   <Button variant="secondary" key={v} onClick={() => setCashReceived(v)} className="h-11 text-sm font-semibold">{v === total ? "Exact" : v.toLocaleString()}</Button>
                 ))}
               </div>
+              {tender === "mobile" && <LipaNumbersList value={store?.lipa_numbers} compact />}
               {tender === "mobile" && <Input aria-label="Lipa reference / token (optional)" value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11" />}
               <div className={`flex items-center justify-between rounded-lg p-3 text-lg ${cashReceived >= total ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                 <span className="font-medium">Change</span><span className="font-bold">{formatTZS(change)}</span>
