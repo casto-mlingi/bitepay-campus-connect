@@ -53,7 +53,9 @@ export const Route = createFileRoute("/api/public/gateway/sms")({
         if (!p) return Response.json({ ok: true, type: "ignored", reason: "Not an incoming payment SMS" }, { headers: cors });
         const r = await ingestSms(sql, dev.store_id, deviceId, b.sms, p);
         return Response.json({ ok: true, type: "payment", provider: p.provider, reference: p.reference, amount: p.amount,
-          status: r.status, duplicate: r.duplicate, matched: r.status === "matched" }, { headers: cors });
+          status: r.status, duplicate: r.duplicate, matched: r.status === "matched",
+          kind: "topup" in r && r.topup ? "topup" : "checkout", topup_id: "topup" in r && r.topup ? r.topup.id : null,
+          customer_name: "topup" in r && r.topup ? r.topup.customer_name : null }, { headers: cors });
       },
     },
   },

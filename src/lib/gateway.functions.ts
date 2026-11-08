@@ -117,3 +117,39 @@ export const submitCheckoutReference = createServerFn({ method: "POST" })
     const { claimByReference } = await import("./gateway.server");
     return claimByReference(sql, data.store_id, data.id, data.reference);
   });
+
+/* ---------- Customer Lipa Namba top-ups (gateway verified) ---------- */
+async function requireCustomer() {
+  const { readSessionCookie } = await import("./auth/session.server");
+  const s = readSessionCookie();
+  if (!s) throw new Error("Please sign in again.");
+  const { getSql } = await import("./db.server");
+  const sql = getSql();
+  const { ensureGatewayTables, ensureTopupTable } = await import("./gateway.server");
+  await ensureGatewayTables(sql);
+  await ensureTopupTable(sql);
+  return { sql, uid: s.uid };
+}
+
+export const registerGatewayTopup = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => z.object({
+    id: z.string().min(1).max(100), store_id: z.string().min(1).max(100),
+    customer_name: z.string().max(120), customer_phone: z.string().max(30),
+    amount: z.number().int().min(100).max(10_000_000), reference: z.string().trim().min(6).max(40),
+  }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql, uid } = await requireCustomer();
+    const { registerTopup } = await import("./gateway.server");
+    return registerTopup(sql, { ...data, customer_id: uid });
+  });
+
+export const checkGatewayTopups = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => z.object({ ids: z.array(z.string().max(100)).max(30) }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql, uid } = await requireCustomer();
+    if (!data.ids.length) return [];
+    await sql`update gateway_topups set status='failed' where customer_id=${uid} and status='pending' and expires_at < now()`;
+    const rows = await sql<{ id: string; status: string; amount: string; expires_at: Date }[]>`
+      select id, status, amount, expires_at from gateway_topups where customer_id=${uid} and id = any(${data.ids})`;
+    return rows.map((r) => ({ id: r.id, status: r.status, amount: Number(r.amount), expires_at: new Date(r.expires_at).getTime() }));
+  });
