@@ -77,8 +77,11 @@ export async function ingestSms(sql: Sql, storeId: string, deviceId: string | nu
       values (${id}, ${storeId}, ${deviceId}, ${p.provider}, ${p.reference}, ${p.amount}, ${p.sender_name}, ${p.sender_phone}, ${raw.slice(0, 1000)}, ${m.status}, ${m.reason}, ${m.checkout_id}, ${isTest})`;
     if (m.status === "matched" && m.checkout_id) {
       await tx`update gateway_checkouts set status='paid', sms_id=${id}, reference=${p.reference}, paid_at=now() where id=${m.checkout_id} and status='pending'`;
+      return { duplicate: false, id, ...m, topup: null as null | { id: string; customer_name: string | null } };
     }
-    return { duplicate: false, id, ...m };
+    const topup = await matchTopupForSms(tx as unknown as Sql, storeId, id, p);
+    if (topup) return { duplicate: false, id, status: "matched" as const, reason: "Customer top-up verified", checkout_id: null, topup };
+    return { duplicate: false, id, ...m, topup: null as null | { id: string; customer_name: string | null } };
   });
 }
 
@@ -107,4 +110,63 @@ export async function claimByReference(sql: Sql, storeId: string, checkoutId: st
     await tx`update gateway_checkouts set reference=${typed.toUpperCase().replace(/\s/g, "")} where id=${checkoutId}`;
     return { status: "pending" as const, message: "Saved. Waiting for the payment SMS to arrive." };
   });
+}
+
+/* ---------- Customer Lipa Namba top-ups verified by the gateway phone ---------- */
+export const TOPUP_WINDOW_MS = 10 * 60_000;
+
+export async function ensureTopupTable(sql: Sql) {
+  await sql`create table if not exists gateway_topups (
+    id text primary key,
+    store_id text not null,
+    customer_id text not null,
+    customer_name text, customer_phone text,
+    amount numeric not null,
+    reference text not null,
+    status text not null default 'pending',
+    sms_id text,
+    created_at timestamptz not null default now(),
+    expires_at timestamptz not null,
+    paid_at timestamptz
+  )`;
+}
+
+export async function expireTopups(sql: Sql, storeId: string) {
+  await sql`update gateway_topups set status='failed' where store_id=${storeId} and status='pending' and expires_at < now()`;
+}
+
+/** Register a customer's typed reference; pays instantly if the SMS already arrived. */
+export async function registerTopup(sql: Sql, t: { id: string; store_id: string; customer_id: string; customer_name: string; customer_phone: string; amount: number; reference: string }) {
+  await ensureTopupTable(sql);
+  const ref = t.reference.toUpperCase().replace(/\s/g, "");
+  return sql.begin(async (tx) => {
+    const [existing] = await tx<{ status: string }[]>`select status from gateway_topups where id=${t.id}`;
+    if (existing) return { status: existing.status };
+    await tx`insert into gateway_topups (id, store_id, customer_id, customer_name, customer_phone, amount, reference, expires_at)
+      values (${t.id}, ${t.store_id}, ${t.customer_id}, ${t.customer_name}, ${t.customer_phone}, ${t.amount}, ${ref}, ${new Date(Date.now() + TOPUP_WINDOW_MS)})`;
+    const smsRows = await tx<{ id: string; reference: string; amount: string }[]>`select id, reference, amount from gateway_sms
+      where store_id=${t.store_id} and checkout_id is null and status in ('unmatched','review') and received_at > now() - interval '2 days' for update`;
+    for (const s of smsRows) {
+      if (compareReference(ref, s.reference) === "exact" && Number(s.amount) === t.amount) {
+        await tx`update gateway_sms set status='matched', checkout_id=${"topup:" + t.id}, reason='Customer top-up' where id=${s.id}`;
+        await tx`update gateway_topups set status='paid', sms_id=${s.id}, paid_at=now() where id=${t.id}`;
+        return { status: "paid" };
+      }
+    }
+    return { status: "pending" };
+  });
+}
+
+/** Called inside SMS ingest when no POS checkout matched: settle one exact pending top-up. */
+export async function matchTopupForSms(tx: Sql, storeId: string, smsId: string, p: ParsedSms) {
+  await ensureTopupTable(tx);
+  const rows = await tx<{ id: string; reference: string; amount: string; customer_name: string | null }[]>`
+    select id, reference, amount, customer_name from gateway_topups
+    where store_id=${storeId} and status='pending' and expires_at >= now() for update`;
+  const hits = rows.filter((r) => compareReference(r.reference, p.reference) === "exact" && Number(r.amount) === p.amount);
+  if (hits.length !== 1) return null;
+  const h = hits[0];
+  await tx`update gateway_topups set status='paid', sms_id=${smsId}, paid_at=now() where id=${h.id} and status='pending'`;
+  await tx`update gateway_sms set status='matched', checkout_id=${"topup:" + h.id}, reason='Customer top-up' where id=${smsId}`;
+  return { id: h.id, customer_name: h.customer_name };
 }
