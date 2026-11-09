@@ -696,6 +696,8 @@ type Ctx = {
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
   creditMobileTopUp: (input: { order_id: string; amount: number; network: string }) => boolean;
   rejectTopUpRequest: (id: string, reason: string) => void;
+  /** Gateway phone verified this request's SMS on the server: approve and credit once. */
+  settleGatewayTopUp: (id: string, outcome: "paid" | "failed") => boolean;
   setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
   /** Customer-set wallet PIN (guards wallet records + QR display + POS wallet charge). */
   setWalletPin: (currentPin: string | null, newPin: string) => Ok | Fail;
@@ -1781,6 +1783,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTransactions((prev) => prev.some((t) => t.reference === order_id) ? prev : [{ id: uid("t"), store_id: sid, customer_id: currentUser.id, type: "topup", amount, description: `Mobile money top-up (${network}) via AzamPay`, balance_before: walletFor(currentUser, sid), tender: "mobile", created_at: Date.now(), reference: order_id }, ...prev]);
       adjustBank((b) => b + amount, sid);
       pushNotification({ store_id: sid, user_id: currentUser.id, title: "Wallet topped up", body: `TZS ${amount.toLocaleString()} added from ${network}.`, kind: "topup" });
+      return true;
+    },
+    settleGatewayTopUp(id, outcome) {
+      const r = topUpRequests.find((x) => x.id === id);
+      if (!r || r.status !== "pending" || !currentUser || currentUser.id !== r.customer_id) return false;
+      if (outcome === "failed") {
+        setTopUpRequests((prev) => prev.map((x) => x.id === id && x.status === "pending" ? { ...x, status: "rejected", resolved_at: Date.now(), reject_reason: "No matching payment SMS within 10 minutes" } : x));
+        return true;
+      }
+      const ref = `gw:${id}`;
+      setTopUpRequests((prev) => prev.map((x) => x.id === id ? { ...x, status: "approved", resolved_at: Date.now() } : x));
+      if (transactions.some((t) => t.reference === ref)) return true;
+      setWallet(r.customer_id, r.store_id, r.amount);
+      setTransactions((prev) => prev.some((t) => t.reference === ref) ? prev : [{ id: uid("t"), store_id: r.store_id, customer_id: r.customer_id, type: "topup", amount: r.amount, description: `Lipa Namba top-up verified by gateway (ref ${r.reference})`, balance_before: walletFor(currentUser, r.store_id), tender: "mobile", created_at: Date.now(), reference: ref }, ...prev]);
+      adjustBank((b) => b + r.amount, r.store_id);
+      pushNotification({ store_id: r.store_id, user_id: r.customer_id, title: "Wallet topped up", body: `TZS ${r.amount.toLocaleString()} verified automatically (ref ${r.reference}).`, kind: "topup" });
       return true;
     },
     rejectTopUpRequest(id, reason) {
