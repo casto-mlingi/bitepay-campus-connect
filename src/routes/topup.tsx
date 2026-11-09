@@ -195,7 +195,7 @@ function TopUpPage() {
                   <div className="font-semibold">{formatTZS(r.amount)} <span className="text-xs text-muted-foreground font-normal">· ref {r.reference}</span></div>
                   <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.status === "approved" ? "Confirmed by the cashier — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : `Checking with the store\'s payment phone… ${Math.max(0, Math.ceil((r.created_at + 600000 - now) / 60000))} min left`}
+                    {r.status === "approved" ? "Confirmed by the cashier — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : `Checking with the store's payment phone… ${Math.max(0, Math.ceil((r.created_at + 600000 - now) / 60000))} min left`}
                   </div>
                   {r.status === "rejected" && r.reject_reason && (
                     <div className="text-xs text-destructive mt-0.5">Reason: {r.reject_reason}</div>
