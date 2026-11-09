@@ -1,5 +1,12 @@
 # Roadmap
 
+## Purchase vouchers and margin controls (Nov 9)
+- [ ] Add validated business-specific margin settings and pure costing rules.
+- [ ] Add multi-line supplier vouchers with one settlement/AP bill and compatible stock reads.
+- [ ] Show purchase-cost changes and optional retail selling-price updates.
+- [ ] Show evidenced per-dish costs and margin safety alerts.
+- [ ] Run regression tests and isolated phone/desktop purchase and settings checks without shared-data uploads.
+
 ## Retail & trade and account packages (Nov 1)
 - [x] Batch 1: Add shop, hardware, supermarket and wholesale families without changing hospitality defaults.
 - [x] Batch 2: Centralize business visibility and package eligibility; preserve all hospitality workflows and historical records.
