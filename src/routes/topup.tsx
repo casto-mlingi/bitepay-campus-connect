@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { LipaNumbersList } from "@/components/lipa-numbers";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { registerGatewayTopup, checkGatewayTopups } from "@/lib/gateway.functions";
 import { CheckCircle2, Info, Clock, XCircle, Hash, Smartphone, ReceiptText } from "lucide-react";
 import { useStore, formatTZS } from "@/lib/store";
 import { CustomerShell } from "@/components/customer-shell";
@@ -17,7 +19,10 @@ export const Route = createFileRoute("/topup")({
 const presets = [5000, 10000, 20000, 50000];
 
 function TopUpPage() {
-  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest, store } = useStore();
+  const { currentUser, sessionReady, topUpRequests, submitTopUpRequest, settleGatewayTopUp, store } = useStore();
+  const registerGw = useServerFn(registerGatewayTopup);
+  const checkGw = useServerFn(checkGatewayTopups);
+  const [now, setNow] = useState(Date.now());
   const activeStoreId = store?.id ?? null;
   const navigate = useNavigate();
   const [amount, setAmount] = useState<number>(10000);
@@ -35,6 +40,25 @@ function TopUpPage() {
     [topUpRequests, currentUser],
   );
 
+  const pendingIds = myRequests.filter((r) => r.status === "pending").map((r) => r.id).join(",");
+  useEffect(() => {
+    if (!pendingIds) return;
+    const ids = pendingIds.split(",");
+    let alive = true;
+    const tick = async () => {
+      const rows = await checkGw({ data: { ids } }).catch(() => []);
+      if (!alive) return;
+      for (const row of rows) {
+        if (row.status === "paid") settleGatewayTopUp(row.id, "paid");
+        else if (row.status === "failed") settleGatewayTopUp(row.id, "failed");
+      }
+    };
+    tick();
+    const t = setInterval(tick, 6000);
+    const c = setInterval(() => setNow(Date.now()), 1000);
+    return () => { alive = false; clearInterval(t); clearInterval(c); };
+  }, [pendingIds, checkGw, settleGatewayTopUp]);
+
   if (!currentUser) return null;
 
   const submit = () => {
@@ -43,6 +67,9 @@ function TopUpPage() {
     if (!reference.trim()) return setError("Enter the Lipa Namba / payment reference from your SMS.");
     const req = submitTopUpRequest({ amount, reference, note: note.trim() || undefined });
     if (!req) return setError("Could not send request. Try again.");
+    registerGw({ data: { id: req.id, store_id: req.store_id, customer_name: req.customer_name, customer_phone: req.customer_phone, amount: Math.round(req.amount), reference: req.reference } })
+      .then((r) => { if (r.status === "paid") settleGatewayTopUp(req.id, "paid"); })
+      .catch(() => {});
     setSent(true);
     setReference("");
     setNote("");
@@ -52,7 +79,7 @@ function TopUpPage() {
   return (
     <CustomerShell active="topup">
       <h1 className="text-2xl font-bold">Top-Up Request</h1>
-      <p className="text-muted-foreground text-sm">Pay via Lipa Namba or cash, then submit your reference below. A cashier will confirm and credit your wallet.</p>
+      <p className="text-muted-foreground text-sm">Pay via Lipa Namba or cash, then submit your reference below. Your wallet is credited automatically when the store's payment phone receives the SMS (within 10 minutes).</p>
 
       <div className="mt-5 rounded-2xl bg-gradient-to-br from-success to-emerald-600 text-white p-5">
         <div className="text-white/85 text-sm">Current balance</div>
@@ -140,7 +167,7 @@ function TopUpPage() {
             {sent && (
               <div className="mt-3 flex items-center gap-2 rounded-lg bg-success/10 text-success p-3">
                 <CheckCircle2 className="w-5 h-5" />
-                <span className="text-sm font-semibold">Request sent — waiting for cashier confirmation.</span>
+                <span className="text-sm font-semibold">Request sent — verifying with the store's payment phone.</span>
               </div>
             )}
 
@@ -168,7 +195,7 @@ function TopUpPage() {
                   <div className="font-semibold">{formatTZS(r.amount)} <span className="text-xs text-muted-foreground font-normal">· ref {r.reference}</span></div>
                   <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.status === "approved" ? "Confirmed by the cashier — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : "Waiting for a cashier to check your reference."}
+                    {r.status === "approved" ? "Confirmed by the cashier — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : `Checking with the store's payment phone… ${Math.max(0, Math.ceil((r.created_at + 600000 - now) / 60000))} min left`}
                   </div>
                   {r.status === "rejected" && r.reject_reason && (
                     <div className="text-xs text-destructive mt-0.5">Reason: {r.reject_reason}</div>

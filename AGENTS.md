@@ -39,3 +39,4 @@
 - Retail stock is derived from immutable opening quantities, purchase rows and signed sale/refund quantities in retail-stock, never a mutable display balance, so offline merges retain deductions.
 - New branches inherit verified account billing at the locked snapshot boundary; staff snapshot uploads cannot modify subscriptions or opening-stock anchors, preventing self-upgrades and stock inflation.
 - BytePay Gateway SMS payments live in gateway tables (devices with hashed secrets, provider+reference-unique SMS rows, expiring checkouts); sms-parser matching only auto-pays an exact amount with one unambiguous checkout so typos and duplicates never double-credit.
+- Customer Lipa Namba top-ups are mirrored to gateway_topups (10-minute window); the gateway phone polls /api/public/gateway/pending, SMS ingest settles exactly one matching top-up, and the customer's device credits the wallet idempotently (reference gw:<id>) so snapshot merges never double-credit.
