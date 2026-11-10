@@ -1,12 +1,13 @@
 import { DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR, marginStatus } from "@/lib/costing-rules";
 import { isRetail } from "@/lib/business-rules";
 import { TRADE_UNITS } from "@/lib/retail-stock";
+import { PACK_UNITS, normalizePack, packLabel } from "@/lib/pack-units";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil, Eye, History, Check, X, Ban } from "lucide-react";
-import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest, type StandardPortion } from "@/lib/store";
+import { Package, AlertTriangle, Plus, ChefHat, Calculator, Trash2, Utensils, UtensilsCrossed, ClipboardList, Phone, User, Pencil, Eye, History, Check, X, Ban, Boxes } from "lucide-react";
+import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDishRequest, type StandardPortion, type RawMaterial } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 import { ListFilter, useListFilter } from "@/components/list-filter";
