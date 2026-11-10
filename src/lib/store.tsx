@@ -452,6 +452,7 @@ export type RawMaterial = {
   /** Wholesale pack the supplier delivers in, e.g. crate of 25 bottles. */
   pack_unit?: TradeUnit;
   pack_size?: number;
+  converted_product_id?: string; // moved to Finished Goods; kept so old batches still resolve
 };
 
 export type BatchIngredient = { raw_id: string; qty: number };
