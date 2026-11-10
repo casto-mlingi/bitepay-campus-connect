@@ -1,4 +1,16 @@
 import { isBeverage } from "./business-rules";
+import { TRADE_UNITS, type TradeUnit } from "./retail-stock";
+/** Wholesale units a supplier delivers in; anything sold loose has no pack. */
+export const PACK_UNITS: TradeUnit[] = TRADE_UNITS.filter((u) => ["crate", "carton", "box", "bale", "packet", "bag", "jerrican"].includes(u));
+/** Supplier-pack fields survive only when a pack unit is chosen and it holds a whole number of pieces above 1. */
+export function normalizePack(pack_unit?: string | null, pack_size?: number | null): { pack_unit?: TradeUnit; pack_size?: number } {
+  const unit = PACK_UNITS.find((u) => u === (pack_unit ?? "").trim().toLowerCase());
+  const n = Math.round(Number(pack_size ?? 0) || 0);
+  if (!unit || !Number.isInteger(n) || n < 2) return {};
+  return { pack_unit: unit, pack_size: n };
+}
+/** Human label for the wholesale pack, e.g. "crate × 25". */
+export function packLabel(p?: PackProduct | null) { const n = packSize(p); return n ? `${p!.pack_unit} × ${n}` : "—"; }
 export type Department = "food" | "drinks" | "resale";
 export const DEPARTMENT_LABELS: Record<Department, string> = { food: "🍽️ Food", drinks: "🥤 Drinks", resale: "🛒 Resale" };
 type PackProduct = { pack_size?: number; pack_unit?: string; department?: Department; category?: string };

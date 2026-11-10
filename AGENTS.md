@@ -33,6 +33,7 @@
 - Witnessed shift closes are verified and frozen server-side; drawer float and safe handovers are locations of existing cash, not new revenue or expenses.
 - POS stock reservation (pos-stock) counts the active bill plus other open saved bills; real stock deductions still happen only at sale completion.
 - Products are archived (archived_at) instead of deleted so historical orders and receipts keep resolving.
+- Raw and product items carry optional supplier-pack fields (pack_unit/pack_size) normalized by pack-units.normalizePack, so buying by the crate converts to stocking pieces and an invalid pack is dropped rather than saved.
 - First-run starter raw materials/products are owner-selected in setup and inserted by completeSetup with zero stock; nothing is seeded automatically.
 - The owner launch checklist is derived from live records only (launch-guide), never stored.
 - Account packages, prices, owner-group store caps and business eligibility live in subscription-rules; existing hospitality tools remain grandfathered to avoid daily-work regressions.
