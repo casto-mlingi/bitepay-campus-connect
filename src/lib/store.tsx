@@ -2179,6 +2179,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const pack = normalizePack(r.pack_unit, r.pack_size);
       setRawMaterials((prev) => [...prev, { ...r, pack_unit: pack.pack_unit, pack_size: pack.pack_size, id: uid("r"), store_id: currentStoreId }]);
     },
+    // Editing must never invent stock: every number is taken as typed and an
+    // invalid pack (no unit, or fewer than 2 pieces) is dropped rather than saved.
+    updateRawMaterial(id, patch) {
+      if (!currentStoreId) return false;
+      const cur = rawMaterials.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!cur) return false;
+      const name = (patch.name ?? cur.name).trim();
+      if (!name) return false;
+      const num = (v: number | undefined, fallback: number) => (v == null || !Number.isFinite(v) || v < 0 ? fallback : v);
+      const pack = ("pack_unit" in patch || "pack_size" in patch)
+        ? normalizePack(patch.pack_unit, patch.pack_size)
+        : normalizePack(cur.pack_unit, cur.pack_size);
+      setRawMaterials((prev) => prev.map((r) => r.id === id && r.store_id === currentStoreId ? {
+        ...cur,
+        ...patch,
+        name,
+        stock: num(patch.stock, cur.stock),
+        avg_cost: Math.round(num(patch.avg_cost, cur.avg_cost)),
+        low_threshold: num(patch.low_threshold, cur.low_threshold),
+        pack_unit: pack.pack_unit,
+        pack_size: pack.pack_size,
+      } : r));
+      return true;
+    },
     // Editing an item must never invent stock: quantity, cost and pack fields are
     // taken as typed, and an invalid pack (no unit, or fewer than 2 pieces) is dropped.
     updateRawMaterial(id, patch) {
