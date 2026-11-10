@@ -80,103 +80,249 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 }
 
 /* ────────────── Raw Materials ────────────── */
-function RawMaterialsPanel() {
-  const { rawMaterials, addRawMaterial } = useStore();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", category: "", unit: "kg" as "kg" | "liters" | "pcs", stock: 0, avg_cost: 0, low_threshold: 10 });
+type RawUnit = "kg" | "liters" | "pcs";
+const RAW_UNITS: RawUnit[] = ["kg", "liters", "pcs"];
+const blankRaw = () => ({ name: "", category: "", unit: "kg" as RawUnit, stock: 0, avg_cost: 0, low_threshold: 10, pack_unit: "", pack_size: "" });
+const qty = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
+function StatTile({ label, value, tone }: { label: string; value: string; tone?: "ok" | "low" | "out" }) {
+  const toneCls = tone === "low" ? "text-warning" : tone === "out" ? "text-destructive" : "";
+  return (
+    <div className="bg-surface border rounded-2xl p-4">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
+      <div className={`mt-1 font-mono font-bold text-lg ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
+function RawStatusPill({ status }: { status: "ok" | "low" | "out" }) {
+  if (status === "out") return <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-destructive/10 text-destructive px-2 py-1 rounded-full"><AlertTriangle className="w-3 h-3" /> Out of stock</span>;
+  if (status === "low") return <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-warning/15 text-warning px-2 py-1 rounded-full"><AlertTriangle className="w-3 h-3" /> Low stock</span>;
+  return <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-success/10 text-success px-2 py-1 rounded-full">In stock</span>;
+}
+
+function RawMaterialsPanel() {
+  const { rawMaterials, addRawMaterial, updateRawMaterial } = useStore();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(blankRaw());
+  const { filter, setFilter, match } = useListFilter();
+
+  const rows = useMemo(() => rawMaterials.map((r) => {
+    const value = Math.round(r.stock * r.avg_cost);
+    const out = r.stock <= 0;
+    const low = !out && r.stock <= r.low_threshold;
+    return { r, value, status: (out ? "out" : low ? "low" : "ok") as "ok" | "low" | "out" };
+  }), [rawMaterials]);
+
+  const totals = useMemo(() => ({
+    value: rows.reduce((s, x) => s + x.value, 0),
+    low: rows.filter((x) => x.status === "low").length,
+    out: rows.filter((x) => x.status === "out").length,
+  }), [rows]);
+
+  const shown = rows.filter((x) => match({ text: `${x.r.name} ${x.r.category}`, status: x.status }));
+
+  const pack = normalizePack(form.pack_unit, Number(form.pack_size) || 0);
+  const packMissing = !!form.pack_unit && !pack.pack_size;
+
+  const reset = () => { setForm(blankRaw()); setEditingId(null); };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
-    addRawMaterial(form);
-    setForm({ name: "", category: "", unit: "kg", stock: 0, avg_cost: 0, low_threshold: 10 });
+    if (!form.name.trim() || packMissing) return;
+    const data = { name: form.name, category: form.category, unit: form.unit, stock: Number(form.stock) || 0, avg_cost: Number(form.avg_cost) || 0, low_threshold: Number(form.low_threshold) || 0, pack_unit: pack.pack_unit, pack_size: pack.pack_size };
+    if (editingId) updateRawMaterial(editingId, data); else addRawMaterial(data);
+    reset();
     setShowForm(false);
+  };
+  const startEdit = (r: RawMaterial) => {
+    setForm({ name: r.name, category: r.category, unit: r.unit, stock: r.stock, avg_cost: r.avg_cost, low_threshold: r.low_threshold, pack_unit: r.pack_unit ?? "", pack_size: r.pack_size ? String(r.pack_size) : "" });
+    setEditingId(r.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">{rawMaterials.length} items tracked</div>
-        <button onClick={() => setShowForm((v) => !v)} className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-primary/90">
-          <Plus className="w-4 h-4" /> Add Item
-        </button>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatTile label="Items tracked" value={String(rows.length)} />
+        <StatTile label="Stock value" value={formatTZS(totals.value)} />
+        <StatTile label="Low stock" value={String(totals.low)} tone={totals.low ? "low" : undefined} />
+        <StatTile label="Out of stock" value={String(totals.out)} tone={totals.out ? "out" : undefined} />
       </div>
 
+      <ListFilter
+        filter={filter}
+        onChange={setFilter}
+        showPeriod={false}
+        placeholder="Search items or categories…"
+        statuses={[{ value: "ok", label: "In stock" }, { value: "low", label: "Low stock" }, { value: "out", label: "Out of stock" }]}
+        right={
+          <button onClick={() => { reset(); setShowForm((v) => !v); }} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 h-10 rounded-xl text-sm font-semibold hover:opacity-90">
+            <Plus className="w-4 h-4" /> Add Item
+          </button>
+        }
+      />
+
       {showForm && (
-        <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">
-          <label className="col-span-2 text-sm">
-            <div className="text-muted-foreground mb-1">Item Name</div>
-            <input required placeholder="e.g. Rice" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </label>
-          <label className="text-sm">
-            <div className="text-muted-foreground mb-1">Category</div>
-            <input placeholder="e.g. Grains" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-          </label>
-          <label className="text-sm">
-            <div className="text-muted-foreground mb-1">Unit</div>
-            <select className="w-full px-3 py-2 rounded-lg border bg-background" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as "kg" | "liters" | "pcs" })}>
-              <option value="kg">kg</option>
-              <option value="liters">liters</option>
-              <option value="pcs">pcs</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <div className="text-muted-foreground mb-1">Stock</div>
-            <input type="number" step="any" inputMode="decimal" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
-          </label>
-          <label className="text-sm">
-            <div className="text-muted-foreground mb-1">Cost / Unit (TZS)</div>
-            <input type="number" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.avg_cost} onChange={(e) => setForm({ ...form, avg_cost: Number(e.target.value) })} />
-          </label>
-          <label className="col-span-2 text-sm">
-            <div className="text-muted-foreground mb-1">Low Stock Threshold</div>
-            <input type="number" step="any" inputMode="decimal" className="w-full px-3 py-2 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
-          </label>
-          <button className="col-span-2 md:col-span-1 bg-foreground text-background rounded-lg font-semibold text-sm py-2 self-end">Save</button>
+        <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-sm">{editingId ? "Edit raw material" : "New raw material"}</h2>
+            <button type="button" onClick={() => { reset(); setShowForm(false); }} aria-label="Close form" className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <label className="col-span-2 text-sm">
+              <div className="text-muted-foreground mb-1">Item Name</div>
+              <input required placeholder="e.g. Rice" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </label>
+            <label className="col-span-2 md:col-span-2 text-sm">
+              <div className="text-muted-foreground mb-1">Category</div>
+              <input placeholder="e.g. Grains" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+            </label>
+            <label className="col-span-2 md:col-span-2 text-sm">
+              <div className="text-muted-foreground mb-1">Stocking unit</div>
+              <select className="w-full h-11 px-3 rounded-lg border bg-background" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as RawUnit })}>
+                {RAW_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="border-t pt-3">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Stock &amp; cost</div>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <label className="text-sm">
+                <div className="text-muted-foreground mb-1">Stock ({form.unit})</div>
+                <input type="number" step="any" inputMode="decimal" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
+              </label>
+              <label className="text-sm">
+                <div className="text-muted-foreground mb-1">Cost / {form.unit} (TZS)</div>
+                <input type="number" inputMode="numeric" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.avg_cost} onChange={(e) => setForm({ ...form, avg_cost: Number(e.target.value) })} />
+              </label>
+              <label className="col-span-2 text-sm">
+                <div className="text-muted-foreground mb-1">Low stock alert at</div>
+                <input type="number" step="any" inputMode="decimal" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.low_threshold} onChange={(e) => setForm({ ...form, low_threshold: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+
+          <div className="border-t pt-3">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Supplier pack <span className="normal-case font-normal">(optional — buy by the crate, sell by the piece)</span></div>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <label className="col-span-2 text-sm">
+                <div className="text-muted-foreground mb-1">Pack type</div>
+                <select aria-label="Supplier pack" className="w-full h-11 px-3 rounded-lg border bg-background" value={form.pack_unit} onChange={(e) => setForm({ ...form, pack_unit: e.target.value })}>
+                  <option value="">None — bought loose</option>
+                  {PACK_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </label>
+              <label className="col-span-2 text-sm">
+                <div className="text-muted-foreground mb-1">Pieces per {form.pack_unit || "pack"}</div>
+                <input aria-label="Pieces per pack" type="number" min={0} inputMode="numeric" placeholder="e.g. 25" disabled={!form.pack_unit} className="w-full h-11 px-3 rounded-lg border bg-background disabled:opacity-50" value={form.pack_size} onChange={(e) => setForm({ ...form, pack_size: e.target.value })} />
+              </label>
+              <div className="col-span-2 text-xs text-muted-foreground self-end pb-3">
+                {pack.pack_size
+                  ? <span className="inline-flex items-center gap-1 font-semibold text-primary"><Boxes className="w-3.5 h-3.5" /> 1 {pack.pack_unit} = {pack.pack_size} {form.unit} · buying 2 adds {pack.pack_size * 2} {form.unit}</span>
+                  : packMissing
+                    ? <span className="text-destructive font-semibold">Enter how many pieces are inside one {form.pack_unit}.</span>
+                    : <span>Leave empty if this item is bought loose (e.g. rice by the kg).</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 h-10 rounded-lg border text-sm font-semibold">Cancel</button>
+            <button type="submit" className="px-4 h-10 bg-foreground text-background rounded-lg font-semibold text-sm">{editingId ? "Save changes" : "Save item"}</button>
+          </div>
         </form>
       )}
 
-      <div className="bg-surface border rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Unit</th>
-                <th className="px-4 py-3">Stock</th>
-                <th className="px-4 py-3">Avg Cost/Unit</th>
-                <th className="px-4 py-3">Stock Value</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rawMaterials.map((r) => {
-                const low = r.stock <= r.low_threshold;
-                return (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-4 py-3 font-semibold">{r.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{r.category}</td>
-                    <td className="px-4 py-3">{r.unit}</td>
-                    <td className="px-4 py-3 font-mono">{r.stock.toFixed(1)} {r.unit}</td>
-                    <td className="px-4 py-3 font-mono">{formatTZS(r.avg_cost)}</td>
-                    <td className="px-4 py-3 font-mono">{formatTZS(Math.round(r.stock * r.avg_cost))}</td>
-                    <td className="px-4 py-3">
-                      {low ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                          <AlertTriangle className="w-3 h-3" /> Low Stock
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">In Stock</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {rows.length === 0 ? (
+        <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">
+          No raw materials yet. Add your first item — you can buy it loose, or by the crate, carton or box.
         </div>
-      </div>
+      ) : shown.length === 0 ? (
+        <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">No items match this filter.</div>
+      ) : (
+        <>
+          {/* Desktop ledger */}
+          <div className="hidden md:block bg-surface border rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-4 py-3">Bought as</th>
+                    <th className="px-4 py-3 text-right">Stock</th>
+                    <th className="px-4 py-3 text-right">Avg cost / unit</th>
+                    <th className="px-4 py-3 text-right">Stock value</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map(({ r, value, status }) => (
+                    <tr key={r.id} className="border-t hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">{r.name}</div>
+                        <div className="text-xs text-muted-foreground">{r.category || "Uncategorised"}</div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{packLabel(r)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{qty(r.stock)} {r.unit}</td>
+                      <td className="px-4 py-3 text-right font-mono">{formatTZS(r.avg_cost)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold">{formatTZS(value)}</td>
+                      <td className="px-4 py-3"><RawStatusPill status={status} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <button type="button" onClick={() => startEdit(r)} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-semibold hover:bg-muted"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t bg-muted/40 font-semibold">
+                    <td className="px-4 py-3" colSpan={4}>{shown.length} of {rows.length} items</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatTZS(shown.reduce((s, x) => s + x.value, 0))}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Phone ledger */}
+          <div className="md:hidden space-y-3">
+            {shown.map(({ r, value, status }) => (
+              <div key={r.id} className="bg-surface border rounded-2xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold truncate">{r.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{r.category || "Uncategorised"}</div>
+                  </div>
+                  <RawStatusPill status={status} />
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Stock</div>
+                    <div className="font-mono font-bold text-sm">{qty(r.stock)} {r.unit}</div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg cost</div>
+                    <div className="font-mono font-bold text-sm">{formatTZS(r.avg_cost)}</div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Value</div>
+                    <div className="font-mono font-bold text-sm">{formatTZS(value)}</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><Boxes className="w-3.5 h-3.5" /> {packLabel(r)}</span>
+                  <button type="button" onClick={() => startEdit(r)} className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border text-sm font-semibold"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
