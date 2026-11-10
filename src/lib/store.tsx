@@ -310,6 +310,9 @@ export type Product = {
   updated_at?: number;
   archived_at?: number; // hidden from POS/menu; kept so past sales still resolve
   unit?: TradeUnit;
+  pack_unit?: TradeUnit; // wholesale pack bought from suppliers, e.g. crate
+  pack_size?: number; // stocking pieces inside one pack, e.g. 25 bottles
+  department?: "food" | "drinks" | "resale";
   sku?: string;
   barcode?: string;
   cost_price?: number;
@@ -2371,7 +2374,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const retailMode = isRetail(store?.business_type);
       const resolved = lines.map((l) => ({
         line: l,
-        product: retailMode ? products.find((p) => p.id === l.item_id && p.store_id === currentStoreId && !p.archived_at) : undefined,
+        product: products.find((p) => p.id === l.item_id && p.store_id === currentStoreId && !p.archived_at),
         raw: retailMode ? undefined : rawMaterials.find((r) => r.id === l.item_id && r.store_id === currentStoreId),
       }));
       if (resolved.some((r) => !r.product && !r.raw)) return null;
@@ -2386,6 +2389,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         return cur;
       }));
+      // Hospitality resale goods (drinks, cigarettes) become ready-to-sell stock batches with no kitchen ingredients.
+      if (!retailMode) {
+        const resale: CookingBatch[] = resolved.filter((x) => x.product && Number.isInteger(x.line.qty) && x.line.qty > 0).map((x, i) => ({
+          id: `B-${when}-${i}`, store_id: currentStoreId, product_id: x.product!.id, ingredients: [], labor_cost: 0, plates: x.line.qty,
+          raw_cost: x.line.total_cost, unit_cost: Math.round(x.line.total_cost / x.line.qty), plates_remaining: x.line.qty, created_at: when,
+        }));
+        if (resale.length) setBatches((prev) => [...resale, ...prev]);
+      }
       const priceUpdates = new Map<string, number>();
       for (const x of resolved) if (x.product && x.line.new_price != null && Number.isSafeInteger(x.line.new_price) && x.line.new_price > 0) priceUpdates.set(x.product.id, x.line.new_price);
       if (priceUpdates.size) setProducts((prev) => prev.map((p) => priceUpdates.has(p.id) ? { ...p, price: priceUpdates.get(p.id)!, updated_at: when } : p));

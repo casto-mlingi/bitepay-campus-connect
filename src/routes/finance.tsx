@@ -1,3 +1,4 @@
+import { toPieces, packSize } from "@/lib/pack-units";
 import { isRetail } from "@/lib/business-rules";
 import { retailStock, retailUnitCost } from "@/lib/retail-stock";
 import { businessFeatures } from "@/lib/subscription-rules";
@@ -471,8 +472,8 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
   );
 }
 
-type VoucherRow = { key: string; item_id: string; qty: number; total_cost: number; updatePrice: boolean };
-const blankRow = (): VoucherRow => ({ key: Math.random().toString(36).slice(2), item_id: "", qty: 1, total_cost: 0, updatePrice: true });
+type VoucherRow = { key: string; item_id: string; qty: number; total_cost: number; updatePrice: boolean; inPacks: boolean };
+const blankRow = (): VoucherRow => ({ key: Math.random().toString(36).slice(2), item_id: "", qty: 1, total_cost: 0, updatePrice: true, inPacks: true });
 
 function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
   const { rawMaterials, purchases, cash, bank, vendors, products, store, recordPurchaseVoucher } = useStore();
@@ -487,9 +488,11 @@ function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useSto
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [msg, setMsg] = useState<string | null>(null);
 
-  const items = retail
-    ? products.filter((p) => !p.archived_at).map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases), price: p.price }))
-    : rawMaterials.map((r) => ({ id: r.id, name: r.name, unit: r.unit, avg_cost: r.avg_cost, price: 0 }));
+  const productItems = products.filter((p) => !p.archived_at).map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases), price: p.price, pack_size: p.pack_size, pack_unit: p.pack_unit, resale: true }));
+  const rawItems = rawMaterials.map((r) => ({ id: r.id, name: r.name, unit: r.unit as string, avg_cost: r.avg_cost, price: 0, pack_size: undefined as number | undefined, pack_unit: undefined as string | undefined, resale: false }));
+  // Hospitality buys both kitchen ingredients and ready-to-sell goods such as drinks and cigarettes.
+  const items = retail ? productItems : [...rawItems, ...productItems];
+  const pieces = (r: VoucherRow) => toPieces(r.qty, items.find((i) => i.id === r.item_id), r.inPacks);
   const lastCost = (id: string) => {
     const last = purchases.find((p) => (p.product_id ?? p.raw_id) === id && p.qty > 0);
     return last ? Math.round(last.total_cost / last.qty) : items.find((i) => i.id === id)?.avg_cost ?? 0;
@@ -502,11 +505,12 @@ function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useSto
     e.preventDefault();
     const name = vendor?.name ?? supplier;
     const lines = filled.map((r) => {
-      const unit = r.qty > 0 ? Math.round(r.total_cost / r.qty) : 0;
+      const qty = pieces(r);
+      const unit = qty > 0 ? Math.round(r.total_cost / qty) : 0;
       const item = items.find((i) => i.id === r.item_id);
       const suggested = suggestSellingPrice(unit, markup);
-      const changed = retail && item && costChangePercent(lastCost(r.item_id), unit) !== 0;
-      return { item_id: r.item_id, qty: r.qty, total_cost: r.total_cost, ...(changed && r.updatePrice && suggested > 0 && suggested !== item.price ? { new_price: suggested } : {}) };
+      const changed = item?.resale && costChangePercent(lastCost(r.item_id), unit) !== 0;
+      return { item_id: r.item_id, qty, total_cost: r.total_cost, ...(changed && r.updatePrice && suggested > 0 && suggested !== item.price ? { new_price: suggested } : {}) };
     });
     if (voucherTotal(lines) == null) { setMsg("Check every line: pick an item, quantity above 0 and a total cost."); return; }
     const res = recordPurchaseVoucher({ supplier: name, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7, payment_method: method, invoice_no: invoiceNo, lines });
@@ -555,20 +559,25 @@ function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useSto
         <div className="space-y-3">
           {rows.map((r, idx) => {
             const item = items.find((i) => i.id === r.item_id);
-            const unit = r.qty > 0 ? Math.round(r.total_cost / r.qty) : 0;
+            const qty = pieces(r);
+            const pack = packSize(item);
+            const unit = qty > 0 ? Math.round(r.total_cost / qty) : 0;
             const prev = r.item_id ? lastCost(r.item_id) : 0;
             const change = r.item_id && r.total_cost > 0 ? costChangePercent(prev, unit) : null;
             const suggested = suggestSellingPrice(unit, markup);
             return (
               <div key={r.key} className="border rounded-xl p-3 bg-background space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
-                  <label className="col-span-2 sm:col-span-5 text-xs font-semibold">{retail ? "Product" : "Raw material"} {idx + 1}
+                  <label className="col-span-2 sm:col-span-5 text-xs font-semibold">{retail ? "Product" : "Item"} {idx + 1}
                     <select value={r.item_id} onChange={(e) => patch(r.key, { item_id: e.target.value })} className="mt-1 w-full h-11 px-3 rounded-lg border bg-background text-sm font-normal">
                       <option value="">Select…</option>
-                      {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit}) — avg {formatTZS(i.avg_cost)}</option>)}
+                      {retail ? items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit}) — avg {formatTZS(i.avg_cost)}</option>) : <>
+                        <optgroup label="Kitchen raw materials">{rawItems.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit}) — avg {formatTZS(i.avg_cost)}</option>)}</optgroup>
+                        <optgroup label="Ready to sell (drinks, cigarettes…)">{productItems.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}</optgroup>
+                      </>}
                     </select>
                   </label>
-                  <label className="sm:col-span-2 text-xs font-semibold">Quantity
+                  <label className="sm:col-span-2 text-xs font-semibold">{pack && r.inPacks ? `Quantity (${item?.pack_unit ?? "pack"}s)` : "Quantity"}
                     <input type="number" min={0.001} step="any" inputMode="decimal" value={r.qty} onChange={(e) => patch(r.key, { qty: Number(e.target.value) })} className="mt-1 w-full h-11 px-3 rounded-lg border bg-background text-sm font-normal" />
                   </label>
                   <label className="sm:col-span-3 text-xs font-semibold">Line total (TZS)
@@ -579,10 +588,19 @@ function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useSto
                     {rows.length > 1 && <button type="button" aria-label={`Remove line ${idx + 1}`} onClick={() => setRows((x) => x.filter((y) => y.key !== r.key))} className="p-2 rounded-lg border text-destructive"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
+                {pack && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-1">
+                      <button type="button" onClick={() => patch(r.key, { inPacks: true })} className={`px-3 py-1.5 rounded-lg border font-semibold ${r.inPacks ? "bg-foreground text-background border-foreground" : "bg-background"}`}>{item?.pack_unit ?? "Pack"} of {pack}</button>
+                      <button type="button" onClick={() => patch(r.key, { inPacks: false })} className={`px-3 py-1.5 rounded-lg border font-semibold ${!r.inPacks ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Single {item?.unit ?? "pcs"}</button>
+                    </div>
+                    {r.inPacks && <span className="text-muted-foreground">Adds {qty} {item?.unit ?? "pcs"}{unit > 0 ? ` @ ${formatTZS(unit)} each` : ""}</span>}
+                  </div>
+                )}
                 {change != null && change !== 0 && (
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className={`px-2 py-0.5 rounded-full font-semibold ${change > 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>Cost {change > 0 ? "up" : "down"} {change > 0 ? "+" : ""}{change}% (was {formatTZS(prev)})</span>
-                    {retail && item && suggested > 0 && suggested !== item.price && (
+                    {item?.resale && suggested > 0 && suggested !== item.price && (
                       <label className="flex items-center gap-2">
                         <input type="checkbox" checked={r.updatePrice} onChange={(e) => patch(r.key, { updatePrice: e.target.checked })} />
                         Update selling price {formatTZS(item.price)} → <b>{formatTZS(suggested)}</b> ({marginPercent(suggested, unit)}% margin)
