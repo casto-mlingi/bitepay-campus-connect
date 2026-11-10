@@ -25,10 +25,16 @@ function TopupsDesk() {
   const [msg, setMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [verified, setVerified] = useState<Record<string, string>>({});
+  const [mCust, setMCust] = useState("");
+  const [mRef, setMRef] = useState("");
+  const [mAmt, setMAmt] = useState("");
+  const [mMsg, setMMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => { if (sessionReady && (!currentUser || currentUser.role !== "staff")) navigate({ to: "/" }); }, [sessionReady, currentUser, navigate]);
 
-  const pending = useMemo(() => topUpRequests.filter((r) => r.status === "pending"), [topUpRequests]);
+  const pending = useMemo(() => topUpRequests.filter((r) => r.status === "pending").sort((a, b) => (b.assist_requested_at ?? 0) - (a.assist_requested_at ?? 0)), [topUpRequests]);
+  const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);
   const log = useMemo(() => topUpRequests.filter((r) => r.status !== "pending").sort((a, b) => (b.resolved_at ?? 0) - (a.resolved_at ?? 0)).slice(0, 50), [topUpRequests]);
   const nameOf = (id?: string) => profiles.find((p) => p.id === id)?.full_name ?? "Staff";
 
@@ -37,8 +43,20 @@ function TopupsDesk() {
 
   const confirm = (id: string) => {
     const r = pending.find((x) => x.id === id); if (!r) return;
-    const res = staffTopUp({ customerId: r.customer_id, amount: r.amount, tender: "mobile", reference: r.reference, pin, requestId: r.id });
-    setMsg({ id, ok: res.ok, text: res.ok ? `Confirmed — ${formatTZS(r.amount)} added to ${r.customer_name}'s wallet.` : res.reason });
+    const amt = Math.round(Number(verified[id] ?? r.amount));
+    if (!Number.isSafeInteger(amt) || amt <= 0) return setMsg({ id, ok: false, text: "Enter the amount shown on the till SMS." });
+    const res = staffTopUp({ customerId: r.customer_id, amount: amt, tender: "mobile", reference: r.reference, pin, requestId: r.id });
+    setMsg({ id, ok: res.ok, text: res.ok ? `Confirmed — ${formatTZS(amt)} added to ${r.customer_name}'s wallet.` : res.reason });
+  };
+  const manualVerify = () => {
+    const amt = Math.round(Number(mAmt));
+    const ref = mRef.trim().toUpperCase();
+    if (!mCust) return setMMsg({ ok: false, text: "Choose the customer." });
+    if (!ref) return setMMsg({ ok: false, text: "Enter the receipt number from the till SMS." });
+    if (!Number.isSafeInteger(amt) || amt <= 0) return setMMsg({ ok: false, text: "Enter the amount shown on the till SMS." });
+    const res = staffTopUp({ customerId: mCust, amount: amt, tender: "mobile", reference: ref, pin });
+    setMMsg({ ok: res.ok, text: res.ok ? `Verified — ${formatTZS(amt)} added (receipt ${ref}).` : res.reason });
+    if (res.ok) { setMRef(""); setMAmt(""); }
   };
   const reject = (id: string) => {
     if (!reason.trim()) return setMsg({ id, ok: false, text: "Enter a reason so the customer knows what to fix." });
@@ -59,6 +77,23 @@ function TopupsDesk() {
         </div>
       )}
 
+      {allowed && (
+        <section className="mt-6 bg-surface border rounded-2xl p-4">
+          <h2 className="text-lg font-bold">Manual receipt verification</h2>
+          <p className="text-xs text-muted-foreground">Check the receipt number and amount on the till SMS, then credit the customer.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-4">
+            <select value={mCust} onChange={(e) => setMCust(e.target.value)} className="h-10 rounded-md border bg-background px-2 text-sm sm:col-span-2">
+              <option value="">Choose customer…</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.full_name} · {c.phone}</option>)}
+            </select>
+            <Input value={mRef} onChange={(e) => setMRef(e.target.value.toUpperCase())} placeholder="Receipt no. e.g. DK9J93CK51" className="font-mono" />
+            <Input type="number" inputMode="numeric" value={mAmt} onChange={(e) => setMAmt(e.target.value)} placeholder="Amount on SMS" />
+          </div>
+          <Button className="mt-3" onClick={manualVerify} disabled={!pin}><CheckCircle2 className="w-4 h-4 mr-1" /> Verify & credit wallet</Button>
+          {mMsg && <div className={`mt-2 text-sm font-medium ${mMsg.ok ? "text-success" : "text-destructive"}`}>{mMsg.text}</div>}
+        </section>
+      )}
+
       <section className="mt-6">
         <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><Clock className="w-5 h-5 text-warning" /> Waiting ({pending.length})</h2>
         {pending.length === 0 ? (
@@ -72,6 +107,7 @@ function TopupsDesk() {
                     <div className="font-bold text-lg">{formatTZS(r.amount)}</div>
                     <div className="text-sm">{r.customer_name} · {r.customer_phone}</div>
                     <div className="text-sm font-mono">Ref {r.reference}</div>
+                    {r.assist_requested_at && <div className="mt-1 inline-block rounded bg-warning/15 text-warning px-2 py-0.5 text-xs font-semibold">Customer asked for help · verify manually</div>}
                     {r.note && <div className="text-xs text-muted-foreground">“{r.note}”</div>}
                     <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                   </div>
@@ -84,7 +120,10 @@ function TopupsDesk() {
                     <Button variant="ghost" onClick={() => setRejecting(null)}>Cancel</Button>
                   </div>
                 ) : (
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground">Amount on SMS
+                      <Input type="number" inputMode="numeric" className="h-9 w-28" value={verified[r.id] ?? String(r.amount)} onChange={(e) => setVerified((v) => ({ ...v, [r.id]: e.target.value }))} />
+                    </label>
                     <Button onClick={() => confirm(r.id)} disabled={!pin}><CheckCircle2 className="w-4 h-4 mr-1" /> Confirm</Button>
                     <Button variant="outline" onClick={() => { setRejecting(r.id); setReason(""); }}><XCircle className="w-4 h-4 mr-1" /> Reject</Button>
                   </div>

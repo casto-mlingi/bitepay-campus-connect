@@ -187,6 +187,8 @@ export type TopUpRequest = {
   resolved_at?: number;
   resolved_by?: string;
   reject_reason?: string;
+  /** Customer asked a cashier to verify this receipt manually. */
+  assist_requested_at?: number;
 };
 
 /** ---- Pay later (debtor) --------------------------------------------------
@@ -696,6 +698,7 @@ type Ctx = {
   submitTopUpRequest: (input: { amount: number; reference: string; note?: string }) => TopUpRequest | null;
   creditMobileTopUp: (input: { order_id: string; amount: number; network: string }) => boolean;
   rejectTopUpRequest: (id: string, reason: string) => void;
+  requestTopUpAssist: (id: string) => boolean;
   /** Gateway phone verified this request's SMS on the server: approve and credit once. */
   settleGatewayTopUp: (id: string, outcome: "paid" | "failed") => boolean;
   setStaffPin: (currentPin: string | null, newPin: string) => Ok | Fail;
@@ -1789,7 +1792,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const r = topUpRequests.find((x) => x.id === id);
       if (!r || r.status !== "pending" || !currentUser || currentUser.id !== r.customer_id) return false;
       if (outcome === "failed") {
-        setTopUpRequests((prev) => prev.map((x) => x.id === id && x.status === "pending" ? { ...x, status: "rejected", resolved_at: Date.now(), reject_reason: "No matching payment SMS within 10 minutes" } : x));
+        setTopUpRequests((prev) => prev.map((x) => x.id === id && x.status === "pending" && !x.assist_requested_at ? { ...x, status: "rejected", resolved_at: Date.now(), reject_reason: "No matching payment SMS within 10 minutes" } : x));
         return true;
       }
       const ref = `gw:${id}`;
@@ -1799,6 +1802,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTransactions((prev) => prev.some((t) => t.reference === ref) ? prev : [{ id: uid("t"), store_id: r.store_id, customer_id: r.customer_id, type: "topup", amount: r.amount, description: `Lipa Namba top-up verified by gateway (ref ${r.reference})`, balance_before: walletFor(currentUser, r.store_id), tender: "mobile", created_at: Date.now(), reference: ref }, ...prev]);
       adjustBank((b) => b + r.amount, r.store_id);
       pushNotification({ store_id: r.store_id, user_id: r.customer_id, title: "Wallet topped up", body: `TZS ${r.amount.toLocaleString()} verified automatically (ref ${r.reference}).`, kind: "topup" });
+      return true;
+    },
+    requestTopUpAssist(id) {
+      const r = topUpRequests.find((x) => x.id === id);
+      if (!r || r.status === "approved" || !currentUser || currentUser.id !== r.customer_id) return false;
+      const now = Date.now();
+      setTopUpRequests((prev) => prev.map((x) => x.id === id && x.status !== "approved" ? { ...x, status: "pending", assist_requested_at: now, reject_reason: undefined, resolved_at: undefined } : x));
+      const staffIds = profiles.filter((p) => p.role === "staff" && p.store_id === r.store_id).map((p) => p.id);
+      if (staffIds.length) setNotifications((prev) => [
+        ...staffIds.map((sid) => ({ id: uid("n"), store_id: r.store_id, user_id: sid, title: "Customer needs top-up verification", body: `${r.customer_name} (${r.customer_phone}) · receipt ${r.reference} · TZS ${r.amount.toLocaleString()}. Verify manually on Top-ups.`, kind: "topup" as const, created_at: now, read: false })),
+        ...prev,
+      ]);
       return true;
     },
     rejectTopUpRequest(id, reason) {
