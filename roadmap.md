@@ -87,3 +87,7 @@
 - [x] 7-step first setup with raw materials and menu starter pack
 - [x] Owner launch checklist and installable-app icons
 - [ ] Generate APK at pwabuilder.com after publishing (owner action)
+
+## New requests (Nov 10)
+- [x] Supplier pack (crate/carton/box…) and pieces-per-pack on Raw Materials, edit action included
+- [x] Raw Materials screen redesigned: summary tiles, search + status filter, ledger table, phone cards
