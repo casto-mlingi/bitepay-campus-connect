@@ -4,6 +4,17 @@ import { buildLedger, isBalanced, saleEntry, trialBalance } from "./accounting";
 
 const base = { purchases: [], expenses: [], cogs: 0, walletLiabilities: 0, inventoryValue: 0 };
 
+it("sold-stock costs post once at sale dates and refunds reverse the same cost", () => {
+  const entries = buildLedger({ ...base, orders: [], cash: 0, bank: 0, cogs: 0, costEntries: [{ id: "s", date: 2, amount: 250000 }, { id: "r", date: 3, amount: -250000 }] });
+  const sale = entries.find((e) => e.id === "cogs-s");
+  const refund = entries.find((e) => e.id === "cogs-r");
+  assert.equal(sale?.date, 2);
+  assert.equal(sale?.lines.find((l) => l.account === "5000")?.debit, 250000);
+  assert.equal(refund?.lines.find((l) => l.account === "5000")?.credit, 250000);
+  assert.equal(entries.find((e) => e.id === "cogs"), undefined);
+  assert.ok(entries.every(isBalanced));
+});
+
 it("5,000 saved change clears 3,000 existing debt and leaves 2,000 credit", () => {
   const e = saleEntry({ id: "change-debt", created_at: 1, total_amount: 10000, cash_paid: 10000, cash_delta: 15000, bank_delta: 0, change_saved: 5000, change_debt_settled: 3000, payment_status: "paid" });
   assert.equal(e.lines.find((l) => l.account === "1100")?.credit, 3000);

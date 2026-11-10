@@ -1,5 +1,10 @@
 # Roadmap
 
+## Finance costing and navigation (Nov 10)
+- [ ] Recognize hospitality COGS only for evidenced sales, preserve unsold inventory and reverse refunded costs.
+- [ ] Group all Finance tools into Overview, Money In & Out, and Reports & Books without removing workflows.
+- [ ] Verify costing regressions, report consistency, and phone/desktop navigation without shared-data writes.
+
 ## Purchase vouchers and margin controls (Nov 9)
 - [x] Add validated business-specific margin settings and pure costing rules.
 - [x] Add multi-line supplier vouchers with one settlement/AP bill and compatible stock reads.
