@@ -1,3 +1,4 @@
+import { DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR, marginStatus } from "@/lib/costing-rules";
 import { isRetail } from "@/lib/business-rules";
 import { TRADE_UNITS } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
@@ -337,8 +338,15 @@ function BatchesPanel() {
   const {
     rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages,
     createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
-    setProductPortionMappings, closeCookedCommodityBatch, logCookedCommodityWaste,
+    setProductPortionMappings, closeCookedCommodityBatch, logCookedCommodityWaste, store,
   } = useStore();
+  const target = store?.food_margin_percentage ?? DEFAULT_FOOD_MARGIN;
+  const floor = store?.food_margin_floor_percentage ?? DEFAULT_FOOD_FLOOR;
+  // Evidence only: cost per plate comes from each dish's most recent cooking batch.
+  const dishMargins = products.filter((p) => !p.archived_at).flatMap((p) => {
+    const latest = batches.filter((b) => b.product_id === p.id && b.plates > 0).sort((a, b) => b.created_at - a.created_at)[0];
+    return latest ? [{ product: p, cost: latest.unit_cost, ...marginStatus(p.price, latest.unit_cost, target, floor) }] : [];
+  });
   const [wasteFor, setWasteFor] = useState<string | null>(null);
   const [wasteQty, setWasteQty] = useState("");
   const [wasteReason, setWasteReason] = useState("Spoiled");
@@ -387,6 +395,23 @@ function BatchesPanel() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
+      <section className="lg:col-span-5 border bg-surface rounded-xl p-5 space-y-3">
+        <div>
+          <h2 className="font-bold text-lg">Dish margins</h2>
+          <p className="text-sm text-muted-foreground">Cost per plate from the latest cooking batch. Target {target}%, safety floor {floor}%.</p>
+        </div>
+        {dishMargins.length === 0 ? <p className="text-sm text-muted-foreground">Log a cooking batch to see the cost and margin of each dish.</p> : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {dishMargins.map((d) => (
+              <div key={d.product.id} className={`rounded-xl border p-3 ${d.status === "critical" ? "border-destructive bg-destructive/5" : d.status === "squeezed" ? "border-warning bg-warning/10" : "border-primary/30 bg-primary/5"}`}>
+                <div className="flex justify-between gap-2 font-semibold"><span>{d.product.emoji} {d.product.name}</span><span>{d.percent}%</span></div>
+                <div className="text-xs text-muted-foreground mt-1">Cost {formatTZS(d.cost)} · Price {formatTZS(d.product.price)} · Profit {formatTZS(d.profit)}</div>
+                <div className="text-xs mt-2 font-medium">{d.status === "healthy" ? "Healthy — at or above target." : d.status === "squeezed" ? "Squeezed — below target but above the safety floor. Fine to keep the price to keep plates moving." : `Below the ${floor}% safety floor — review portion size or price.`}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="lg:col-span-5 border bg-surface rounded-xl p-5 space-y-4">
         <div>
           <h2 className="font-bold text-lg">Shared Cooked Stock</h2>

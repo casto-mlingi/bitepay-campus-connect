@@ -1,11 +1,12 @@
 import { isRetail } from "@/lib/business-rules";
 import { retailStock, retailUnitCost } from "@/lib/retail-stock";
 import { businessFeatures } from "@/lib/subscription-rules";
+import { DEFAULT_RETAIL_MARKUP, suggestSellingPrice, costChangePercent, marginPercent, voucherTotal } from "@/lib/costing-rules";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Banknote, Package, Users, TrendingUp, TrendingDown,
-  ShoppingCart, Receipt, FileBarChart, Plus, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone, Truck, HandCoins,
+  ShoppingCart, Receipt, FileBarChart, Plus, Trash2, ArrowDownRight, ArrowUpRight, ArrowLeftRight, X, BookOpen, Smartphone, Truck, HandCoins,
 } from "lucide-react";
 import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
@@ -470,102 +471,143 @@ function Bar({ label, value, total, color }: { label: string; value: number; tot
   );
 }
 
-function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
-  const { rawMaterials, purchases, cash, bank, vendors, products, store } = useStore();
+type VoucherRow = { key: string; item_id: string; qty: number; total_cost: number; updatePrice: boolean };
+const blankRow = (): VoucherRow => ({ key: Math.random().toString(36).slice(2), item_id: "", qty: 1, total_cost: 0, updatePrice: true });
+
+function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useStore>["recordPurchase"] }) {
+  const { rawMaterials, purchases, cash, bank, vendors, products, store, recordPurchaseVoucher } = useStore();
   const retail = isRetail(store?.business_type);
+  const markup = store?.retail_markup_percentage ?? DEFAULT_RETAIL_MARKUP;
   const [supplier, setSupplier] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
   const [onCredit, setOnCredit] = useState(false);
   const vendor = vendors.find((v) => v.id === vendorId);
-  const [rawId, setRawId] = useState("");
-  const [qty, setQty] = useState(1);
-  const [totalCost, setTotalCost] = useState(0);
+  const [rows, setRows] = useState<VoucherRow[]>([blankRow()]);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [msg, setMsg] = useState<string | null>(null);
 
+  const items = retail
+    ? products.filter((p) => !p.archived_at).map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases), price: p.price }))
+    : rawMaterials.map((r) => ({ id: r.id, name: r.name, unit: r.unit, avg_cost: r.avg_cost, price: 0 }));
+  const lastCost = (id: string) => {
+    const last = purchases.find((p) => (p.product_id ?? p.raw_id) === id && p.qty > 0);
+    return last ? Math.round(last.total_cost / last.qty) : items.find((i) => i.id === id)?.avg_cost ?? 0;
+  };
+  const patch = (key: string, p: Partial<VoucherRow>) => setRows((r) => r.map((x) => x.key === key ? { ...x, ...p } : x));
+  const filled = rows.filter((r) => r.item_id);
+  const grand = filled.reduce((n, r) => n + r.total_cost, 0);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const res = onSubmit({ supplier: vendor?.name ?? supplier, raw_id: retail ? "" : rawId, product_id: retail ? rawId : undefined, qty, total_cost: totalCost, payment_method: method, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7 });
+    const name = vendor?.name ?? supplier;
+    const lines = filled.map((r) => {
+      const unit = r.qty > 0 ? Math.round(r.total_cost / r.qty) : 0;
+      const item = items.find((i) => i.id === r.item_id);
+      const suggested = suggestSellingPrice(unit, markup);
+      const changed = retail && item && costChangePercent(lastCost(r.item_id), unit) !== 0;
+      return { item_id: r.item_id, qty: r.qty, total_cost: r.total_cost, ...(changed && r.updatePrice && suggested > 0 && suggested !== item.price ? { new_price: suggested } : {}) };
+    });
+    if (voucherTotal(lines) == null) { setMsg("Check every line: pick an item, quantity above 0 and a total cost."); return; }
+    const res = recordPurchaseVoucher({ supplier: name, vendor_id: vendor?.id, on_credit: onCredit, terms_days: vendor?.terms_days ?? 7, payment_method: method, invoice_no: invoiceNo, lines });
     if (res) {
-      setMsg(onCredit ? `✓ ${res.id} saved as a supplier bill — ${formatTZS(totalCost)} owed` : `✓ ${res.id} recorded — ${method === "bank" ? "bank" : "cash"} reduced by ${formatTZS(totalCost)}`);
-      setSupplier(""); setVendorId(""); setOnCredit(false); setRawId(""); setQty(1); setTotalCost(0); setMethod("cash");
-    } else {
-      setMsg("Could not record purchase. Check inputs.");
-    }
-    setTimeout(() => setMsg(null), 3500);
+      setMsg(onCredit ? `✓ ${res.count} item(s) saved as supplier bill — ${formatTZS(res.total)} owed` : `✓ ${res.count} item(s) recorded — ${method === "bank" ? "bank" : "cash"} reduced once by ${formatTZS(res.total)}`);
+      setSupplier(""); setVendorId(""); setInvoiceNo(""); setOnCredit(false); setRows([blankRow()]); setMethod("cash");
+    } else setMsg("Could not record purchase. Check inputs.");
+    setTimeout(() => setMsg(null), 4000);
   };
-
-  const perUnit = qty > 0 ? Math.round(totalCost / qty) : 0;
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
-      <form onSubmit={submit} className="lg:col-span-2 bg-surface border rounded-2xl p-5 space-y-4">
+      <form onSubmit={submit} className="lg:col-span-5 bg-surface border rounded-2xl p-5 space-y-4">
         <div>
-          <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-primary" /> New Stock Purchase</h2>
-          <p className="text-xs text-muted-foreground">Deducts cash and adds to inventory value.</p>
+          <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-primary" /> New Supplier Purchase</h2>
+          <p className="text-xs text-muted-foreground">Add every item from one delivery note. Money is paid once for the whole voucher.</p>
         </div>
-        <Field label="Supplier">
-          {vendors.length > 0 && (
-            <select aria-label="Choose a saved supplier" value={vendorId} onChange={(e) => setVendorId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border bg-background mb-2">
-              <option value="">Type a supplier name below…</option>
-              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}{v.terms_days ? ` · pay in ${v.terms_days} days` : " · cash on delivery"}</option>)}
-            </select>
-          )}
-          {!vendor && (
-            <input required value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Kilimanjaro Supplies"
-              className="w-full px-3 py-2 rounded-lg border bg-background" />
-          )}
-        </Field>
-        <Field label="When do you pay?">
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setOnCredit(false)}
-              className={`py-2 rounded-lg border text-sm font-semibold ${!onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Paid now</button>
-            <button type="button" onClick={() => setOnCredit(true)}
-              className={`py-2 rounded-lg border text-sm font-semibold ${onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Pay later (bill)</button>
-          </div>
-          {onCredit && <p className="text-xs text-muted-foreground mt-1">Stock is added now. Due in {vendor?.terms_days ?? 7} days — pay it from Suppliers & Bills.</p>}
-        </Field>
-        <Field label={retail ? "Product" : "Raw Material"}>
-          <select required value={rawId} onChange={(e) => setRawId(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border bg-background">
-            <option value="">{retail ? "Select product…" : "Select material…"}</option>
-            {(retail ? products.map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases) })) : rawMaterials).map((r) => (
-              <option key={r.id} value={r.id}>{r.name} ({r.unit}) — current avg {formatTZS(r.avg_cost)}</option>
-            ))}
-          </select>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Quantity">
-            <input required type="number" min={0.001} step="any" value={qty} onChange={(e) => setQty(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-lg border bg-background" />
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Field label="Supplier">
+            {vendors.length > 0 && (
+              <select aria-label="Choose a saved supplier" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className="w-full px-3 py-2 rounded-lg border bg-background mb-2">
+                <option value="">Type a supplier name below…</option>
+                {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}{v.terms_days ? ` · pay in ${v.terms_days} days` : " · cash on delivery"}</option>)}
+              </select>
+            )}
+            {!vendor && <input required value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Kilimanjaro Supplies" className="w-full px-3 py-2 rounded-lg border bg-background" />}
           </Field>
-          <Field label="Total Cost (TZS)">
-            <input required type="number" min={0} value={totalCost} onChange={(e) => setTotalCost(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-              className="w-full px-3 py-2 rounded-lg border bg-background" />
+          <Field label="Invoice / delivery note no. (optional)">
+            <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="e.g. DN-0453" className="w-full px-3 py-2 rounded-lg border bg-background" />
+          </Field>
+          <Field label="When do you pay?">
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setOnCredit(false)} className={`py-2 rounded-lg border text-sm font-semibold ${!onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Paid now</button>
+              <button type="button" onClick={() => setOnCredit(true)} className={`py-2 rounded-lg border text-sm font-semibold ${onCredit ? "bg-foreground text-background border-foreground" : "bg-background"}`}>Pay later (bill)</button>
+            </div>
+            {!onCredit ? (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {(["cash", "bank"] as PaymentMethod[]).map((m) => (
+                  <button key={m} type="button" onClick={() => setMethod(m)} className={`py-2 rounded-lg border text-sm font-semibold capitalize ${method === m ? "bg-foreground text-background border-foreground" : "bg-background"}`}>{m}</button>
+                ))}
+              </div>
+            ) : <p className="text-xs text-muted-foreground mt-1">Stock is added now. Due in {vendor?.terms_days ?? 7} days — pay it from Suppliers & Bills.</p>}
           </Field>
         </div>
-        {!onCredit && <Field label="Payment Method">
-          <div className="grid grid-cols-2 gap-2">
-            {(["cash", "bank"] as PaymentMethod[]).map((m) => (
-              <button key={m} type="button" onClick={() => setMethod(m)}
-                className={`py-2 rounded-lg border text-sm font-semibold capitalize ${method === m ? "bg-foreground text-background border-foreground" : "bg-background"}`}>
-                {m}
-              </button>
-            ))}
-          </div>
-        </Field>}
-        <div className="bg-muted rounded-xl p-3 text-xs space-y-1">
-          <div className="flex justify-between"><span className="text-muted-foreground">Per unit</span><span className="font-mono font-semibold">{formatTZS(perUnit)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">{onCredit ? "Owed to supplier" : `${method === "bank" ? "Bank" : "Cash"} balance after`}</span><span className="font-mono font-semibold">{formatTZS(onCredit ? totalCost : (method === "bank" ? bank : cash) - totalCost)}</span></div>
+
+        <div className="space-y-3">
+          {rows.map((r, idx) => {
+            const item = items.find((i) => i.id === r.item_id);
+            const unit = r.qty > 0 ? Math.round(r.total_cost / r.qty) : 0;
+            const prev = r.item_id ? lastCost(r.item_id) : 0;
+            const change = r.item_id && r.total_cost > 0 ? costChangePercent(prev, unit) : null;
+            const suggested = suggestSellingPrice(unit, markup);
+            return (
+              <div key={r.key} className="border rounded-xl p-3 bg-background space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
+                  <label className="col-span-2 sm:col-span-5 text-xs font-semibold">{retail ? "Product" : "Raw material"} {idx + 1}
+                    <select value={r.item_id} onChange={(e) => patch(r.key, { item_id: e.target.value })} className="mt-1 w-full h-11 px-3 rounded-lg border bg-background text-sm font-normal">
+                      <option value="">Select…</option>
+                      {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit}) — avg {formatTZS(i.avg_cost)}</option>)}
+                    </select>
+                  </label>
+                  <label className="sm:col-span-2 text-xs font-semibold">Quantity
+                    <input type="number" min={0.001} step="any" inputMode="decimal" value={r.qty} onChange={(e) => patch(r.key, { qty: Number(e.target.value) })} className="mt-1 w-full h-11 px-3 rounded-lg border bg-background text-sm font-normal" />
+                  </label>
+                  <label className="sm:col-span-3 text-xs font-semibold">Line total (TZS)
+                    <input type="number" min={0} inputMode="numeric" value={r.total_cost || ""} onChange={(e) => patch(r.key, { total_cost: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className="mt-1 w-full h-11 px-3 rounded-lg border bg-background text-sm font-normal" />
+                  </label>
+                  <div className="sm:col-span-2 flex items-center justify-between gap-2 h-11">
+                    <span className="text-xs text-muted-foreground">{formatTZS(unit)}/{item?.unit ?? "unit"}</span>
+                    {rows.length > 1 && <button type="button" aria-label={`Remove line ${idx + 1}`} onClick={() => setRows((x) => x.filter((y) => y.key !== r.key))} className="p-2 rounded-lg border text-destructive"><Trash2 className="w-4 h-4" /></button>}
+                  </div>
+                </div>
+                {change != null && change !== 0 && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={`px-2 py-0.5 rounded-full font-semibold ${change > 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>Cost {change > 0 ? "up" : "down"} {change > 0 ? "+" : ""}{change}% (was {formatTZS(prev)})</span>
+                    {retail && item && suggested > 0 && suggested !== item.price && (
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={r.updatePrice} onChange={(e) => patch(r.key, { updatePrice: e.target.checked })} />
+                        Update selling price {formatTZS(item.price)} → <b>{formatTZS(suggested)}</b> ({marginPercent(suggested, unit)}% margin)
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button type="button" onClick={() => setRows((r) => [...r, blankRow()])} className="w-full sm:w-auto px-4 py-2 rounded-lg border font-semibold text-sm flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add line</button>
         </div>
-        <button className="w-full bg-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90">
+
+        <div className="bg-muted rounded-xl p-3 text-sm grid sm:grid-cols-3 gap-2">
+          <div className="flex justify-between sm:block"><span className="text-muted-foreground block text-xs">Items</span><span className="font-semibold">{filled.length}</span></div>
+          <div className="flex justify-between sm:block"><span className="text-muted-foreground block text-xs">Voucher total</span><span className="font-mono font-bold">{formatTZS(grand)}</span></div>
+          <div className="flex justify-between sm:block"><span className="text-muted-foreground block text-xs">{onCredit ? "Owed to supplier" : `${method === "bank" ? "Bank" : "Cash"} balance after`}</span><span className="font-mono font-semibold">{formatTZS(onCredit ? grand : (method === "bank" ? bank : cash) - grand)}</span></div>
+        </div>
+        <button className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90">
           <Plus className="w-4 h-4" /> Record Purchase
         </button>
         {msg && <div className="text-xs text-center font-semibold text-primary">{msg}</div>}
       </form>
 
-      <div className="lg:col-span-3 bg-surface border rounded-2xl p-5">
+      <div className="lg:col-span-5 bg-surface border rounded-2xl p-5">
         <h2 className="font-bold mb-4">Recent Purchases</h2>
         {purchases.length === 0 ? (
           <div className="text-xs text-muted-foreground text-center py-10">No purchases yet.</div>
@@ -587,7 +629,7 @@ function Procurement({ onSubmit }: { onSubmit: ReturnType<typeof useStore>["reco
                 {purchases.map((p) => (
                   <tr key={p.id}>
                     <td className="py-2 pr-3 text-muted-foreground">{new Date(p.date).toLocaleDateString()}</td>
-                    <td className="pr-3 font-mono text-xs">{p.id}</td>
+                    <td className="pr-3 font-mono text-xs">{p.invoice_no ?? p.id}</td>
                     <td className="pr-3">{p.supplier}</td>
                     <td className="pr-3">{p.raw_name}</td>
                     <td className="pr-3 text-right">{p.qty}</td>

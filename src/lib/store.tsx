@@ -14,6 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { hasTableService, isRetail, canApproveRefund, validScanGrant, newOrderId, type ScanGrant, type BusinessType } from "@/lib/business-rules";
 import { ownerPackage, businessFeatures, storeCreationReason, PLAN_PRICE, PLAN_LABEL, type SubscriptionPlan } from "./subscription-rules";
 import { retailStock, retailUnitCost, type TradeUnit } from "./retail-stock";
+import { voucherTotal, validPercent } from "./costing-rules";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
@@ -83,6 +84,11 @@ export type Store = {
   credit_terms_days?: number;
   customer_debt_limit?: number;
   loyalty_percentage?: number;
+  /** Retail: markup used to suggest selling prices from purchase cost. */
+  retail_markup_percentage?: number;
+  /** Food: target margin and safety floor for cooked dishes. */
+  food_margin_percentage?: number;
+  food_margin_floor_percentage?: number;
   /** Store Lipa numbers shown to customers on top-up and to cashiers on POS. */
   lipa_numbers?: import("./lipa-numbers").LipaNumber[];
   /** Default staff commission, in percent of the sales value they handled. */
@@ -521,6 +527,9 @@ export type Purchase = {
   on_credit?: boolean;
   vendor_id?: string;
   due_date?: number;
+  /** Shared by every line of one multi-item supplier voucher. */
+  voucher_id?: string;
+  invoice_no?: string;
 };
 
 export type ExpenseCategory = "Labor" | "Utilities" | "Transport" | "Maintenance" | "Other";
@@ -732,6 +741,7 @@ type Ctx = {
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
+  recordPurchaseVoucher: (input: { supplier: string; vendor_id?: string; on_credit?: boolean; terms_days?: number; payment_method: PaymentMethod; invoice_no?: string; lines: { item_id: string; qty: number; total_cost: number; new_price?: number }[] }) => { voucher_id: string; total: number; count: number } | null;
   recordPurchase: (input: { supplier: string; raw_id: string; product_id?: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number; vendor_id?: string; on_credit?: boolean; terms_days?: number }) => Purchase | null;
   vendors: Vendor[];
   vendorPayments: VendorPayment[];
@@ -1678,6 +1688,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!can("settings.manage") && !(can("settings.credit") && Object.keys(patch).every((k) => ["customer_debt_limit", "loyalty_percentage"].includes(k)))) return;
       if (!currentStoreId) return;
       if (patch.loyalty_percentage != null && (!Number.isFinite(patch.loyalty_percentage) || patch.loyalty_percentage < 0 || patch.loyalty_percentage > 100)) return;
+      for (const k of ["retail_markup_percentage", "food_margin_percentage", "food_margin_floor_percentage"] as const) if (patch[k] != null && !validPercent(patch[k])) return;
       if (patch.customer_debt_limit != null && (!Number.isSafeInteger(patch.customer_debt_limit) || patch.customer_debt_limit < 0)) return;
       setStores((prev) => prev.map((s) => s.id === currentStoreId ? { ...s, ...patch, updated_at: Date.now(), name: (patch.name ?? s.name).trim() || s.name } : s));
     },
@@ -2352,6 +2363,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setPurchases((prev) => [purchase, ...prev]);
       return purchase;
+    },
+    recordPurchaseVoucher({ supplier, vendor_id, on_credit, terms_days, payment_method, invoice_no, lines }) {
+      if (!currentStoreId || !can("finance.edit") || !supplier.trim()) return null;
+      const total = voucherTotal(lines);
+      if (total == null) return null;
+      const retailMode = isRetail(store?.business_type);
+      const resolved = lines.map((l) => ({
+        line: l,
+        product: retailMode ? products.find((p) => p.id === l.item_id && p.store_id === currentStoreId && !p.archived_at) : undefined,
+        raw: retailMode ? undefined : rawMaterials.find((r) => r.id === l.item_id && r.store_id === currentStoreId),
+      }));
+      if (resolved.some((r) => !r.product && !r.raw)) return null;
+      const voucher_id = crypto.randomUUID();
+      const when = Date.now();
+      // Raw materials: apply every line in one update so repeated items accumulate correctly.
+      setRawMaterials((prev) => prev.map((r) => {
+        let cur = r;
+        for (const x of resolved) if (x.raw?.id === r.id) {
+          const stock = cur.stock + x.line.qty;
+          cur = { ...cur, stock, avg_cost: stock > 0 ? Math.round((cur.avg_cost * cur.stock + x.line.total_cost) / stock) : cur.avg_cost };
+        }
+        return cur;
+      }));
+      const priceUpdates = new Map<string, number>();
+      for (const x of resolved) if (x.product && x.line.new_price != null && Number.isSafeInteger(x.line.new_price) && x.line.new_price > 0) priceUpdates.set(x.product.id, x.line.new_price);
+      if (priceUpdates.size) setProducts((prev) => prev.map((p) => priceUpdates.has(p.id) ? { ...p, price: priceUpdates.get(p.id)!, updated_at: when } : p));
+      if (!on_credit) {
+        if (payment_method === "bank") adjustBank((b) => b - total);
+        else adjustCash((c) => c - total);
+      }
+      const rows: Purchase[] = resolved.map((x) => ({
+        id: uid("PO"), store_id: currentStoreId, date: when, supplier: supplier.trim(),
+        raw_id: x.product ? "" : x.raw!.id, raw_name: x.product?.name ?? x.raw?.name ?? "", ...(x.product ? { product_id: x.product.id } : {}),
+        qty: x.line.qty, total_cost: x.line.total_cost, payment_method, shift_id: activeShift?.id, voucher_id,
+        ...(invoice_no?.trim() ? { invoice_no: invoice_no.trim() } : {}),
+        ...(vendor_id ? { vendor_id } : {}),
+        ...(on_credit ? { on_credit: true, due_date: dueDate(when, terms_days ?? 0) } : {}),
+      }));
+      setPurchases((prev) => [...rows, ...prev]);
+      return { voucher_id, total, count: rows.length };
     },
     recordExpense({ category, amount, description, payment_method, date }) {
       if (!currentStoreId || !can("finance.edit") || !Number.isSafeInteger(amount) || amount <= 0) return null;
