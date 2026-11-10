@@ -15,6 +15,7 @@ import { hasTableService, isRetail, canApproveRefund, validScanGrant, newOrderId
 import { ownerPackage, businessFeatures, storeCreationReason, PLAN_PRICE, PLAN_LABEL, type SubscriptionPlan } from "./subscription-rules";
 import { retailStock, retailUnitCost, type TradeUnit } from "./retail-stock";
 import { voucherTotal, validPercent } from "./costing-rules";
+import { normalizePack } from "./pack-units";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
@@ -447,6 +448,9 @@ export type RawMaterial = {
   stock: number;
   avg_cost: number;
   low_threshold: number;
+  /** Wholesale pack the supplier delivers in, e.g. crate of 25 bottles. */
+  pack_unit?: TradeUnit;
+  pack_size?: number;
 };
 
 export type BatchIngredient = { raw_id: string; qty: number };
@@ -731,6 +735,7 @@ type Ctx = {
   findCustomer: (query: string) => Profile | null;
   addCustomer: (input: { full_name: string; phone: string; initial_balance?: number; default_password?: string }) => Profile | null;
   addRawMaterial: (r: Omit<RawMaterial, "id" | "store_id">) => void;
+  updateRawMaterial: (id: string, patch: Partial<Omit<RawMaterial, "id" | "store_id">>) => boolean;
   updateRawStock: (id: string, delta: number) => void;
   addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
   updateProduct: (id: string, patch: Partial<Omit<Product, "id" | "store_id">>) => void;
@@ -2171,7 +2176,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     addRawMaterial(r) {
       if (!currentStoreId) return;
-      setRawMaterials((prev) => [...prev, { ...r, id: uid("r"), store_id: currentStoreId }]);
+      const pack = normalizePack(r.pack_unit, r.pack_size);
+      setRawMaterials((prev) => [...prev, { ...r, pack_unit: pack.pack_unit, pack_size: pack.pack_size, id: uid("r"), store_id: currentStoreId }]);
+    },
+    // Editing an item must never invent stock: quantity, cost and pack fields are
+    // taken as typed, and an invalid pack (no unit, or fewer than 2 pieces) is dropped.
+    updateRawMaterial(id, patch) {
+      if (!currentStoreId) return false;
+      const cur = rawMaterials.find((r) => r.id === id && r.store_id === currentStoreId);
+      if (!cur) return false;
+      const name = patch.name != null ? patch.name.trim() : cur.name;
+      if (!name) return false;
+      const num = (v: number | undefined, fallback: number, round = false) => {
+        const n = Number(v);
+        if (v == null || !Number.isFinite(n) || n < 0) return fallback;
+        return round ? Math.round(n) : n;
+      };
+      const pack = ("pack_unit" in patch || "pack_size" in patch)
+        ? normalizePack(patch.pack_unit, patch.pack_size)
+        : normalizePack(cur.pack_unit, cur.pack_size);
+      setRawMaterials((prev) => prev.map((r) => r.id === id && r.store_id === currentStoreId ? {
+        ...cur,
+        name,
+        category: patch.category != null ? patch.category.trim() : cur.category,
+        unit: patch.unit ?? cur.unit,
+        stock: num(patch.stock, cur.stock),
+        avg_cost: num(patch.avg_cost, cur.avg_cost, true),
+        low_threshold: num(patch.low_threshold, cur.low_threshold),
+        pack_unit: pack.pack_unit,
+        pack_size: pack.pack_size,
+      } : r));
+      return true;
     },
     updateRawStock(id, delta) { setRawMaterials((prev) => prev.map((r) => r.id === id ? { ...r, stock: Math.max(0, r.stock + delta) } : r)); },
     addProduct(p) {

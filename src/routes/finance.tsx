@@ -489,7 +489,7 @@ function Procurement({ onSubmit: _legacy }: { onSubmit: ReturnType<typeof useSto
   const [msg, setMsg] = useState<string | null>(null);
 
   const productItems = products.filter((p) => !p.archived_at).map((p) => ({ id: p.id, name: p.name, unit: p.unit ?? "pcs", avg_cost: retailUnitCost(p, purchases), price: p.price, pack_size: p.pack_size, pack_unit: p.pack_unit, resale: true }));
-  const rawItems = rawMaterials.map((r) => ({ id: r.id, name: r.name, unit: r.unit as string, avg_cost: r.avg_cost, price: 0, pack_size: undefined as number | undefined, pack_unit: undefined as string | undefined, resale: false }));
+  const rawItems = rawMaterials.map((r) => ({ id: r.id, name: r.name, unit: r.unit as string, avg_cost: r.avg_cost, price: 0, pack_size: r.pack_size, pack_unit: r.pack_unit as string | undefined, resale: false }));
   // Hospitality buys both kitchen ingredients and ready-to-sell goods such as drinks and cigarettes.
   const items = retail ? productItems : [...rawItems, ...productItems];
   const pieces = (r: VoucherRow) => toPieces(r.qty, items.find((i) => i.id === r.item_id), r.inPacks);
