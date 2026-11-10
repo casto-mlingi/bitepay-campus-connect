@@ -30,7 +30,7 @@ export const Route = createFileRoute("/inventory")({
   }),
 });
 
-type Tab = "raw" | "menu" | "batches" | "requests";
+type Tab = "raw" | "finished" | "menu" | "batches" | "requests";
 
 function InventoryPage() {
   const { currentUser, sessionReady, customDishRequests, store } = useStore();
@@ -56,12 +56,14 @@ function InventoryPage() {
 
       <div className="flex gap-1 mb-6 border-b overflow-x-auto">
         {!retail && <TabBtn active={currentTab === "raw"} onClick={() => setTab("raw")} icon={<Package className="w-4 h-4" />} label="Raw Materials" />}
+        {!retail && <TabBtn active={currentTab === "finished"} onClick={() => setTab("finished")} icon={<Boxes className="w-4 h-4" />} label="Finished Goods" />}
         <TabBtn active={currentTab === "menu"} onClick={() => setTab("menu")} icon={<Utensils className="w-4 h-4" />} label={retail ? "Products" : "Menu / Dishes"} />
         {!retail && <><TabBtn active={currentTab === "batches"} onClick={() => setTab("batches")} icon={<ChefHat className="w-4 h-4" />} label="Daily Cooking Batches" />
         <TabBtn active={currentTab === "requests"} onClick={() => setTab("requests")} icon={<ClipboardList className="w-4 h-4" />} label={`Menu Requests${pendingRequests ? ` (${pendingRequests})` : ""}`} /></>}
       </div>
 
       {currentTab === "raw" && <RawMaterialsPanel />}
+      {currentTab === "finished" && <FinishedGoodsPanel />}
       {currentTab === "menu" && <MenuPanel />}
       {currentTab === "batches" && <BatchesPanel />}
       {currentTab === "requests" && <MenuRequestsPanel />}
@@ -104,13 +106,21 @@ function RawStatusPill({ status }: { status: "ok" | "low" | "out" }) {
 }
 
 function RawMaterialsPanel() {
-  const { rawMaterials, addRawMaterial, updateRawMaterial } = useStore();
+  const { rawMaterials, addRawMaterial, updateRawMaterial, convertRawToFinished } = useStore();
+  const moveToFinished = (r: RawMaterial) => {
+    const v = window.prompt(`Move "${r.name}" to Finished Goods so it sells directly on POS.\nEnter selling price per piece (TZS):`);
+    if (v == null) return;
+    const price = Math.round(Number(v.replace(/[, ]/g, "")));
+    if (!Number.isSafeInteger(price) || price <= 0) { window.alert("Enter a valid selling price."); return; }
+    const drink = /beer|lager|soda|juice|water|wine|drink|cola|pepsi|fanta|malt|energy|whisk|vodka|gin/i.test(`${r.name} ${r.category}`);
+    if (!convertRawToFinished(r.id, { price, department: drink ? "drinks" : "resale" })) window.alert("Could not move this item.");
+  };
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(blankRaw());
   const { filter, setFilter, match } = useListFilter();
 
-  const rows = useMemo(() => rawMaterials.map((r) => {
+  const rows = useMemo(() => rawMaterials.filter((r) => !r.converted_product_id).map((r) => {
     const value = Math.round(r.stock * r.avg_cost);
     const out = r.stock <= 0;
     const low = !out && r.stock <= r.low_threshold;
@@ -276,6 +286,7 @@ function RawMaterialsPanel() {
                       <td className="px-4 py-3"><RawStatusPill status={status} /></td>
                       <td className="px-4 py-3 text-right">
                         <button type="button" onClick={() => startEdit(r)} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-semibold hover:bg-muted"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+<button type="button" onClick={() => moveToFinished(r)} title="Sell directly on POS" className="inline-flex items-center gap-1.5 h-9 px-3 text-xs rounded-lg border font-semibold hover:bg-muted ml-1"><Boxes className="w-3.5 h-3.5" /> To Finished Goods</button>
                       </td>
                     </tr>
                   ))}
@@ -319,6 +330,7 @@ function RawMaterialsPanel() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><Boxes className="w-3.5 h-3.5" /> {packLabel(r)}</span>
                   <button type="button" onClick={() => startEdit(r)} className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border text-sm font-semibold"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+<button type="button" onClick={() => moveToFinished(r)} title="Sell directly on POS" className="inline-flex items-center gap-1.5 h-10 px-4 text-sm rounded-lg border font-semibold hover:bg-muted ml-1"><Boxes className="w-3.5 h-3.5" /> To Finished Goods</button>
                 </div>
               </div>
             ))}
@@ -339,6 +351,81 @@ const GRADIENTS = [
   "from-lime-400 to-emerald-500",
 ];
 
+/* ────────────── Finished Goods (sold as bought, straight to POS) ────────────── */
+const blankFG = () => ({ name: "", category: "", department: "drinks" as Department, price: "", unit_cost: "", qty: "", pack_unit: "", pack_size: "", image: undefined as string | undefined });
+function FinishedGoodsPanel() {
+  const { products, addFinishedGood, updateProduct, setProductArchived, availablePlates, batches, can } = useStore();
+  const [form, setForm] = useState(blankFG());
+  const [show, setShow] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const rows = products.filter((p) => p.direct_sale).map((p) => {
+    const stock = availablePlates(p.id) ?? 0;
+    const latest = batches.filter((b) => b.product_id === p.id).sort((a, b) => b.created_at - a.created_at)[0];
+    const cost = latest?.unit_cost ?? p.cost_price ?? 0;
+    return { p, stock, cost, margin: cost > 0 ? ((p.price - cost) / p.price) * 100 : null };
+  }).filter((x) => !q.trim() || `${x.p.name} ${x.p.category}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const value = rows.reduce((s, x) => s + Math.max(0, x.stock) * x.cost, 0);
+  const pack = normalizePack(form.pack_unit, Number(form.pack_size) || 0);
+  const close = () => { setForm(blankFG()); setEditingId(null); setShow(false); };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const price = Math.round(Number(form.price));
+    if (uploading || !form.name.trim() || !(price > 0)) return;
+    const base = { name: form.name.trim(), category: form.category.trim(), department: form.department, price, pack_unit: pack.pack_unit, pack_size: pack.pack_size, image: form.image };
+    if (editingId) updateProduct(editingId, base);
+    else addFinishedGood({ ...base, description: "", emoji: form.department === "drinks" ? "🥤" : "📦", gradient: GRADIENTS[0], unit: "pcs" }, { qty: Number(form.qty) || 0, unit_cost: Number(form.unit_cost) || 0 });
+    close();
+  };
+  const edit = (p: Product) => { setEditingId(p.id); setForm({ ...blankFG(), name: p.name, category: p.category, department: productDepartment(p), price: String(p.price), pack_unit: p.pack_unit ?? "", pack_size: p.pack_size ? String(p.pack_size) : "", image: p.image }); setShow(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const inp = "w-full px-3 py-2 rounded-lg border bg-background";
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatTile label="Items" value={String(rows.length)} />
+        <StatTile label="Stock value" value={formatTZS(Math.round(value))} />
+        <StatTile label="Out of stock" value={String(rows.filter((x) => x.stock <= 0).length)} tone={rows.some((x) => x.stock <= 0) ? "out" : undefined} />
+      </div>
+      <p className="text-sm text-muted-foreground">Items you buy and sell as they are (beer, soda, water, cigarettes). They appear on POS immediately; supplier purchases in Finance add stock, sales reduce it.</p>
+      <div className="flex gap-2">
+        <input placeholder="Search finished goods" className={inp} value={q} onChange={(e) => setQ(e.target.value)} />
+        {can("inventory.edit") && <Button type="button" onClick={() => (show ? close() : setShow(true))}><Plus className="w-4 h-4" /> Add</Button>}
+      </div>
+      {show && (
+        <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="col-span-2 md:col-span-1 md:row-span-2"><DishImagePicker value={form.image} onChange={(image) => setForm((f) => ({ ...f, image }))} onBusyChange={setUploading} /></div>
+          <label className="col-span-2 text-sm"><div className="text-muted-foreground mb-1">Item name</div><input required placeholder="e.g. Safari Lager" className={inp} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="text-sm"><div className="text-muted-foreground mb-1">POS section</div><select className={inp} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value as Department })}>{(["drinks", "resale", "food"] as Department[]).map((d) => <option key={d} value={d}>{DEPARTMENT_LABELS[d]}</option>)}</select></label>
+          <label className="text-sm"><div className="text-muted-foreground mb-1">Category</div><input placeholder="e.g. Beer" className={inp} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label>
+          <label className="text-sm"><div className="text-muted-foreground mb-1">Selling price / pc</div><input required type="number" min={1} className={inp} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></label>
+          {!editingId && <><label className="text-sm"><div className="text-muted-foreground mb-1">Cost / pc</div><input type="number" min={0} className={inp} value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} /></label>
+          <label className="text-sm"><div className="text-muted-foreground mb-1">Opening stock (pcs)</div><input type="number" min={0} className={inp} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} /></label></>}
+          <label className="text-sm"><div className="text-muted-foreground mb-1">Supplier pack</div><select className={inp} value={form.pack_unit} onChange={(e) => setForm({ ...form, pack_unit: e.target.value })}><option value="">None</option>{PACK_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></label>
+          <label className="text-sm"><div className="text-muted-foreground mb-1">Pieces per pack</div><input type="number" min={2} className={inp} value={form.pack_size} onChange={(e) => setForm({ ...form, pack_size: e.target.value })} /></label>
+          <div className="col-span-2 md:col-span-4 flex gap-2 justify-end"><Button type="button" variant="outline" onClick={close}>Cancel</Button><Button type="submit" disabled={uploading}>{editingId ? "Save" : "Add to POS"}</Button></div>
+        </form>
+      )}
+      {rows.length === 0 ? <div className="text-center text-sm text-muted-foreground border rounded-2xl p-8">No finished goods yet. Add one, or tap "To Finished Goods" on a Raw Materials item.</div> : (
+        <div className="grid gap-2">
+          {rows.map(({ p, stock, cost, margin }) => (
+            <div key={p.id} className="bg-surface border rounded-xl p-3 flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center text-xl shrink-0">{p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : p.emoji}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{DEPARTMENT_LABELS[productDepartment(p)]} · {formatTZS(p.price)}{cost ? ` · cost ${formatTZS(cost)}` : ""}{margin != null ? ` · ${margin.toFixed(0)}%` : ""} · {packLabel(p)}</div>
+              </div>
+              <div className={`font-mono font-bold text-sm ${stock <= 0 ? "text-destructive" : ""}`}>{qty(stock)} pcs</div>
+              {can("inventory.edit") && <><button type="button" onClick={() => edit(p)} className="h-9 px-2 rounded-lg border" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+              <button type="button" onClick={() => window.confirm(`Remove ${p.name} from POS? Past sales are kept.`) && setProductArchived(p.id, true)} className="h-9 px-2 rounded-lg border text-destructive" aria-label="Remove"><Trash2 className="w-4 h-4" /></button></>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MenuPanel() {
   const { products, archivedProducts, addProduct, updateProduct, setProductArchived, store, availablePlates, can } = useStore();
   const retail = isRetail(store?.business_type);
@@ -351,7 +438,7 @@ function MenuPanel() {
   const { batches, purchases } = useStore();
   const [menuQ, setMenuQ] = useState("");
   const [dept, setDept] = useState<"all" | Department>("all");
-  const menuRows = useMemo(() => products.map((p) => {
+  const menuRows = useMemo(() => products.filter((p) => retail || !p.direct_sale).map((p) => {
     const stock = availablePlates(p.id);
     const latest = batches.filter((b) => b.product_id === p.id && b.plates > 0).sort((a, b) => b.created_at - a.created_at)[0];
     const cost = retail ? (retailUnitCost(p, purchases.filter((x) => x.store_id === p.store_id)) || p.cost_price || 0) : latest?.unit_cost ?? 0;

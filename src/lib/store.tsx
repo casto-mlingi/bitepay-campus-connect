@@ -314,6 +314,7 @@ export type Product = {
   pack_unit?: TradeUnit; // wholesale pack bought from suppliers, e.g. crate
   pack_size?: number; // stocking pieces inside one pack, e.g. 25 bottles
   department?: "food" | "drinks" | "resale";
+  direct_sale?: boolean; // finished good sold as bought (no kitchen batch); listed under Finished Goods
   sku?: string;
   barcode?: string;
   cost_price?: number;
@@ -451,6 +452,7 @@ export type RawMaterial = {
   /** Wholesale pack the supplier delivers in, e.g. crate of 25 bottles. */
   pack_unit?: TradeUnit;
   pack_size?: number;
+  converted_product_id?: string; // moved to Finished Goods; kept so old batches still resolve
 };
 
 export type BatchIngredient = { raw_id: string; qty: number };
@@ -738,6 +740,8 @@ type Ctx = {
   updateRawMaterial: (id: string, patch: Partial<Omit<RawMaterial, "id" | "store_id">>) => boolean;
   updateRawStock: (id: string, delta: number) => void;
   addProduct: (p: Omit<Product, "id" | "store_id">) => Product | null;
+  addFinishedGood: (p: Omit<Product, "id" | "store_id">, opening: { qty: number; unit_cost: number }) => Product | null;
+  convertRawToFinished: (raw_id: string, input: { price: number; department: "drinks" | "resale" | "food" }) => Product | null;
   updateProduct: (id: string, patch: Partial<Omit<Product, "id" | "store_id">>) => void;
   setProductArchived: (id: string, archived: boolean) => void;
 
@@ -2213,6 +2217,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!currentStoreId || !can("inventory.edit") || !Number.isSafeInteger(p.price) || p.price <= 0 || !Number.isFinite(p.opening_stock ?? 0) || (p.opening_stock ?? 0) < 0 || !Number.isSafeInteger(p.cost_price ?? 0) || (p.cost_price ?? 0) < 0) return null;
       const prod: Product = { ...p, id: uid("p"), store_id: currentStoreId, updated_at: Date.now() };
       setProducts((prev) => [...prev, prod]);
+      return prod;
+    },
+    // Finished goods go straight to POS: opening stock becomes a ready-to-sell batch with no ingredients.
+    addFinishedGood(p, opening) {
+      if (!currentStoreId || !can("inventory.edit") || !Number.isSafeInteger(p.price) || p.price <= 0) return null;
+      const q = Math.floor(Number(opening.qty) || 0), c = Math.max(0, Math.round(Number(opening.unit_cost) || 0));
+      if (q < 0) return null;
+      const pack = normalizePack(p.pack_unit, p.pack_size);
+      const now = Date.now();
+      const prod: Product = { ...p, ...pack, pack_unit: pack.pack_unit, pack_size: pack.pack_size, direct_sale: true, cost_price: c || undefined, id: uid("p"), store_id: currentStoreId, updated_at: now };
+      setProducts((prev) => [...prev, prod]);
+      if (q > 0) setBatches((prev) => [{ id: `B-${now}-fg`, store_id: currentStoreId, product_id: prod.id, ingredients: [], labor_cost: 0, plates: q, raw_cost: q * c, unit_cost: c, plates_remaining: q, created_at: now }, ...prev]);
+      return prod;
+    },
+    // Moves a mis-filed raw item (e.g. beer) to Finished Goods: its counted stock and average cost carry over, nothing is invented.
+    convertRawToFinished(raw_id, { price, department }) {
+      if (!currentStoreId || !can("inventory.edit") || !Number.isSafeInteger(price) || price <= 0) return null;
+      const r = rawMaterials.find((x) => x.id === raw_id && x.store_id === currentStoreId && !x.converted_product_id);
+      if (!r) return null;
+      const now = Date.now(); const q = Math.floor(r.stock);
+      const prod: Product = { id: uid("p"), store_id: currentStoreId, name: r.name, description: "", price, category: r.category, emoji: department === "drinks" ? "🥤" : "📦", gradient: "from-amber-400 to-orange-500", unit: "pcs", pack_unit: r.pack_unit, pack_size: r.pack_size, department, direct_sale: true, cost_price: r.avg_cost || undefined, updated_at: now };
+      setProducts((prev) => [...prev, prod]);
+      if (q > 0) setBatches((prev) => [{ id: `B-${now}-cv`, store_id: currentStoreId, product_id: prod.id, ingredients: [], labor_cost: 0, plates: q, raw_cost: q * r.avg_cost, unit_cost: r.avg_cost, plates_remaining: q, created_at: now }, ...prev]);
+      setRawMaterials((prev) => prev.map((x) => x.id === raw_id ? { ...x, stock: x.stock - q, converted_product_id: prod.id } : x));
       return prod;
     },
     updateProduct(id, patch) {
