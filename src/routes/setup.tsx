@@ -148,7 +148,7 @@ function SetupWizard() {
         <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/10" />
         <div className="absolute -left-16 top-24 w-40 h-40 rounded-full bg-white/10" />
         <div className="relative flex flex-col items-center text-center">
-          <BrandLogo className="w-16 h-16 rounded-2xl mb-3 shadow-lg" />
+          <BrandLogo variant="on-orange" className="w-16 h-16 rounded-2xl mb-3" />
           <h1 className="text-3xl font-extrabold tracking-tight">Set up BitePay</h1>
           <p className="mt-1.5 text-white/85 text-sm max-w-xs">A few easy steps — you can change everything later in Settings.</p>
           <div className="flex items-center gap-1.5 mt-5 flex-wrap justify-center">
