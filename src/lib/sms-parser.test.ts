@@ -48,3 +48,8 @@ describe("matching", () => {
     assert.equal(matchSms({ reference: "X1", amount: 4999 }, [c("a", 5000)], now).status, "unmatched");
   });
 });
+
+import { parseSms as parseRev } from "./sms-parser";
+test("telco reversal SMS never credits", () => {
+  expect(parseRev("DK9J93CK51 Imethibitishwa. Umepokea Tsh 5,000.00 imerudishwa kutoka CASTO", "M-PESA")).toBeNull();
+});
