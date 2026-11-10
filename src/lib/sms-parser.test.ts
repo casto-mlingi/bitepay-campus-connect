@@ -49,7 +49,6 @@ describe("matching", () => {
   });
 });
 
-import { parseSms as parseRev } from "./sms-parser";
-test("telco reversal SMS never credits", () => {
-  expect(parseRev("DK9J93CK51 Imethibitishwa. Umepokea Tsh 5,000.00 imerudishwa kutoka CASTO", "M-PESA")).toBeNull();
+it("telco reversal SMS never credits", () => {
+  assert.equal(parseSms("DK9J93CK51 Imethibitishwa. Umepokea Tsh 5,000.00 imerudishwa kutoka CASTO", "M-PESA"), null);
 });
