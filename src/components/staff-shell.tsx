@@ -114,10 +114,10 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           </div>
         </div>
         <div className="md:hidden max-w-7xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto">
-          <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Orders"} active={active === "orders"} />
-          <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
+          {active === "pos" && <><TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Orders"} active={false} />
+          <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active /></>}
           {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
-          <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
+          {active === "pos" && <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={false} />}
           {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />}
               {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
           {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}

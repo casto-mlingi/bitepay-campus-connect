@@ -1,7 +1,8 @@
 import { DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR, marginStatus } from "@/lib/costing-rules";
 import { isRetail } from "@/lib/business-rules";
 import { TRADE_UNITS } from "@/lib/retail-stock";
-import { PACK_UNITS, normalizePack, packLabel } from "@/lib/pack-units";
+import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, DEPARTMENT_LABELS, type Department } from "@/lib/pack-units";
+import { retailUnitCost } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -347,6 +348,19 @@ function MenuPanel() {
     name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined,
   });
   const [uploading, setUploading] = useState(false);
+  const { batches, purchases } = useStore();
+  const [menuQ, setMenuQ] = useState("");
+  const [dept, setDept] = useState<"all" | Department>("all");
+  const menuRows = useMemo(() => products.map((p) => {
+    const stock = availablePlates(p.id);
+    const latest = batches.filter((b) => b.product_id === p.id && b.plates > 0).sort((a, b) => b.created_at - a.created_at)[0];
+    const cost = retail ? (retailUnitCost(p, purchases.filter((x) => x.store_id === p.store_id)) || p.cost_price || 0) : latest?.unit_cost ?? 0;
+    const margin = cost > 0 && p.price > 0 ? ((p.price - cost) / p.price) * 100 : null;
+    const low = retail ? p.low_stock_threshold ?? 0 : 3;
+    const status = (stock == null ? "none" : stock <= 0 ? "out" : stock <= low ? "low" : "ok") as "none" | "ok" | "low" | "out";
+    return { p, stock, cost, margin, status, dep: productDepartment(p), value: Math.round(Math.max(0, stock ?? 0) * cost) };
+  }), [products, batches, purchases, availablePlates, retail]);
+  const shownMenu = menuRows.filter((x) => (dept === "all" || x.dep === dept) && (!menuQ.trim() || `${x.p.name} ${x.p.category} ${x.p.sku ?? ""} ${x.p.barcode ?? ""}`.toLowerCase().includes(menuQ.trim().toLowerCase())));
 
   const reset = () => { setEditingId(null);
     setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined }); };
@@ -436,32 +450,49 @@ function MenuPanel() {
           {retail ? "No products yet" : "No dishes yet. Add your first finished product — it will show up in the POS, customer menu, and the cooking batch dropdown."}
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {products.map((p) => (
-            <div key={p.id} className="bg-surface border rounded-2xl overflow-hidden">
-              {p.image ? (
-                <img src={p.image} alt={p.name} className="aspect-square w-full object-cover" />
-              ) : (
-                <div className={`aspect-square bg-gradient-to-br ${p.gradient} flex items-center justify-center text-5xl`}>{p.emoji}</div>
-              )}
-              <div className="p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-bold">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">{p.category || "Uncategorized"}</div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatTile label={retail ? "Products" : "Menu items"} value={String(menuRows.length)} />
+            <StatTile label="Stock value" value={formatTZS(menuRows.reduce((s, x) => s + x.value, 0))} />
+            <StatTile label="Low stock" value={String(menuRows.filter((x) => x.status === "low").length)} tone="low" />
+            <StatTile label="Out of stock" value={String(menuRows.filter((x) => x.status === "out").length)} tone="out" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input aria-label="Search items" placeholder="Search items or category" value={menuQ} onChange={(e) => setMenuQ(e.target.value)} className="flex-1 min-w-[160px] h-11 px-3 rounded-xl border bg-background" />
+            {!retail && <select aria-label="POS section filter" value={dept} onChange={(e) => setDept(e.target.value as typeof dept)} className="h-11 px-3 rounded-xl border bg-background">
+              <option value="all">All sections</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale</option>
+            </select>}
+          </div>
+          <div className="space-y-2">
+            {shownMenu.map(({ p, stock, cost, margin, status, dep }) => (
+              <div key={p.id} className="bg-surface border rounded-2xl p-3 flex gap-3">
+                {p.image ? <img src={p.image} alt={p.name} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-muted" /> : <div className={`w-16 h-16 rounded-xl shrink-0 bg-gradient-to-br ${p.gradient} flex items-center justify-center text-2xl`}>{p.emoji}</div>}
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold truncate">{p.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">{p.category || "Uncategorized"}{!retail ? ` · ${DEPARTMENT_LABELS[dep]}` : ""}{packSize(p) ? ` · ${packLabel(p)}` : ""}{p.sku ? ` · ${p.sku}` : ""}</div>
+                    </div>
+                    {status === "none" ? <span className="text-[11px] font-semibold bg-muted text-muted-foreground px-2 py-1 rounded-full whitespace-nowrap">No stock yet</span> : <RawStatusPill status={status} />}
                   </div>
-                  <div className="text-sm font-mono font-bold text-primary">{formatTZS(p.price)}</div>
-                </div>
-                {retail && <p className={`text-sm mt-2 ${(availablePlates(p.id) ?? 0) <= (p.low_stock_threshold ?? 0) ? "text-destructive" : "text-muted-foreground"}`}>{availablePlates(p.id)} {p.unit ?? "pcs"} in stock · {p.sku ?? p.barcode ?? ""}</p>}
-                {p.description && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</div>}
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => startEdit(p)} className="flex-1 h-10 rounded-lg border text-sm font-semibold">Edit</button>
-                  <button type="button" onClick={() => { if (window.confirm(`Remove ${p.name} from the POS? Past sales stay saved and you can restore it later.`)) setProductArchived(p.id, true); }} className="flex-1 h-10 rounded-lg border border-destructive/40 text-destructive text-sm font-semibold">Delete</button>
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="bg-muted/50 rounded-lg p-1.5"><div className="text-[10px] uppercase text-muted-foreground">Stock</div><div className="font-mono font-bold text-sm">{stock == null ? "—" : `${qty(stock)} ${retail ? p.unit ?? "pcs" : dep === "food" ? "plates" : "pcs"}`}</div></div>
+                    <div className="bg-muted/50 rounded-lg p-1.5"><div className="text-[10px] uppercase text-muted-foreground">Cost</div><div className="font-mono font-bold text-sm">{cost ? formatTZS(Math.round(cost)) : "—"}</div></div>
+                    <div className="bg-muted/50 rounded-lg p-1.5"><div className="text-[10px] uppercase text-muted-foreground">Price</div><div className="font-mono font-bold text-sm text-primary">{formatTZS(p.price)}</div></div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-xs font-semibold ${margin == null ? "text-muted-foreground" : margin < 10 ? "text-destructive" : "text-success"}`}>{margin == null ? "Margin: —" : `Margin ${margin.toFixed(1)}%`}</span>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => startEdit(p)} className="h-9 px-3 rounded-lg border text-sm font-semibold inline-flex items-center gap-1"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                      <button type="button" aria-label={`Delete ${p.name}`} onClick={() => { if (window.confirm(`Remove ${p.name} from the POS? Past sales stay saved and you can restore it later.`)) setProductArchived(p.id, true); }} className="h-9 px-3 rounded-lg border border-destructive/40 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+            {shownMenu.length === 0 && <div className="bg-surface border rounded-2xl p-6 text-center text-sm text-muted-foreground">No items match this search.</div>}
+          </div>
+        </>
       )}
 
       {archivedProducts.length > 0 && (
