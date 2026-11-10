@@ -1,3 +1,5 @@
+import { hospitalityCosting } from "@/lib/hospitality-costing";
+import { Button } from "@/components/ui/button";
 import { toPieces, packSize } from "@/lib/pack-units";
 import { isRetail } from "@/lib/business-rules";
 import { retailStock, retailUnitCost } from "@/lib/retail-stock";
@@ -20,15 +22,21 @@ export const Route = createFileRoute("/finance")({
   head: () => ({
     meta: [
       { title: "Finance & Treasury — BitePay Staff" },
-      { name: "description", content: "Treasury dashboard, procurement, expenses, journal and P&L for BitePay canteen." },
+      { name: "description", content: "Manage BitePay cash, stock purchases, customer balances, supplier bills and financial reports." },
       { property: "og:title", content: "Finance & Treasury — BitePay Staff" },
-      { property: "og:description", content: "Double-entry style treasury and P&L for the canteen." },
+      { property: "og:description", content: "Treasury and accounting for BitePay retail and hospitality businesses." },
     
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },],
   }),
 });
 
+type Section = "overview" | "operations" | "reports";
+const FINANCE_SECTIONS: Record<Section, { value: Tab; label: string }[]> = {
+  overview: [{ value: "treasury", label: "Treasury" }, { value: "receivables", label: "Customer Balances" }, { value: "payables", label: "Suppliers & Bills" }],
+  operations: [{ value: "procurement", label: "Record Purchase / Bill" }, { value: "expenses", label: "Operating Expenses" }],
+  reports: [{ value: "pnl", label: "Income Statement" }, { value: "journal", label: "Daily Journal" }, { value: "books", label: "Books & Balance Sheet" }],
+};
 type Tab = "treasury" | "receivables" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
 
 function FinancePage() {
@@ -38,6 +46,8 @@ function FinancePage() {
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
+  const [section, setSection] = useState<Section>("overview");
+  const hospitality = useMemo(() => hospitalityCosting(orders, batches), [orders, batches]);
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
@@ -50,8 +60,8 @@ function FinancePage() {
     [rawMaterials]
   );
   const finishedGoodsValue = useMemo(
-    () => batches.reduce((s, b) => s + b.plates_remaining * b.unit_cost, 0),
-    [batches]
+    () => hospitality.inventoryValue,
+    [hospitality.inventoryValue]
   );
   const retail = isRetail(store?.business_type);
   const features = businessFeatures(store?.business_type, store?.subscription.plan);
@@ -63,7 +73,8 @@ function FinancePage() {
   );
 
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
-  const cogs = retail ? orders.reduce((n, o) => n + (o.cost_amount ?? o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0)), 0) : batches.reduce((s, b) => s + b.raw_cost + b.labor_cost, 0);
+  const costEntries = retail ? orders.map((o) => ({ id: o.id, date: o.created_at, amount: o.cost_amount ?? Math.round(o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0)) })) : hospitality.entries;
+  const cogs = retail ? costEntries.reduce((sum, e) => sum + e.amount, 0) : hospitality.cogs;
   const grossProfit = grossRevenue - cogs;
   const opex = expenses.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
   const netProfit = grossProfit - opex;
@@ -79,16 +90,21 @@ function FinancePage() {
         <p className="text-muted-foreground">Cash, inventory, liabilities, and profitability at a glance.</p>
       </div>
 
-      <div className="flex gap-1 mb-6 border-b overflow-x-auto">
-        <TabBtn active={tab === "treasury"} onClick={() => setTab("treasury")} icon={<Wallet className="w-4 h-4" />} label="Treasury" />
-        <TabBtn active={tab === "procurement"} onClick={() => setTab("procurement")} icon={<ShoppingCart className="w-4 h-4" />} label="Procurement" />
-        <TabBtn active={tab === "receivables"} onClick={() => setTab("receivables")} icon={<HandCoins className="w-4 h-4" />} label="Customer Balances" />
-        <TabBtn active={tab === "payables"} onClick={() => setTab("payables")} icon={<Truck className="w-4 h-4" />} label="Suppliers & Bills" />
-        <TabBtn active={tab === "expenses"} onClick={() => setTab("expenses")} icon={<Receipt className="w-4 h-4" />} label="Expenses" />
-        <TabBtn active={tab === "journal"} onClick={() => setTab("journal")} icon={<BookOpen className="w-4 h-4" />} label="Daily Journal" />
-        <TabBtn active={tab === "pnl"} onClick={() => setTab("pnl")} icon={<FileBarChart className="w-4 h-4" />} label="Income Statement" />
-        <TabBtn active={tab === "books"} onClick={() => setTab("books")} icon={<BookOpen className="w-4 h-4" />} label="Books & Balance Sheet" />
+      <div className="mb-6 space-y-3">
+        <div className="grid grid-cols-3 gap-1 border-b" aria-label="Finance sections">
+          {([{ value: "overview", label: "Overview", icon: Wallet }, { value: "operations", label: "Money In & Out", icon: ArrowLeftRight }, { value: "reports", label: "Reports & Books", icon: BookOpen }] as const).map((item) => (
+            <Button key={item.value} variant="ghost" aria-pressed={section === item.value}
+              onClick={() => { setSection(item.value); setTab(FINANCE_SECTIONS[item.value][0].value); }}
+              className={`h-auto min-h-14 min-w-0 flex-col gap-1 rounded-none px-1 py-2 text-xs sm:flex-row sm:text-sm whitespace-normal border-b-2 ${section === item.value ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
+              <item.icon /> <span>{item.label}</span>
+            </Button>
+          ))}
+        </div>
+        <select aria-label="Finance view" value={tab} onChange={(e) => setTab(e.target.value as Tab)} className="h-11 w-full sm:max-w-sm rounded-lg border bg-background px-3 text-sm font-semibold">
+          {FINANCE_SECTIONS[section].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
       </div>
+      {!retail && hospitality.uncostedQuantity > 0 && <p role="status" className="mb-4 border-l-2 border-destructive pl-3 text-sm text-muted-foreground">Cost history is incomplete for {hospitality.uncostedQuantity} sold or refunded units. Profit includes recorded costs only.</p>}
 
       {tab === "treasury" && (
         <Treasury
@@ -102,11 +118,16 @@ function FinancePage() {
       {tab === "receivables" && <ReceivablesPanel />}
       {tab === "payables" && <PayablesPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
-      {tab === "journal" && <Journal />}
+      {tab === "journal" && <Journal
+        orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries}
+        cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
+        walletReceivables={profiles.filter((p) => p.role === "customer").reduce((sum, p) => sum + Math.max(0, -p.wallet_balance), 0)}
+        walletPayouts={transactions.filter((t) => t.wallet_payout)} walletTopups={transactions.filter((t) => t.type === "topup")} fundTransfers={fundTransfers}
+      />}
       {tab === "books" && !features.fullAccounting && <p className="mb-4 border-y py-3 text-sm text-muted-foreground">Full accounting is included in Business Pro. Existing financial records remain readable below.</p>}
       {tab === "books" && (
         <Books
-          orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs}
+          orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries}
           cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
           walletReceivables={profiles.filter((p) => p.role === "customer").reduce((s, p) => s + Math.max(0, -p.wallet_balance), 0)}
           walletPayouts={transactions.filter((t) => t.wallet_payout)}
@@ -123,78 +144,33 @@ function FinancePage() {
   );
 }
 
-function Journal() {
-  const { orders, purchases, expenses, batches } = useStore();
-
-  type Entry = { date: number; day: string; dr: string; cr: string; amount: number; memo: string };
+function Journal(props: Parameters<typeof buildLedger>[0]) {
   const days = useMemo(() => {
-    const entries: Entry[] = [];
-    const dayKey = (t: number) => new Date(t).toISOString().slice(0, 10);
-    for (const o of orders) {
-      const cash = o.cash_paid ?? 0;
-      const wallet = o.wallet_paid ?? 0;
-      if (cash !== 0) {
-        entries.push({
-          date: o.created_at, day: dayKey(o.created_at),
-          dr: o.tender === "mobile" ? "Mobile Settlement (T+1)" : "Cash on Hand",
-          cr: "Sales Revenue", amount: cash,
-          memo: `${o.receipt_no ?? o.id} · ${o.customer_name}${o.reference ? ` · ref ${o.reference}` : ""}`,
-        });
-      }
-      if (wallet !== 0) {
-        entries.push({
-          date: o.created_at, day: dayKey(o.created_at),
-          dr: "Wallet Liability", cr: "Sales Revenue", amount: wallet,
-          memo: `${o.receipt_no ?? o.id} · ${o.customer_name}`,
-        });
-      }
-      if ((o.loyalty_earned ?? 0) !== 0) {
-        entries.push({
-          date: o.created_at, day: dayKey(o.created_at),
-          dr: "Marketing Expense", cr: "Wallet Liability", amount: o.loyalty_earned ?? 0,
-          memo: `Loyalty ${o.receipt_no ?? o.id}`,
-        });
-      }
-    }
-    for (const b of batches) {
-      if (b.raw_cost > 0) entries.push({
-        date: b.created_at, day: dayKey(b.created_at),
-        dr: "COGS (Raw Materials)", cr: "Inventory", amount: b.raw_cost, memo: `Batch ${b.id}`,
-      });
-    }
-    for (const p of purchases) entries.push({
-      date: p.date, day: dayKey(p.date),
-      dr: "Inventory", cr: p.payment_method === "bank" ? "Bank" : "Cash on Hand",
-      amount: p.total_cost, memo: `${p.id} · ${p.supplier} · ${p.raw_name}`,
-    });
-    for (const e of expenses) entries.push({
-      date: e.date, day: dayKey(e.date),
-      dr: `Expense — ${e.category}`, cr: e.payment_method === "bank" ? "Bank" : "Cash on Hand",
-      amount: e.amount, memo: `${e.id} · ${e.description || ""}`,
-    });
-    const grouped = new Map<string, Entry[]>();
-    for (const e of entries) {
-      if (!grouped.has(e.day)) grouped.set(e.day, []);
-      grouped.get(e.day)!.push(e);
+    const grouped = new Map<string, { date: number; dr: string; cr: string; amount: number; memo: string }[]>();
+    for (const entry of buildLedger(props)) {
+      const day = entry.date ? new Date(entry.date).toISOString().slice(0, 10) : "Opening";
+      const rows = grouped.get(day) ?? [];
+      rows.push({ date: entry.date, dr: entry.lines.filter((l) => l.debit).map((l) => ACCOUNTS[l.account].name).join(" / "), cr: entry.lines.filter((l) => l.credit).map((l) => ACCOUNTS[l.account].name).join(" / "), amount: entry.lines.reduce((sum, l) => sum + l.debit, 0), memo: entry.memo });
+      grouped.set(day, rows);
     }
     return Array.from(grouped.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [orders, purchases, expenses, batches]);
+  }, [props]);
 
   return (
     <div className="space-y-5">
       <div className="bg-surface border rounded-2xl p-5">
         <h2 className="font-bold text-lg flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> Daily Settlement Journal</h2>
-        <p className="text-xs text-muted-foreground mt-1">Auto-posted double-entry journal. Mobile money is booked to <b>Mobile Settlement (T+1)</b> and cleared once the provider settles the next business day.</p>
+        <p className="text-xs text-muted-foreground mt-1">Recorded sales, stock costs, purchases and payments.</p>
       </div>
       {days.length === 0 && <div className="bg-surface border rounded-2xl p-8 text-center text-sm text-muted-foreground">No journal entries yet.</div>}
       {days.map(([day, entries]) => {
         const totalDr = entries.reduce((s, e) => s + e.amount, 0);
-        const mobile = entries.filter((e) => e.dr === "Mobile Settlement (T+1)").reduce((s, e) => s + e.amount, 0);
+        
         return (
           <div key={day} className="bg-surface border rounded-2xl overflow-hidden">
             <div className="px-5 py-3 border-b flex items-center justify-between bg-muted/30">
-              <div className="font-bold flex items-center gap-2"><FileBarChart className="w-4 h-4 text-primary" /> {new Date(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
-              <div className="text-xs text-muted-foreground">Posted total <span className="font-mono font-semibold text-foreground">{formatTZS(totalDr)}</span>{mobile > 0 && <> · <Smartphone className="inline w-3 h-3" /> Mobile pending <span className="font-mono font-semibold text-foreground">{formatTZS(mobile)}</span></>}</div>
+              <div className="font-bold flex items-center gap-2"><FileBarChart className="w-4 h-4 text-primary" /> {day === "Opening" ? "Opening balances" : new Date(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
+              <div className="text-xs text-muted-foreground">Posted total <span className="font-mono font-semibold text-foreground">{formatTZS(totalDr)}</span></div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -204,7 +180,7 @@ function Journal() {
                 <tbody className="divide-y">
                   {entries.sort((a, b) => a.date - b.date).map((e, i) => (
                     <tr key={i}>
-                      <td className="px-4 py-2 text-muted-foreground text-xs">{new Date(e.date).toLocaleTimeString()}</td>
+                      <td className="px-4 py-2 text-muted-foreground text-xs">{e.date ? new Date(e.date).toLocaleTimeString() : "—"}</td>
                       <td className="text-emerald-700">{e.dr}</td>
                       <td className="text-red-600">{e.cr}</td>
                       <td className="text-right pr-4 font-mono font-semibold">{formatTZS(e.amount)}</td>
@@ -218,19 +194,6 @@ function Journal() {
         );
       })}
     </div>
-  );
-}
-
-function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px ${
-        active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {icon}{label}
-    </button>
   );
 }
 
@@ -793,8 +756,8 @@ function IncomeStatement({
 
         <table className="w-full text-sm">
           <tbody>
-            <PLRow label="Gross Revenue" note="Wallet deductions for food orders" value={formatTZS(grossRevenue)} tone="success" bold />
-            <PLRow label="Less: Cost of Goods Sold" note="Raw materials + labor from batch costing" value={`(${formatTZS(cogs)})`} tone="danger" />
+            <PLRow label="Gross Revenue" note="Recorded sales, net of refunds" value={formatTZS(grossRevenue)} tone="success" bold />
+            <PLRow label="Less: Cost of Goods Sold" note="Cost of sold units, net of refunds" value={`(${formatTZS(cogs)})`} tone="danger" />
             <tr className="border-t"><td className="py-3 font-bold">Gross Profit</td><td /><td className={`py-3 text-right font-bold ${grossProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>{formatTZS(grossProfit)}</td></tr>
             <PLRow label="Less: Operational Expenses" note="Labor, utilities, transport, maintenance" value={`(${formatTZS(opex)})`} tone="danger" />
             <tr className="border-t-2 border-foreground">
@@ -850,7 +813,7 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "suc
 }
 
 function Books(props: Parameters<typeof buildLedger>[0]) {
-  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables, props.walletPayouts, props.walletTopups, props.fundTransfers]);
+  const entries = useMemo(() => buildLedger(props), [props.orders, props.purchases, props.vendorPayments, props.expenses, props.cogs, props.costEntries, props.cash, props.bank, props.walletLiabilities, props.inventoryValue, props.walletReceivables, props.walletPayouts, props.walletTopups, props.fundTransfers]);
   const tb = useMemo(() => trialBalance(entries), [entries]);
   const bal = useMemo(() => balances(entries), [entries]);
   const [account, setAccount] = useState<AccountCode>("1000");
