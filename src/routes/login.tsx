@@ -131,7 +131,7 @@ function LoginPage() {
         <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/10" />
         <div className="absolute -left-16 top-24 w-40 h-40 rounded-full bg-white/10" />
         <div className="relative flex flex-col items-center text-center">
-          <BrandLogo className="w-16 h-16 rounded-2xl mb-3 shadow-lg" />
+          <BrandLogo variant="on-orange" className="w-16 h-16 rounded-2xl mb-3" />
           <h1 className="text-3xl font-extrabold tracking-tight">BitePay</h1>
           <p className="mt-1.5 text-white/85 text-sm max-w-xs">{store?.name ? `${store.name} • Prepaid canteen wallet` : "Top-up once, order faster. No cash, no queues."}</p>
         </div>
