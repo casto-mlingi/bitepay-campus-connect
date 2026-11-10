@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
-import { isBeverage, isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
+import { productDepartment, DEPARTMENT_LABELS } from "@/lib/pack-units";
+import { isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
 import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
@@ -73,9 +74,10 @@ function POS() {
 
   const freshCustomer = customer ? profiles.find((p) => p.id === customer.id) ?? null : null;
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
+  const departments = useMemo(() => Array.from(new Set(products.map(productDepartment))), [products]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set(products.filter((p) => productKind === "all" || productDepartment(p) === productKind).map((p) => p.category)))], [products, productKind]);
   const [itemSearch, setItemSearch] = useState("");
-  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || isBeverage(p.category) === (productKind === "beverages")) && (!itemSearch.trim() || `${p.name} ${p.sku ?? ""} ${p.barcode ?? ""}`.toLowerCase().includes(itemSearch.trim().toLowerCase())));
+  const filtered = products.filter((p) => (category === "All" || p.category === category) && (productKind === "all" || productDepartment(p) === productKind) && (!itemSearch.trim() || `${p.name} ${p.sku ?? ""} ${p.barcode ?? ""}`.toLowerCase().includes(itemSearch.trim().toLowerCase())));
   const isWaiter = currentUser?.staff_role === "waiter";
   const canTakePayment = waiterCanTakePayment(currentUser?.staff_role, store);
   const servers = profiles.filter((p) => p.role === "staff" && !p.disabled);
@@ -540,11 +542,11 @@ function POS() {
             </Button>
           </div>
 
-          {store?.business_type === "bar" && (
-            <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Product type">
-              {["all", "beverages", "food"].map((kind) => (
+          {departments.length > 1 && (
+            <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${departments.length + 1}, minmax(0, 1fr))` }} role="group" aria-label="Product type">
+              {(["all", ...departments] as const).map((kind) => (
                 <Button key={kind} variant={productKind === kind ? "default" : "outline"} className="h-11 text-base" onClick={() => { setProductKind(kind); setCategory("All"); }}>
-                  {kind === "all" ? "All" : kind === "food" ? "Food" : "Drinks"}
+                  {kind === "all" ? "All" : DEPARTMENT_LABELS[kind]}
                 </Button>
               ))}
             </div>
