@@ -1,3 +1,4 @@
+import { DEFAULT_RETAIL_MARKUP, DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR } from "@/lib/costing-rules";
 import { LipaNumbersManager } from "@/components/lipa-numbers";
 import { waiterPaymentMode, type WaiterPaymentMode } from "@/lib/business-rules";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
@@ -53,6 +54,9 @@ function SettingsPage() {
   const [deliveryFee, setDeliveryFee] = useState<number>(store?.delivery_fee ?? 0);
   const [debtLimit, setDebtLimit] = useState(store?.customer_debt_limit ?? 0);
   const [loyalty, setLoyalty] = useState(store?.loyalty_percentage ?? 1);
+  const [markup, setMarkup] = useState(store?.retail_markup_percentage ?? DEFAULT_RETAIL_MARKUP);
+  const [foodMargin, setFoodMargin] = useState(store?.food_margin_percentage ?? DEFAULT_FOOD_MARGIN);
+  const [foodFloor, setFoodFloor] = useState(store?.food_margin_floor_percentage ?? DEFAULT_FOOD_FLOOR);
   const [businessType, setBusinessType] = useState<BusinessType>(store?.business_type ?? "canteen");
 
   useEffect(() => {
@@ -67,6 +71,9 @@ function SettingsPage() {
     setBusinessType(store.business_type ?? "canteen");
     setDebtLimit(store.customer_debt_limit ?? 0);
     setLoyalty(store.loyalty_percentage ?? 1);
+    setMarkup(store.retail_markup_percentage ?? DEFAULT_RETAIL_MARKUP);
+    setFoodMargin(store.food_margin_percentage ?? DEFAULT_FOOD_MARGIN);
+    setFoodFloor(store.food_margin_floor_percentage ?? DEFAULT_FOOD_FLOOR);
   }, [store]);
 
   if (!currentUser || currentUser.role !== "staff") return null;
@@ -76,7 +83,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee) });
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -148,6 +155,11 @@ function SettingsPage() {
         <Row label="Customer debt limit (TZS)"><Input aria-label="Customer debt limit" type="number" min={0} step={1} inputMode="numeric" value={debtLimit || ""} placeholder="0 — disabled" onChange={(e) => setDebtLimit(Math.max(0, Math.round(Number(e.target.value) || 0)))} className="h-12" /></Row>
         <Row label="Customer loyalty reward (%)"><Input aria-label="Customer loyalty reward" type="number" min={0} max={100} step="0.01" inputMode="decimal" value={loyalty} onChange={(e) => setLoyalty(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="h-12" /><span className="text-xs text-muted-foreground">0% — no loyalty rewards</span></Row>
         {can("settings.manage") && <>
+        <h2 className="font-bold">Pricing & margins</h2>
+        {retail ? <Row label="Target retail markup (%)"><Input aria-label="Target retail markup (%)" type="number" min={0} max={100} step="0.5" inputMode="decimal" value={markup} onChange={(e) => setMarkup(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="h-12" /><span className="text-xs text-muted-foreground">Suggests a new selling price when purchase cost changes</span></Row> : <>
+        <Row label="Target food margin (%)"><Input aria-label="Target food margin (%)" type="number" min={0} max={100} step="0.5" inputMode="decimal" value={foodMargin} onChange={(e) => setFoodMargin(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="h-12" /><span className="text-xs text-muted-foreground">Dishes below this show as squeezed</span></Row>
+        <Row label="Minimum margin floor (%)"><Input aria-label="Minimum margin floor (%)" type="number" min={0} max={100} step="0.5" inputMode="decimal" value={foodFloor} onChange={(e) => setFoodFloor(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="h-12" /><span className="text-xs text-muted-foreground">Dishes below this show a red alert</span></Row>
+        </>}
         <div className="flex items-center gap-2 mb-1"><StoreIcon className="w-5 h-5 text-primary" /><h2 className="font-bold">Profile</h2></div>
         <Row label="Store name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Row>
         <Row label="Business type">
