@@ -1,11 +1,12 @@
 # Roadmap
 
 ## Purchase vouchers and margin controls (Nov 9)
-- [ ] Add validated business-specific margin settings and pure costing rules.
-- [ ] Add multi-line supplier vouchers with one settlement/AP bill and compatible stock reads.
-- [ ] Show purchase-cost changes and optional retail selling-price updates.
-- [ ] Show evidenced per-dish costs and margin safety alerts.
-- [ ] Run regression tests and isolated phone/desktop purchase and settings checks without shared-data uploads.
+- [x] Add validated business-specific margin settings and pure costing rules.
+- [x] Add multi-line supplier vouchers with one settlement/AP bill and compatible stock reads.
+- [x] Show purchase-cost changes and optional retail selling-price updates.
+- [x] Show evidenced per-dish costs and margin safety alerts.
+- [x] Run regression tests (costing rules covered).
+- [ ] Verify signed-in voucher save on the live site (needs a real owner session; no test uploads to shared data).
 
 ## Retail & trade and account packages (Nov 1)
 - [x] Batch 1: Add shop, hardware, supermarket and wholesale families without changing hospitality defaults.
