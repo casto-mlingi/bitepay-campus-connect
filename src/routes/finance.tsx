@@ -50,10 +50,11 @@ function FinancePage() {
   const hospitality = useMemo(() => hospitalityCosting(orders, batches), [orders, batches]);
 
   useEffect(() => {
-    if (sessionReady && !currentUser) navigate({ to: "/" });
+    if (!sessionReady) return;
+    if (!currentUser) navigate({ to: "/" });
     else if (currentUser && currentUser.role !== "staff") navigate({ to: "/dashboard" });
     else if (!hasStaffRole("supervisor")) navigate({ to: "/staff" });
-  }, [currentUser, navigate, hasStaffRole]);
+  }, [sessionReady, currentUser, navigate, hasStaffRole]);
 
   const rawInventoryValue = useMemo(
     () => rawMaterials.reduce((s, r) => s + r.stock * r.avg_cost, 0),
