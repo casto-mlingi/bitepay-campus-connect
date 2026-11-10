@@ -79,11 +79,17 @@ function findSender(text: string): { name: string | null; phone: string | null }
 }
 
 /** Returns null for outgoing, unrelated or unreadable messages. */
+/** Telco reversal / refund notices must never credit a wallet. */
+export function isReversalSms(text: string) {
+  return /imerudishwa|imesitishwa|kurejesh|rejeshwa|revers|refund|cancelled|imeghairiwa/i.test(text);
+}
+
 export function parseSms(text: string, sender = ""): ParsedSms | null {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t) return null;
   const incoming = /umepokea|received|imepokelewa|umelipwa|amekutumia|imethibitishwa.*kutoka/i.test(t);
   if (!incoming) return null;
+  if (isReversalSms(t)) return null;
   const amount = findAmount(t);
   const reference = findReference(t);
   if (!amount || amount <= 0 || !reference) return null;

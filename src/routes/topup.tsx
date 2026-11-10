@@ -49,7 +49,7 @@ function TopUpPage() {
       const rows = await checkGw({ data: { ids } }).catch(() => []);
       if (!alive) return;
       for (const row of rows) {
-        if (row.status === "paid") settleGatewayTopUp(row.id, "paid");
+        if (row.status === "paid") settleGatewayTopUp(row.id, "paid", row.paid_amount);
         else if (row.status === "failed") settleGatewayTopUp(row.id, "failed");
       }
     };
@@ -68,7 +68,7 @@ function TopUpPage() {
     const req = submitTopUpRequest({ amount, reference, note: note.trim() || undefined });
     if (!req) return setError("Could not send request. Try again.");
     registerGw({ data: { id: req.id, store_id: req.store_id, customer_name: req.customer_name, customer_phone: req.customer_phone, amount: Math.round(req.amount), reference: req.reference } })
-      .then((r) => { if (r.status === "paid") settleGatewayTopUp(req.id, "paid"); })
+      .then((r) => { if (r.status === "paid") settleGatewayTopUp(req.id, "paid", r.paid_amount); else if (r.status === "blocked") { settleGatewayTopUp(req.id, "failed"); setError("Too many unconfirmed receipts. Wait 15 minutes or ask the cashier."); } })
       .catch(() => {});
     setSent(true);
     setReference("");
@@ -195,7 +195,7 @@ function TopUpPage() {
                   <div className="font-semibold">{formatTZS(r.amount)} <span className="text-xs text-muted-foreground font-normal">· ref {r.reference}</span></div>
                   <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.status === "approved" ? "Confirmed — added to your wallet." : r.status === "rejected" ? "Not confirmed. No money was added." : r.assist_requested_at ? `Sent to the cashier with receipt ${r.reference} and TZS ${r.amount.toLocaleString()} — waiting for manual check.` : `Checking with the store's payment phone… ${Math.max(0, Math.ceil((r.created_at + 600000 - now) / 60000))} min left`}
+                    {r.status === "approved" ? `Payment confirmed by BitePay — receipt ${r.reference}, TZS ${r.amount.toLocaleString()} added.` : r.status === "rejected" ? "Not confirmed. No money was added." : r.assist_requested_at ? `Sent to the cashier with receipt ${r.reference} and TZS ${r.amount.toLocaleString()} — waiting for manual check.` : `Checking with the store's payment phone… ${Math.max(0, Math.ceil((r.created_at + 600000 - now) / 60000))} min left`}
                   </div>
                   {r.status === "rejected" && r.reject_reason && (
                     <div className="text-xs text-destructive mt-0.5">Reason: {r.reject_reason}</div>

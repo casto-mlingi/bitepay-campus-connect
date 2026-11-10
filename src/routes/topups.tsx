@@ -6,6 +6,10 @@ import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PayStateBadge } from "@/components/topup-status";
+import { useServerFn } from "@tanstack/react-start";
+import { lookupGatewayReceipts, claimGatewayReceipt } from "@/lib/gateway.functions";
+
+type Lookup = { found: true; reference: string; amount: number; used: boolean; received_at: number } | { found: false; suggestion: string | null };
 
 export const Route = createFileRoute("/topups")({
   component: TopupsDesk,
@@ -19,7 +23,12 @@ export const Route = createFileRoute("/topups")({
 });
 
 function TopupsDesk() {
-  const { currentUser, sessionReady, topUpRequests, staffTopUp, rejectTopUpRequest, profiles, can } = useStore();
+  const { currentUser, sessionReady, topUpRequests, staffTopUp, rejectTopUpRequest, profiles, can, store } = useStore();
+  const lookupFn = useServerFn(lookupGatewayReceipts);
+  const claimFn = useServerFn(claimGatewayReceipt);
+  const [gw, setGw] = useState<Record<string, Lookup>>({});
+  const [mLook, setMLook] = useState<Lookup | null>(null);
+  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const [pin, setPin] = useState("");
   const [msg, setMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
@@ -34,6 +43,15 @@ function TopupsDesk() {
   useEffect(() => { if (sessionReady && (!currentUser || currentUser.role !== "staff")) navigate({ to: "/" }); }, [sessionReady, currentUser, navigate]);
 
   const pending = useMemo(() => topUpRequests.filter((r) => r.status === "pending").sort((a, b) => (b.assist_requested_at ?? 0) - (a.assist_requested_at ?? 0)), [topUpRequests]);
+  const refsKey = pending.map((r) => r.reference).join(",");
+  useEffect(() => {
+    if (!store?.id || !refsKey) return;
+    let alive = true;
+    const run = () => lookupFn({ data: { store_id: store.id, references: refsKey.split(",").filter((x) => x.length >= 4).slice(0, 40) } })
+      .then((res) => { if (alive) setGw(res as Record<string, Lookup>); }).catch(() => {});
+    run(); const t = setInterval(run, 10000);
+    return () => { alive = false; clearInterval(t); };
+  }, [store?.id, refsKey, lookupFn]);
   const customers = useMemo(() => profiles.filter((p) => p.role === "customer"), [profiles]);
   const log = useMemo(() => topUpRequests.filter((r) => r.status !== "pending").sort((a, b) => (b.resolved_at ?? 0) - (a.resolved_at ?? 0)).slice(0, 50), [topUpRequests]);
   const nameOf = (id?: string) => profiles.find((p) => p.id === id)?.full_name ?? "Staff";
@@ -41,22 +59,47 @@ function TopupsDesk() {
   if (!currentUser || currentUser.role !== "staff") return null;
   const allowed = can("customers.topup");
 
-  const confirm = (id: string) => {
-    const r = pending.find((x) => x.id === id); if (!r) return;
-    const amt = Math.round(Number(verified[id] ?? r.amount));
+  const smsAmount = (ref: string) => { const g = gw[ref]; return g && g.found && !g.used ? g.amount : null; };
+  const confirm = async (id: string) => {
+    const r = pending.find((x) => x.id === id); if (!r || busy) return;
+    let amt = Math.round(Number(verified[id] ?? smsAmount(r.reference) ?? r.amount));
     if (!Number.isSafeInteger(amt) || amt <= 0) return setMsg({ id, ok: false, text: "Enter the amount shown on the till SMS." });
+    if (store?.id) {
+      setBusy(true);
+      const c = await claimFn({ data: { store_id: store.id, reference: r.reference, request_id: r.id } }).catch(() => null);
+      setBusy(false);
+      if (c && !c.ok) return setMsg({ id, ok: false, text: c.reason });
+      if (c?.ok && c.gateway && c.amount) amt = c.amount; // payment phone amount wins
+    }
     const res = staffTopUp({ customerId: r.customer_id, amount: amt, tender: "mobile", reference: r.reference, pin, requestId: r.id });
     setMsg({ id, ok: res.ok, text: res.ok ? `Confirmed — ${formatTZS(amt)} added to ${r.customer_name}'s wallet.` : res.reason });
   };
-  const manualVerify = () => {
-    const amt = Math.round(Number(mAmt));
+  const checkManual = async () => {
+    const ref = mRef.trim().toUpperCase();
+    if (!store?.id || ref.length < 4) return setMMsg({ ok: false, text: "Enter the receipt number first." });
+    setBusy(true);
+    const res = await lookupFn({ data: { store_id: store.id, references: [ref] } }).catch(() => null);
+    setBusy(false);
+    const l = res?.[ref] as Lookup | undefined;
+    setMLook(l ?? null);
+    if (l?.found && !l.used) setMAmt(String(l.amount));
+  };
+  const manualVerify = async () => {
+    let amt = Math.round(Number(mAmt));
     const ref = mRef.trim().toUpperCase();
     if (!mCust) return setMMsg({ ok: false, text: "Choose the customer." });
     if (!ref) return setMMsg({ ok: false, text: "Enter the receipt number from the till SMS." });
     if (!Number.isSafeInteger(amt) || amt <= 0) return setMMsg({ ok: false, text: "Enter the amount shown on the till SMS." });
+    if (store?.id) {
+      setBusy(true);
+      const c = await claimFn({ data: { store_id: store.id, reference: ref, request_id: `manual-${ref}` } }).catch(() => null);
+      setBusy(false);
+      if (c && !c.ok) return setMMsg({ ok: false, text: c.reason });
+      if (c?.ok && c.gateway && c.amount) amt = c.amount;
+    }
     const res = staffTopUp({ customerId: mCust, amount: amt, tender: "mobile", reference: ref, pin });
     setMMsg({ ok: res.ok, text: res.ok ? `Verified — ${formatTZS(amt)} added (receipt ${ref}).` : res.reason });
-    if (res.ok) { setMRef(""); setMAmt(""); }
+    if (res.ok) { setMRef(""); setMAmt(""); setMLook(null); }
   };
   const reject = (id: string) => {
     if (!reason.trim()) return setMsg({ id, ok: false, text: "Enter a reason so the customer knows what to fix." });
@@ -89,7 +132,11 @@ function TopupsDesk() {
             <Input value={mRef} onChange={(e) => setMRef(e.target.value.toUpperCase())} placeholder="Receipt no. e.g. DK9J93CK51" className="font-mono" />
             <Input type="number" inputMode="numeric" value={mAmt} onChange={(e) => setMAmt(e.target.value)} placeholder="Amount on SMS" />
           </div>
-          <Button className="mt-3" onClick={manualVerify} disabled={!pin}><CheckCircle2 className="w-4 h-4 mr-1" /> Verify & credit wallet</Button>
+          {mLook && <GwBadge l={mLook} />}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={checkManual} disabled={busy || mRef.trim().length < 4}>Check payment phone</Button>
+            <Button onClick={manualVerify} disabled={!pin || busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Verify & credit wallet</Button>
+          </div>
           {mMsg && <div className={`mt-2 text-sm font-medium ${mMsg.ok ? "text-success" : "text-destructive"}`}>{mMsg.text}</div>}
         </section>
       )}
@@ -107,6 +154,7 @@ function TopupsDesk() {
                     <div className="font-bold text-lg">{formatTZS(r.amount)}</div>
                     <div className="text-sm">{r.customer_name} · {r.customer_phone}</div>
                     <div className="text-sm font-mono">Ref {r.reference}</div>
+                    {gw[r.reference] && <GwBadge l={gw[r.reference]} />}
                     {r.assist_requested_at && <div className="mt-1 inline-block rounded bg-warning/15 text-warning px-2 py-0.5 text-xs font-semibold">Customer asked for help · verify manually</div>}
                     {r.note && <div className="text-xs text-muted-foreground">“{r.note}”</div>}
                     <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
@@ -122,9 +170,9 @@ function TopupsDesk() {
                 ) : (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <label className="flex items-center gap-1 text-xs text-muted-foreground">Amount on SMS
-                      <Input type="number" inputMode="numeric" className="h-9 w-28" value={verified[r.id] ?? String(r.amount)} onChange={(e) => setVerified((v) => ({ ...v, [r.id]: e.target.value }))} />
+                      <Input type="number" inputMode="numeric" className="h-9 w-28" value={verified[r.id] ?? String(smsAmount(r.reference) ?? r.amount)} onChange={(e) => setVerified((v) => ({ ...v, [r.id]: e.target.value }))} />
                     </label>
-                    <Button onClick={() => confirm(r.id)} disabled={!pin}><CheckCircle2 className="w-4 h-4 mr-1" /> Confirm</Button>
+                    <Button onClick={() => confirm(r.id)} disabled={!pin || busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Confirm</Button>
                     <Button variant="outline" onClick={() => { setRejecting(r.id); setReason(""); }}><XCircle className="w-4 h-4 mr-1" /> Reject</Button>
                   </div>
                 ))}
@@ -158,4 +206,10 @@ function TopupsDesk() {
       </section>
     </StaffShell>
   );
+}
+
+function GwBadge({ l }: { l: Lookup }) {
+  if (l.found && l.used) return <div className="mt-1 inline-block rounded bg-destructive/15 text-destructive px-2 py-0.5 text-xs font-semibold">Receipt {l.reference} already used — do not credit</div>;
+  if (l.found) return <div className="mt-1 inline-block rounded bg-success/15 text-success px-2 py-0.5 text-xs font-semibold">✓ Confirmed by BitePay: receipt {l.reference} · TZS {l.amount.toLocaleString()}</div>;
+  return <div className="mt-1 inline-block rounded bg-muted text-muted-foreground px-2 py-0.5 text-xs font-semibold">Not on payment phone yet{l.suggestion ? ` · did you mean ${l.suggestion}?` : ""}</div>;
 }

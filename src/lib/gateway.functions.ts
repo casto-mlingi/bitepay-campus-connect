@@ -139,6 +139,9 @@ export const registerGatewayTopup = createServerFn({ method: "POST" })
   }).parse(r))
   .handler(async ({ data }) => {
     const { sql, uid } = await requireCustomer();
+    const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from gateway_topups
+      where customer_id=${uid} and status <> 'paid' and created_at > now() - interval '15 minutes'`;
+    if (n >= 3) return { status: "blocked", paid_amount: null as number | null };
     const { registerTopup } = await import("./gateway.server");
     return registerTopup(sql, { ...data, customer_id: uid });
   });
@@ -149,7 +152,26 @@ export const checkGatewayTopups = createServerFn({ method: "POST" })
     const { sql, uid } = await requireCustomer();
     if (!data.ids.length) return [];
     await sql`update gateway_topups set status='failed' where customer_id=${uid} and status='pending' and expires_at < now()`;
-    const rows = await sql<{ id: string; status: string; amount: string; expires_at: Date }[]>`
-      select id, status, amount, expires_at from gateway_topups where customer_id=${uid} and id = any(${data.ids})`;
-    return rows.map((r) => ({ id: r.id, status: r.status, amount: Number(r.amount), expires_at: new Date(r.expires_at).getTime() }));
+    const rows = await sql<{ id: string; status: string; amount: string; paid_amount: string | null; expires_at: Date }[]>`
+      select id, status, amount, paid_amount, expires_at from gateway_topups where customer_id=${uid} and id = any(${data.ids})`;
+    return rows.map((r) => ({ id: r.id, status: r.status, amount: Number(r.amount), paid_amount: r.paid_amount == null ? null : Number(r.paid_amount), expires_at: new Date(r.expires_at).getTime() }));
+  });
+
+export const lookupGatewayReceipts = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => store.extend({ references: z.array(z.string().trim().min(4).max(40)).max(40) }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql } = await requireStaff(data.store_id, false);
+    const { lookupReceipt } = await import("./gateway.server");
+    const out: Record<string, Awaited<ReturnType<typeof lookupReceipt>>> = {};
+    for (const ref of data.references) out[ref] = await lookupReceipt(sql, data.store_id, ref);
+    return out;
+  });
+
+export const claimGatewayReceipt = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => store.extend({ reference: z.string().trim().min(4).max(40), request_id: z.string().min(1).max(100) }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql } = await requireStaff(data.store_id, false);
+    const { claimReceiptForStaff, ensureTopupTable } = await import("./gateway.server");
+    await ensureTopupTable(sql);
+    return claimReceiptForStaff(sql, data.store_id, data.reference, data.request_id);
   });
