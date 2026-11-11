@@ -17,6 +17,9 @@ import { isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business
 import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
+import { ReceiptScannerModal } from "@/components/receipt-scanner-modal";
+import { IncomingLipa } from "@/components/incoming-lipa";
+import { Camera } from "lucide-react";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
@@ -57,6 +60,7 @@ function POS() {
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
   const [mobileRef, setMobileRef] = useState<string>("");
+  const [refScan, setRefScan] = useState(false);
   const [kitchenNote, setKitchenNote] = useState("");
   const [prepare, setPrepare] = useState(false);
   const [productKind, setProductKind] = useState("all");
@@ -428,7 +432,9 @@ function POS() {
                   <div className="text-sm font-semibold text-amber-800">Wallet short by {formatTZS(walletShort)} — collect the rest</div>
                   <Input type="number" value={splitCash || ""} aria-label="Remaining amount received" min={0} max={total} inputMode="numeric" onChange={(e) => setSplitCash(Math.max(0, wholeAmount(Number(e.target.value)) || 0))} className="h-11 font-semibold bg-background" />
                   <TenderPicker tender={tender} onChange={setTender} />
-                  {tender === "mobile" && <Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 bg-background" />}
+                  {tender === "mobile" && <IncomingLipa storeId={store?.id} onPick={(p) => { setMobileRef(p.reference); setSplitCash(Math.min(total, p.amount)); }} />}
+                  {tender === "mobile" && <div className="relative"><Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 pr-12 bg-background" />
+                    <Button type="button" variant="ghost" size="icon" aria-label="Scan receipt with camera" onClick={() => setRefScan(true)} className="absolute right-1 top-1/2 -translate-y-1/2 text-primary"><Camera className="w-5 h-5" /></Button></div>}
                   <label className="flex items-start gap-2 text-sm font-medium"><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={allowDebt} disabled={debtLimit <= 0} onChange={(e) => { setAllowDebt(e.target.checked); setSplitCash(e.target.checked ? 0 : Math.min(total, walletShort)); }} />Pay later · leave the shortage as customer debt</label>
                   <div className="text-xs text-muted-foreground">Debt limit: {formatTZS(debtLimit)}{debtLimit === 0 ? " · disabled in Settings" : ""}</div>
                   {allowDebt && walletPreview && (walletPreview.ok ? <div className="text-destructive font-bold text-sm">Balance after payment: {formatTZS(walletPreview.balanceAfter)}</div> : <div role="alert" className="text-destructive text-sm">{walletPreview.reason}</div>)}
@@ -450,7 +456,10 @@ function POS() {
                 ))}
               </div>
               {tender === "mobile" && <LipaNumbersList value={store?.lipa_numbers} compact />}
-              {tender === "mobile" && <Input aria-label="Lipa reference / token (optional)" value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11" />}
+              {tender === "mobile" && <IncomingLipa storeId={store?.id} onPick={(p) => { setMobileRef(p.reference); setCashReceived(p.amount); }} />}
+              {tender === "mobile" && <div className="relative"><Input aria-label="Lipa reference / token (optional)" value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 pr-12" />
+                <Button type="button" variant="ghost" size="icon" aria-label="Scan receipt with camera" onClick={() => setRefScan(true)} className="absolute right-1 top-1/2 -translate-y-1/2 text-primary"><Camera className="w-5 h-5" /></Button></div>}
+              {refScan && <ReceiptScannerModal onClose={() => setRefScan(false)} onScan={(r) => setMobileRef(r)} />}
               <div className={`flex items-center justify-between rounded-lg p-3 text-lg ${cashReceived >= total ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                 <span className="font-medium">Change</span><span className="font-bold">{formatTZS(change)}</span>
               </div>
