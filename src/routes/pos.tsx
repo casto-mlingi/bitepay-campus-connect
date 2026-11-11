@@ -2,7 +2,7 @@ import { maxLineQty, remainingStock } from "@/lib/pos-stock";
 import { LipaNumbersList } from "@/components/lipa-numbers";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered, ScanBarcode } from "lucide-react";
+import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered, ScanBarcode, Camera } from "lucide-react";
 import { useStore, formatTZS, type Product, type Profile, type Order } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,6 @@ import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 import { ReceiptScannerModal } from "@/components/receipt-scanner-modal";
 import { IncomingLipa } from "@/components/incoming-lipa";
-import { Camera } from "lucide-react";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
