@@ -2,13 +2,16 @@ import { maxLineQty, remainingStock } from "@/lib/pos-stock";
 import { LipaNumbersList } from "@/components/lipa-numbers";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered } from "lucide-react";
+import { Search, User, Wallet, Plus, Minus, Trash2, Printer, ArrowUpCircle, CheckCircle2, X, Banknote, Download, Receipt, QrCode, Smartphone, RotateCcw, MessageSquare, WifiOff, CloudUpload, ClipboardCheck, Save, ListOrdered, ScanBarcode } from "lucide-react";
 import { useStore, formatTZS, type Product, type Profile, type Order } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadReceipt, printReceipt, printBill, type ReceiptExtras } from "@/lib/receipt";
 import { QRScannerModal } from "@/components/qr-scanner-modal";
+import { BarcodeScannerModal } from "@/components/barcode-scanner-modal";
+import { useHardwareScanner } from "@/lib/use-hardware-scanner";
+import { scanBeep } from "@/lib/scan-feedback";
 import { productDepartment, DEPARTMENT_LABELS } from "@/lib/pack-units";
 import { isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
 import { businessFeatures } from "@/lib/subscription-rules";
@@ -154,6 +157,15 @@ function POS() {
   };
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2500); };
+  const [showBarcode, setShowBarcode] = useState(false);
+  const scanProduct = (raw: string) => {
+    const code = raw.trim().toLowerCase();
+    if (!code) return false;
+    const p = products.find((x) => x.barcode?.trim().toLowerCase() === code || x.sku?.trim().toLowerCase() === code);
+    if (!p) { showToast(`No item with barcode ${raw.trim()}`); return false; }
+    addLine(p); return true;
+  };
+  useHardwareScanner((code) => { if (!showScanner && scanProduct(code)) { scanBeep(); setItemSearch(""); } }, !showScanner && !showBarcode);
 
   const walletShort = freshCustomer ? Math.max(0, total - freshCustomer.wallet_balance) : 0;
   const [splitCash, setSplitCash] = useState<number>(0);
@@ -531,11 +543,12 @@ function POS() {
 
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_400px] gap-4 lg:gap-6 pb-28 md:pb-0">
         <section className="min-w-0">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
             <div className="relative">
               <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} aria-label="Find product" onKeyDown={(e) => { if (retail && e.key === "Enter") { e.preventDefault(); const code = itemSearch.trim().toLowerCase(); const p = products.find((p) => p.barcode?.toLowerCase() === code || p.sku?.toLowerCase() === code); if (p) { addLine(p); setItemSearch(""); } } }} placeholder={retail ? "Find product, SKU or barcode" : "Find a drink or dish"} className="pl-10 h-12 text-base" />
+              <Input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} aria-label="Find product" onKeyDown={(e) => { if (e.key === "Enter" && itemSearch.trim()) { const code = itemSearch.trim().toLowerCase(); if (products.some((p) => p.barcode?.trim().toLowerCase() === code || p.sku?.trim().toLowerCase() === code)) { e.preventDefault(); scanProduct(itemSearch); scanBeep(); setItemSearch(""); } } }} placeholder={retail ? "Find product, SKU or barcode" : "Find item or scan barcode"} className="pl-10 h-12 text-base" />
             </div>
+            <Button variant="outline" onClick={() => setShowBarcode(true)} aria-label="Scan item barcode" className="h-12 px-4 text-base font-semibold"><ScanBarcode className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Scan</span></Button>
             <Button variant="outline" onClick={() => setShowTabs(true)} className="h-12 px-4 text-base font-semibold relative">
               <ListOrdered className="w-5 h-5 sm:mr-2" /><span className="hidden sm:inline">Saved bills</span>
               {openBills.length > 0 && <span className="ml-1.5 min-w-6 h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold grid place-items-center">{openBills.length}</span>}
@@ -653,6 +666,7 @@ function POS() {
         </div>
       )}
 
+      {showBarcode && <BarcodeScannerModal continuous title="Scan items into bill" onClose={() => setShowBarcode(false)} onScan={(c) => { scanProduct(c); }} />}
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={onScan} />}
 
       {pinCustomer && (
