@@ -55,7 +55,7 @@ function TeamPage() {
       </div>
 
       <div className="bg-surface border rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_auto] px-4 py-3 text-[11px] uppercase tracking-wider font-bold text-muted-foreground border-b bg-muted/30">
+        <div className="hidden md:grid grid-cols-[1.5fr_1fr_1fr_1fr_auto] px-4 py-3 text-[11px] uppercase tracking-wider font-bold text-muted-foreground border-b bg-muted/30">
           <div>Member</div>
           <div>Phone</div>
           <div>Role</div>
@@ -63,18 +63,18 @@ function TeamPage() {
           <div className="text-right">Actions</div>
         </div>
         {staff.map((p) => (
-          <div key={p.id} className="grid grid-cols-[1.5fr_1fr_1fr_1fr_auto] items-center px-4 py-3 border-b last:border-0 text-sm">
-            <div>
-              <div className="font-semibold flex items-center gap-2">
+          <div key={p.id} className="grid grid-cols-2 gap-2 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto] items-center px-4 py-3 border-b last:border-0 text-sm">
+            <div className="col-span-2 md:col-span-1 min-w-0">
+              <div className="font-semibold flex flex-wrap items-center gap-2 break-words">
                 {p.full_name}
                 {p.id === currentUser.id && <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-1.5 py-0.5 rounded">You</span>}
               </div>
               <div className="text-xs text-muted-foreground">Since {p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}{p.last_login ? ` · last sign-in ${new Date(p.last_login).toLocaleDateString()}` : ""}</div>
             </div>
-            <div>{p.phone}</div>
+            <div className="col-span-2 md:col-span-1 text-muted-foreground md:text-foreground">{p.phone}</div>
             <div><RoleBadge role={p.staff_role ?? "cashier"} /></div>
             <div>{p.disabled ? <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Disabled</span> : <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Active</span>}</div>
-            <div className="flex items-center justify-end gap-1">
+            <div className="col-span-2 md:col-span-1 flex flex-wrap items-center justify-start md:justify-end gap-1 border-t pt-2 md:border-0 md:pt-0">
               <button title="Performance & commission" onClick={() => navigate({ to: "/my-performance", search: { id: p.id, period: "month" } })} className="p-2 rounded-lg hover:bg-muted text-primary"><Activity className="w-4 h-4" /></button>
               <button title="Edit" onClick={() => setEdit(p)} className="p-2 rounded-lg hover:bg-muted"><Pencil className="w-4 h-4" /></button>
               <button title="Reset password" onClick={() => setReset({ p, kind: "password" })} className="p-2 rounded-lg hover:bg-muted"><KeyRound className="w-4 h-4" /></button>
@@ -231,16 +231,16 @@ function StaffDebts({ flash }: { flash: (m: string) => void }) {
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState<"cash" | "salary">("cash");
   const [note, setNote] = useState("");
-  if (rows.length === 0) return null;
   const nameOf = (id: string) => shifts.flatMap((s) => s.stock_counts ?? []).flatMap((l) => l.charges ?? []).find((c) => c.staff_id === id)?.name ?? "Staff";
   const canSettle = hasStaffRole("supervisor");
   return (
     <section className="mt-6 bg-surface border rounded-2xl p-4">
       <h2 className="font-bold text-lg">Staff stock debts</h2>
       <p className="text-sm text-muted-foreground">Missing stock charged at shift close. Settle by cash or salary deduction.</p>
+      {rows.length === 0 && <p className="mt-3 rounded-xl bg-muted/40 p-4 text-center text-sm text-muted-foreground">No outstanding staff debts — all shifts balanced.</p>}
       <ul className="mt-3 divide-y">{rows.map(([id, r]) => <li key={id} className="py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div><p className="font-semibold">{nameOf(id)}</p><p className="text-xs text-muted-foreground">Charged {formatTZS(r.charged)} · Paid {formatTZS(r.paid)}</p></div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <div className="min-w-0"><p className="font-semibold truncate">{nameOf(id)}</p><p className="text-xs text-muted-foreground">Charged {formatTZS(r.charged)} · Paid {formatTZS(r.paid)}</p></div>
           <div className="text-right"><p className={r.balance > 0 ? "font-bold text-destructive" : "font-bold"}>{formatTZS(r.balance)}</p>
             {canSettle && r.balance > 0 && <Button size="sm" variant="outline" className="mt-1" onClick={() => { setOpen(open === id ? null : id); setAmount(r.balance); setNote(""); }}>Settle</Button>}</div>
         </div>
