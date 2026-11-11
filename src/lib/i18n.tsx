@@ -1,5 +1,6 @@
 import { PHRASES } from "./i18n-dict";
 import { SW_APP } from "./i18n-sw";
+import { FR_APP } from "./i18n-fr";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type Lang = "en" | "sw" | "fr";
@@ -42,6 +43,7 @@ const fr: Dict = {
 };
 for (const [en, [s1, f1]] of Object.entries(PHRASES)) { if (!(en in sw)) sw[en] = s1; if (!(en in fr)) fr[en] = f1; }
 for (const [en, s1] of Object.entries(SW_APP)) { if (!(en in sw)) sw[en] = s1; }
+for (const [en, f1] of Object.entries(FR_APP)) { if (!(en in fr)) fr[en] = f1; }
 const DICTS: Record<Lang, Dict> = { en: {}, sw, fr };
 
 // Translate visible text anywhere on the page (exact phrase match), so screens
