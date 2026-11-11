@@ -21,9 +21,9 @@ export type ReceiptExtras = {
 const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const qr = (value: string, size: number) => renderToStaticMarkup(createElement(QRCodeSVG, { value, size, level: "M", marginSize: 1 }));
 
-/** Text a phone camera shows after scanning a Lipa Namba QR on a bill. */
-export function lipaQrText(l: { provider: keyof typeof LIPA_PROVIDERS; number: string; account_name: string }, amount?: number) {
-  return `${LIPA_PROVIDERS[l.provider]} Lipa Namba: ${l.number}\nName: ${l.account_name}${amount ? `\nAmount: ${formatTZS(amount)}` : ""}`;
+/** QR payload for a bill: just the till/business number, so M-Pesa and other wallet scanners auto-fill it. */
+export function lipaQrText(l: { provider: keyof typeof LIPA_PROVIDERS; number: string; account_name: string }, _amount?: number) {
+  return l.number.replace(/[^0-9A-Za-z]/g, "");
 }
 
 const row = (k: string, v: string, bold = false) => `<div class="row${bold ? " b" : ""}"><span>${esc(k)}</span><span>${esc(v)}</span></div>`;
