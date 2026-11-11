@@ -6,6 +6,7 @@ import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { validHandover } from "@/lib/shift-controls";
+import { lossCharges, shortage, unresolvedLosses, type LossBasis, type LossDisposition } from "@/lib/staff-debts";
 
 export const Route = createFileRoute("/shift")({
   component: ShiftPage,
@@ -27,6 +28,7 @@ function ShiftPage() {
   const [report, setReport] = useState<Shift | null>(null);
   const [notes, setNotes] = useState<string>("");
   const [toast, setToast] = useState<string>("");
+  const [lossOpen, setLossOpen] = useState(false);
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
@@ -41,6 +43,7 @@ function ShiftPage() {
   };
 
   const doClose = async () => {
+    if (unresolvedLosses(activeShift?.stock_counts ?? []).length > 0) { setLossOpen(true); return; }
     setClosing(true);
     try {
       const closed = await closeShift({ counted_cash: countedCash, counted_mobile: countedMobile, retained_float: retained, cash_drop: drop, witness_id: witness, witness_pin: witnessPin, notes });
@@ -122,6 +125,7 @@ function ShiftPage() {
         </div>
       )}
 
+      {lossOpen && <LossDialog onClose={() => setLossOpen(false)} onDone={() => { setLossOpen(false); show("Loss decisions saved · tap Confirm handover"); }} />}
       {report && <ShiftReport shift={report} onClose={() => setReport(null)} />}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium">
@@ -193,6 +197,65 @@ function PastShifts({ onSelect }: { onSelect: (shift: Shift) => void }) {
 function ShiftReport({ shift, onClose }: { shift: Shift; onClose: () => void }) {
   const fields: [string, number][] = [["Starting drawer cash", shift.opening_float], ["Expected cash", shift.expected_cash ?? (shift.counted_cash ?? 0) - (shift.cash_variance ?? 0)], ["Counted cash", shift.counted_cash ?? 0], ["Shortage / surplus", shift.cash_variance ?? 0], ["Float left in drawer", shift.retained_float ?? 0], ["Handed to manager / safe", shift.cash_drop ?? 0], ["Expected mobile", shift.expected_mobile ?? (shift.counted_mobile ?? 0) - (shift.mobile_variance ?? 0)], ["Counted mobile", shift.counted_mobile ?? 0], ["Mobile difference", shift.mobile_variance ?? 0]];
   const stock = shift.stock_counts ?? [];
-  const print = () => { const w = window.open("", "_blank"); if (!w) return; const text = ["BitePay — Shift handover", shift.id, `Cashier: ${shift.cashier_name}`, `Receiver: ${shift.witness_name ?? "Legacy report — no witness"}`, `Closed: ${new Date(shift.closed_at ?? 0).toLocaleString()}`, ...fields.map(([label, value]) => `${label}: ${value.toLocaleString()}`), ...(stock.length ? ["Stock count (counted/system, difference):", ...stock.map((l) => `${l.name}: ${l.counted}/${l.expected} (${l.counted - l.expected})`)] : []), shift.notes ?? ""].join("\n"); w.document.title = "BitePay Shift Handover"; const pre = w.document.createElement("pre"); pre.textContent = text; w.document.body.appendChild(pre); w.print(); };
-  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"><section role="dialog" aria-label="Shift handover report" className="bg-background border rounded-lg p-5 w-full max-w-lg max-h-[85dvh] overflow-y-auto"><h2 className="font-bold text-xl">Shift handover report</h2><p className="text-sm text-muted-foreground break-all">{shift.id}</p><p className="mt-3 text-sm">Cashier: {shift.cashier_name}<br />Receiver: {shift.witness_name ?? "Not recorded"}</p><dl className="mt-4 space-y-2">{fields.map(([label, value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt>{label}</dt><dd className={value < 0 ? "text-destructive font-bold" : "font-semibold"}>{value.toLocaleString()}</dd></div>)}</dl>{shift.notes && <p className="mt-3 text-sm">{shift.notes}</p>}{stock.length > 0 && <div className="mt-4 border-t pt-3"><h3 className="font-semibold text-sm">Stock count</h3><dl className="mt-2 space-y-1">{stock.map((l) => <div key={l.product_id} className="flex justify-between gap-4 text-sm"><dt>{l.name} <span className="text-muted-foreground">({l.counted}/{l.expected})</span></dt><dd className={l.counted - l.expected < 0 ? "text-destructive font-bold" : "font-semibold"}>{l.counted - l.expected}</dd></div>)}</dl></div>}<div className="mt-5 flex gap-2"><Button onClick={print}><Printer className="w-4 h-4 mr-2" />Print report</Button><Button variant="outline" onClick={onClose}>Close</Button></div></section></div>;
+  const print = () => { const w = window.open("", "_blank"); if (!w) return; const text = ["BitePay — Shift handover", shift.id, `Cashier: ${shift.cashier_name}`, `Receiver: ${shift.witness_name ?? "Legacy report — no witness"}`, `Closed: ${new Date(shift.closed_at ?? 0).toLocaleString()}`, ...fields.map(([label, value]) => `${label}: ${value.toLocaleString()}`), ...(stock.length ? ["Stock count (counted/system, difference):", ...stock.map((l) => `${l.name}: ${l.counted}/${l.expected} (${l.counted - l.expected})${l.disposition ? ` — ${lossText(l)}` : ""}`)] : []), shift.notes ?? ""].join("\n"); w.document.title = "BitePay Shift Handover"; const pre = w.document.createElement("pre"); pre.textContent = text; w.document.body.appendChild(pre); w.print(); };
+  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"><section role="dialog" aria-label="Shift handover report" className="bg-background border rounded-lg p-5 w-full max-w-lg max-h-[85dvh] overflow-y-auto"><h2 className="font-bold text-xl">Shift handover report</h2><p className="text-sm text-muted-foreground break-all">{shift.id}</p><p className="mt-3 text-sm">Cashier: {shift.cashier_name}<br />Receiver: {shift.witness_name ?? "Not recorded"}</p><dl className="mt-4 space-y-2">{fields.map(([label, value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt>{label}</dt><dd className={value < 0 ? "text-destructive font-bold" : "font-semibold"}>{value.toLocaleString()}</dd></div>)}</dl>{shift.notes && <p className="mt-3 text-sm">{shift.notes}</p>}{stock.length > 0 && <div className="mt-4 border-t pt-3"><h3 className="font-semibold text-sm">Stock count</h3><dl className="mt-2 space-y-1">{stock.map((l) => <div key={l.product_id} className="flex flex-wrap justify-between gap-x-4 text-sm"><dt>{l.name} <span className="text-muted-foreground">({l.counted}/{l.expected})</span></dt><dd className={l.counted - l.expected < 0 ? "text-destructive font-bold" : "font-semibold"}>{l.counted - l.expected}</dd>{l.disposition && <p className="basis-full text-xs text-muted-foreground">{lossText(l)}</p>}</div>)}</dl></div>}<div className="mt-5 flex gap-2"><Button onClick={print}><Printer className="w-4 h-4 mr-2" />Print report</Button><Button variant="outline" onClick={onClose}>Close</Button></div></section></div>;
+}
+
+function lossText(l: ShiftStockLine) {
+  const amt = formatTZS(l.loss_amount ?? 0);
+  if (l.disposition === "spoilage") return `Written off as spoilage (${amt})${l.reason ? ` · ${l.reason}` : ""}${l.approved_by ? ` · approved by ${l.approved_by}` : ""}`;
+  return `Charged ${(l.charges ?? []).map((c) => `${c.name} ${formatTZS(c.amount)}`).join(", ")} at ${l.basis === "cost" ? "cost" : "selling"} price${l.approved_by ? ` · approved by ${l.approved_by}` : ""}`;
+}
+
+type Decision = { disposition: LossDisposition; basis: LossBasis; waiter: string; reason: string };
+function LossDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { activeShift, products, profiles, resolveStockLosses } = useStore();
+  const storeId = activeShift?.store_id;
+  const roleOf = (p: (typeof profiles)[number]) => p.memberships?.find((m) => m.store_id === storeId)?.staff_role ?? (p.store_id === storeId ? p.staff_role : undefined);
+  const staff = profiles.filter((p) => p.role === "staff" && !p.disabled && roleOf(p));
+  const waiters = staff.filter((p) => roleOf(p) === "waiter");
+  const team = staff.filter((p) => p.id === activeShift?.cashier_id || roleOf(p) === "waiter");
+  const approvers = staff.filter((p) => (roleOf(p) === "owner" || roleOf(p) === "supervisor") && p.staff_pin);
+  const lines = activeShift?.stock_counts ?? [];
+  const short = lines.filter((l) => shortage(l) > 0);
+  const [d, setD] = useState<Record<string, Decision>>(() => Object.fromEntries(short.map((l) => [l.product_id, { disposition: "cashier", basis: "retail", waiter: "", reason: "" }])));
+  const [approver, setApprover] = useState("");
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  if (!activeShift) return null;
+  const cashier = { id: activeShift.cashier_id, name: activeShift.cashier_name };
+  const calc = (l: ShiftStockLine) => {
+    const x = d[l.product_id]; const p = products.find((q) => q.id === l.product_id);
+    const who = x.disposition === "cashier" ? [cashier] : x.disposition === "waiter" ? waiters.filter((w) => w.id === x.waiter).map((w) => ({ id: w.id, name: w.full_name })) : x.disposition === "team" ? team.map((w) => ({ id: w.id, name: w.full_name })) : [];
+    return { ...lossCharges(shortage(l), p?.cost_price ?? 0, p?.price ?? 0, x.disposition, x.basis, who), p };
+  };
+  const set = (id: string, patch: Partial<Decision>) => setD((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const totalCharged = short.reduce((s, l) => s + calc(l).charges.reduce((a, c) => a + c.amount, 0), 0);
+  const save = () => {
+    const next = lines.map((l) => { if (shortage(l) === 0) return l; const x = d[l.product_id]; const r = calc(l); return { ...l, disposition: x.disposition, basis: x.disposition === "spoilage" ? "cost" as const : x.basis, reason: x.reason.trim() || undefined, loss_amount: r.total, charges: r.charges }; });
+    if (short.some((l) => d[l.product_id].disposition === "spoilage" && !d[l.product_id].reason.trim())) return setErr("Write a short reason for each spoilage write-off");
+    const res = resolveStockLosses(next, approver, pin);
+    if (!res.ok) return setErr(res.reason);
+    onDone();
+  };
+  const opts: [LossDisposition, string][] = [["spoilage", "Spoilage / breakage (store pays, at cost)"], ["cashier", `Charge cashier (${cashier.name})`], ["waiter", "Charge a waiter"], ["team", `Split across shift team (${team.length})`]];
+  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-3"><section role="dialog" aria-label="Missing stock" className="bg-background border rounded-lg p-4 sm:p-5 w-full max-w-lg max-h-[90dvh] overflow-y-auto">
+    <h2 className="font-bold text-lg">Missing stock found</h2>
+    <p className="text-sm text-muted-foreground">{short.length} item(s) are short. A supervisor or the owner decides who pays before the shift can close.</p>
+    <ul className="mt-3 space-y-3">{short.map((l) => { const x = d[l.product_id]; const r = calc(l); return <li key={l.product_id} className="border rounded-lg p-3">
+      <div className="flex justify-between gap-2"><span className="font-semibold">{l.name}</span><span className="text-destructive font-bold">−{shortage(l)}</span></div>
+      <p className="text-xs text-muted-foreground">Cost {formatTZS(r.p?.cost_price ?? 0)} · Price {formatTZS(r.p?.price ?? 0)} each</p>
+      <div className="mt-2 space-y-1.5">{opts.map(([v, label]) => <label key={v} className="flex items-center gap-2 text-sm min-h-9"><input type="radio" name={`d-${l.product_id}`} checked={x.disposition === v} onChange={() => set(l.product_id, { disposition: v })} className="w-4 h-4 accent-primary" />{label}</label>)}</div>
+      {x.disposition === "spoilage" && <Input className="mt-2" placeholder="Reason, e.g. dropped bottle" value={x.reason} onChange={(e) => set(l.product_id, { reason: e.target.value })} />}
+      {x.disposition === "waiter" && <select aria-label="Waiter" className="mt-2 w-full min-h-11 rounded-lg border bg-background px-3 text-sm" value={x.waiter} onChange={(e) => set(l.product_id, { waiter: e.target.value })}><option value="">Select waiter</option>{waiters.map((w) => <option key={w.id} value={w.id}>{w.full_name}</option>)}</select>}
+      {x.disposition !== "spoilage" && <div className="mt-2 flex gap-2">{(["retail", "cost"] as const).map((b) => <button key={b} type="button" onClick={() => set(l.product_id, { basis: b })} className={`flex-1 min-h-10 rounded-lg border text-sm ${x.basis === b ? "bg-primary text-primary-foreground border-primary" : "bg-background"}`}>{b === "retail" ? "Selling price" : "Cost price"}</button>)}</div>}
+      <p className="mt-2 text-sm font-semibold">{x.disposition === "spoilage" ? `Store write-off ${formatTZS(r.total)}` : r.charges.length ? r.charges.map((c) => `${c.name}: ${formatTZS(c.amount)}`).join(" · ") : "Choose who pays"}</p>
+    </li>; })}</ul>
+    <div className="mt-4 space-y-2">
+      <select aria-label="Approver" className="w-full min-h-11 rounded-lg border bg-background px-3 text-sm" value={approver} onChange={(e) => setApprover(e.target.value)}><option value="">Approved by (supervisor / owner)</option>{approvers.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select>
+      <Input aria-label="Approver PIN" type="password" inputMode="numeric" autoComplete="off" placeholder="Approver PIN" value={pin} onChange={(e) => setPin(e.target.value)} />
+    </div>
+    {err && <p className="mt-2 text-sm text-destructive">{err}</p>}
+    <div className="mt-4 flex gap-2"><Button variant="outline" onClick={onClose} className="flex-1 h-11">Recount</Button><Button onClick={save} disabled={!approver || !pin} className="flex-1 h-11">Save · staff owe {formatTZS(totalCharged)}</Button></div>
+  </section></div>;
 }
