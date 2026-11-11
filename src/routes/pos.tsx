@@ -191,6 +191,7 @@ function POS() {
     if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (walletOnly && walletShort > 0) { showToast("Wallet balance is not enough — save the bill for the cashier"); return; }
     if (!walletAllowed || !freshCustomer || !lines.length) return;
+    if (walletShort > 0 && splitCash > 0 && lipaBlock) { showToast(lipaBlock); return; }
     if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
