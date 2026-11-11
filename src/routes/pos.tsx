@@ -18,7 +18,7 @@ import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 import { ReceiptScannerModal } from "@/components/receipt-scanner-modal";
-import { IncomingLipa } from "@/components/incoming-lipa";
+import { IncomingLipa, type LipaCheck } from "@/components/incoming-lipa";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
