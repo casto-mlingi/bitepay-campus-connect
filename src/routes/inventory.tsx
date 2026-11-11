@@ -4,6 +4,7 @@ import { TRADE_UNITS } from "@/lib/retail-stock";
 import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, DEPARTMENT_LABELS, type Department } from "@/lib/pack-units";
 import { retailUnitCost } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
+import { BarcodeField } from "@/components/barcode-field";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -352,7 +353,7 @@ const GRADIENTS = [
 ];
 
 /* ────────────── Finished Goods (sold as bought, straight to POS) ────────────── */
-const blankFG = () => ({ name: "", category: "", department: "drinks" as Department, price: "", unit_cost: "", qty: "", pack_unit: "", pack_size: "", image: undefined as string | undefined });
+const blankFG = () => ({ barcode: "", name: "", category: "", department: "drinks" as Department, price: "", unit_cost: "", qty: "", pack_unit: "", pack_size: "", image: undefined as string | undefined });
 function FinishedGoodsPanel() {
   const { products, addFinishedGood, updateProduct, setProductArchived, availablePlates, batches, can } = useStore();
   const [form, setForm] = useState(blankFG());
@@ -365,7 +366,7 @@ function FinishedGoodsPanel() {
     const latest = batches.filter((b) => b.product_id === p.id).sort((a, b) => b.created_at - a.created_at)[0];
     const cost = latest?.unit_cost ?? p.cost_price ?? 0;
     return { p, stock, cost, margin: cost > 0 ? ((p.price - cost) / p.price) * 100 : null };
-  }).filter((x) => !q.trim() || `${x.p.name} ${x.p.category}`.toLowerCase().includes(q.trim().toLowerCase()));
+  }).filter((x) => !q.trim() || `${x.p.name} ${x.p.category} ${x.p.barcode ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()));
   const value = rows.reduce((s, x) => s + Math.max(0, x.stock) * x.cost, 0);
   const pack = normalizePack(form.pack_unit, Number(form.pack_size) || 0);
   const close = () => { setForm(blankFG()); setEditingId(null); setShow(false); };
@@ -373,12 +374,12 @@ function FinishedGoodsPanel() {
     e.preventDefault();
     const price = Math.round(Number(form.price));
     if (uploading || !form.name.trim() || !(price > 0)) return;
-    const base = { name: form.name.trim(), category: form.category.trim(), department: form.department, price, pack_unit: pack.pack_unit, pack_size: pack.pack_size, image: form.image };
+    const base = { barcode: form.barcode.trim() || undefined, name: form.name.trim(), category: form.category.trim(), department: form.department, price, pack_unit: pack.pack_unit, pack_size: pack.pack_size, image: form.image };
     if (editingId) updateProduct(editingId, base);
     else addFinishedGood({ ...base, description: "", emoji: form.department === "drinks" ? "🥤" : "📦", gradient: GRADIENTS[0], unit: "pcs" }, { qty: Number(form.qty) || 0, unit_cost: Number(form.unit_cost) || 0 });
     close();
   };
-  const edit = (p: Product) => { setEditingId(p.id); setForm({ ...blankFG(), name: p.name, category: p.category, department: productDepartment(p), price: String(p.price), pack_unit: p.pack_unit ?? "", pack_size: p.pack_size ? String(p.pack_size) : "", image: p.image }); setShow(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const edit = (p: Product) => { setEditingId(p.id); setForm({ ...blankFG(), barcode: p.barcode ?? "", name: p.name, category: p.category, department: productDepartment(p), price: String(p.price), pack_unit: p.pack_unit ?? "", pack_size: p.pack_size ? String(p.pack_size) : "", image: p.image }); setShow(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const inp = "w-full px-3 py-2 rounded-lg border bg-background";
   return (
     <div className="space-y-4">
@@ -398,6 +399,7 @@ function FinishedGoodsPanel() {
           <label className="col-span-2 text-sm"><div className="text-muted-foreground mb-1">Item name</div><input required placeholder="e.g. Safari Lager" className={inp} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label className="text-sm"><div className="text-muted-foreground mb-1">POS section</div><select className={inp} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value as Department })}>{(["drinks", "resale", "food"] as Department[]).map((d) => <option key={d} value={d}>{DEPARTMENT_LABELS[d]}</option>)}</select></label>
           <label className="text-sm"><div className="text-muted-foreground mb-1">Category</div><input placeholder="e.g. Beer" className={inp} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label>
+          <div className="col-span-2 text-sm"><div className="text-muted-foreground mb-1">Barcode (optional)</div><BarcodeField value={form.barcode} onChange={(v) => setForm({ ...form, barcode: v })} /></div>
           <label className="text-sm"><div className="text-muted-foreground mb-1">Selling price / pc</div><input required type="number" min={1} className={inp} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></label>
           {!editingId && <><label className="text-sm"><div className="text-muted-foreground mb-1">Cost / pc</div><input type="number" min={0} className={inp} value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} /></label>
           <label className="text-sm"><div className="text-muted-foreground mb-1">Opening stock (pcs)</div><input type="number" min={0} className={inp} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} /></label></>}
@@ -515,7 +517,7 @@ function MenuPanel() {
           <label className="col-span-2 text-sm">POS section<select aria-label="POS section" value={form.department ?? ""} onChange={(e) => setForm({ ...form, department: (e.target.value || undefined) as Product["department"] })} className="w-full h-11 border rounded-md bg-background px-3"><option value="">Automatic (from category)</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale (cigarettes, snacks…)</option></select></label>
           <label className="col-span-1 text-sm">Supplier pack<select aria-label="Supplier pack" value={form.pack_unit ?? ""} onChange={(e) => setForm({ ...form, pack_unit: (e.target.value || undefined) as Product["pack_unit"] })} className="w-full h-11 border rounded-md bg-background px-3"><option value="">None</option>{TRADE_UNITS.filter((u) => ["crate", "carton", "box", "bale", "packet", "bag"].includes(u)).map((u) => <option key={u}>{u}</option>)}</select></label>
           <label className="col-span-1 text-sm">Pieces per pack<input aria-label="Pieces per pack" type="number" min={0} inputMode="numeric" value={form.pack_size ?? ""} onChange={(e) => setForm({ ...form, pack_size: Math.max(0, Math.round(Number(e.target.value) || 0)) || undefined })} placeholder="e.g. 25" className="w-full h-11 border rounded-md px-3 bg-background" /></label>
-          {retail && <><label className="col-span-2 text-sm">Sale unit<select aria-label="Sale unit" value={form.unit ?? "pcs"} onChange={(e) => setForm({ ...form, unit: e.target.value as Product["unit"] })} className="w-full h-11 border rounded-md bg-background px-3">{TRADE_UNITS.map((u) => <option key={u}>{u}</option>)}</select></label><label className="col-span-2 text-sm">SKU<input aria-label="SKU" value={form.sku ?? ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Barcode<input aria-label="Barcode" value={form.barcode ?? ""} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Cost per unit<input aria-label="Cost per unit" type="number" min={0} value={form.cost_price ?? 0} onChange={(e) => setForm({ ...form, cost_price: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Opening stock<input aria-label="Opening stock" disabled={!!editingId} type="number" min={0} value={form.opening_stock ?? 0} onChange={(e) => setForm({ ...form, opening_stock: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Low-stock alert<input aria-label="Low-stock alert" type="number" min={0} value={form.low_stock_threshold ?? 0} onChange={(e) => setForm({ ...form, low_stock_threshold: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label></>}
+          {retail && <><label className="col-span-2 text-sm">Sale unit<select aria-label="Sale unit" value={form.unit ?? "pcs"} onChange={(e) => setForm({ ...form, unit: e.target.value as Product["unit"] })} className="w-full h-11 border rounded-md bg-background px-3">{TRADE_UNITS.map((u) => <option key={u}>{u}</option>)}</select></label><label className="col-span-2 text-sm">SKU<input aria-label="SKU" value={form.sku ?? ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><div className="col-span-2 text-sm">Barcode<BarcodeField value={form.barcode ?? ""} onChange={(v) => setForm({ ...form, barcode: v })} /></div><label className="col-span-2 text-sm">Cost per unit<input aria-label="Cost per unit" type="number" min={0} value={form.cost_price ?? 0} onChange={(e) => setForm({ ...form, cost_price: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Opening stock<input aria-label="Opening stock" disabled={!!editingId} type="number" min={0} value={form.opening_stock ?? 0} onChange={(e) => setForm({ ...form, opening_stock: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Low-stock alert<input aria-label="Low-stock alert" type="number" min={0} value={form.low_stock_threshold ?? 0} onChange={(e) => setForm({ ...form, low_stock_threshold: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label></>}
           <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
             <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 py-2 rounded-lg border text-sm font-semibold">Cancel</button>
             <button
