@@ -575,7 +575,10 @@ export type Shift = {
   cash_variance?: number;
   mobile_variance?: number;
   notes?: string;
+  stock_counts?: ShiftStockLine[];
+  stock_counted_at?: number;
 };
+export type ShiftStockLine = { product_id: string; name: string; expected: number; counted: number };
 
 export type PendingSaleKind = "wallet" | "cash";
 export type PendingSale = {
@@ -764,6 +767,7 @@ type Ctx = {
   transferFunds: (from: PaymentMethod, amount: number) => boolean;
   availablePlates: (product_id: string) => number | null;
   openShift: (opening_float: number) => Shift | null;
+  saveShiftStockCount: (lines: ShiftStockLine[]) => boolean;
   closeShift: (input: { counted_cash: number; counted_mobile: number; retained_float: number; cash_drop: number; witness_id: string; witness_pin: string; notes?: string }) => Promise<Shift>;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
 
@@ -2520,6 +2524,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setActiveShiftId(s.id);
       // Opening float is counted existing cash, not new income.
       return s;
+    },
+    saveShiftStockCount(lines) {
+      if (!activeShift || !currentUser || activeShift.cashier_id !== currentUser.id) return false;
+      const clean = lines.filter((l) => Number.isSafeInteger(l.counted) && l.counted >= 0 && Number.isFinite(l.expected));
+      const now = Date.now();
+      setShifts((prev) => prev.map((x) => x.id === activeShift.id ? { ...x, stock_counts: clean, stock_counted_at: now, updated_at: now } : x));
+      return true;
     },
     async closeShift(input) {
       if (!activeShift || !currentUser || activeShift.cashier_id !== currentUser.id) throw new Error("Only the shift cashier can submit the count");
