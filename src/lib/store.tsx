@@ -75,6 +75,11 @@ export type Store = {
   updated_at?: number;
   location: string;
   contact_phone: string;
+  /** Receipt header details set by the owner. */
+  receipt_logo?: string;
+  receipt_email?: string;
+  tin_number?: string;
+  vrn_number?: string;
   admin_email?: string; // billing/admin contact — must be unique across stores
   currency: string;
 

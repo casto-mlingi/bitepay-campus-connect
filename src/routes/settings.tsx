@@ -44,6 +44,10 @@ function SettingsPage() {
   const [name, setName] = useState(store?.name ?? "");
   const [location, setLocation] = useState(store?.location ?? "");
   const [contact, setContact] = useState(store?.contact_phone ?? "");
+  const [receiptLogo, setReceiptLogo] = useState(store?.receipt_logo ?? "");
+  const [receiptEmail, setReceiptEmail] = useState(store?.receipt_email ?? "");
+  const [tin, setTin] = useState(store?.tin_number ?? "");
+  const [vrn, setVrn] = useState(store?.vrn_number ?? "");
   const [currency, setCurrency] = useState(store?.currency ?? "TZS");
   const [low, setLow] = useState<number>(store?.low_balance_threshold ?? 3000);
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
@@ -83,7 +87,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, receipt_logo: receiptLogo || undefined, receipt_email: receiptEmail.trim() || undefined, tin_number: tin.trim() || undefined, vrn_number: vrn.trim() || undefined, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -170,6 +174,19 @@ function SettingsPage() {
         </Row>
         <Row label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Row>
         <Row label="Contact phone"><Input value={contact} onChange={(e) => setContact(e.target.value)} /></Row>
+        <h2 className="font-bold pt-2">Receipt details</h2>
+        <Row label="Receipt email (optional)"><Input type="email" value={receiptEmail} onChange={(e) => setReceiptEmail(e.target.value)} /></Row>
+        <div className="grid grid-cols-2 gap-3">
+          <Row label="TIN number"><Input value={tin} onChange={(e) => setTin(e.target.value)} placeholder="123-456-789" /></Row>
+          <Row label="VRN number"><Input value={vrn} onChange={(e) => setVrn(e.target.value)} placeholder="40-012345-A" /></Row>
+        </div>
+        <Row label="Business logo on receipt">
+          <div className="flex items-center gap-3">
+            {receiptLogo && <img src={receiptLogo} alt="Receipt logo" className="h-14 w-14 object-contain rounded border bg-card" />}
+            <Input type="file" accept="image/*" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setReceiptLogo(await shrinkLogo(f)); }} />
+            {receiptLogo && <Button type="button" variant="outline" size="sm" onClick={() => setReceiptLogo("")}>Remove</Button>}
+          </div>
+        </Row>
         <div className="grid grid-cols-2 gap-3">
           <Row label="Currency"><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></Row>
           <Row label="Low-balance nudge"><Input type="number" value={low} onChange={(e) => setLow(Number(e.target.value) || 0)} /></Row>
@@ -317,4 +334,21 @@ function PaymentDialog({ plan, onClose, onSubmit }: { plan: SubscriptionPlan; on
       </div>
     </div>
   );
+}
+
+/** Shrinks a logo to a small greyscale-friendly image so it syncs and prints quickly. */
+function shrinkLogo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 240 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      const ctx = c.getContext("2d")!; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
 }
