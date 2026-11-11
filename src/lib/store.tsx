@@ -2547,7 +2547,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     staffDebtPayments: currentStoreId ? staffDebtPayments.filter((p) => p.store_id === currentStoreId).sort((a, b) => b.created_at - a.created_at) : [],
     settleStaffDebt({ staff_id, amount, method, note }) {
       if (!currentStoreId || !currentUser) return { ok: false, reason: "No store selected" };
-      if (!hasStaffRole("owner", "supervisor")) return { ok: false, reason: "Only a supervisor or the owner can settle staff debts" };
+      if (!hasStaffRole("supervisor")) return { ok: false, reason: "Only a supervisor or the owner can settle staff debts" };
       const amt = Math.round(amount);
       if (!Number.isSafeInteger(amt) || amt <= 0) return { ok: false, reason: "Enter a valid amount" };
       setStaffDebtPayments((prev) => [{ id: crypto.randomUUID(), store_id: currentStoreId, staff_id, amount: amt, method, note: note?.trim() || undefined, recorded_by: currentUser.full_name, created_at: Date.now() }, ...prev]);
