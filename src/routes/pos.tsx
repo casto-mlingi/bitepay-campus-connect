@@ -202,7 +202,7 @@ function POS() {
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
-    printReceipt(res.order, extras);
+    printReceipt(res.order, { ...extras, store });
     setLines([]); setSplitCash(0); setMobileRef(""); setKitchenNote(""); resetBill(res.order.id);
     if (qrOnly) { setCustomer(null); setWalletUnlocked([]); }
     showToast(`Sale ${res.order.receipt_no ?? res.order.id} — receipt printed`);
@@ -227,7 +227,7 @@ function POS() {
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
-    printReceipt(res.order, extras);
+    printReceipt(res.order, { ...extras, store });
     setLines([]); setCashReceived(0); setCashName(""); setMobileRef(""); setKitchenNote(""); setChangePhone(""); resetBill(res.order.id);
     showToast(saveChange && change > 0 ? `${formatTZS(change)} saved as customer credit` : tender === "mobile" && change > 0 ? `Payment saved · give customer ${formatTZS(change)} cash change` : `Payment saved · receipt printed`);
   };
@@ -246,7 +246,7 @@ function POS() {
     if (!reason) return;
     const res = reverseSale(lastReceipt.order.id, reason);
     if (!res.ok) { showToast(res.reason); return; }
-    printReceipt(res.order, { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name });
+    printReceipt(res.order, { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name, store });
     setLastReceipt({ order: res.order, extras: { paymentMode: lastReceipt.extras.paymentMode, cashierName: currentUser?.full_name } });
     showToast(`Credit note ${res.order.receipt_no ?? res.order.id} issued`);
   };
@@ -360,7 +360,7 @@ function POS() {
         <Button disabled={!lines.length} onClick={doSaveBill} className="h-14 text-base font-bold col-span-2 sm:col-span-1">
           <Save className="w-5 h-5 mr-2" /> {retail ? "Hold sale" : "Save bill"}
         </Button>
-        <Button disabled={!lines.length} variant="outline" className="h-14 text-base font-semibold col-span-2 sm:col-span-1" onClick={() => printBill({ items: toItems(), customerName: billLabel || freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name })}>
+        <Button disabled={!lines.length} variant="outline" className="h-14 text-base font-semibold col-span-2 sm:col-span-1" onClick={() => printBill({ items: toItems(), customerName: billLabel || freshCustomer?.full_name || cashName, tableNo, kitchenNote, businessName: store?.name, store })}>
           <Printer className="w-5 h-5 mr-2" /> Print bill
         </Button>
         {canTakePayment ? (
@@ -496,7 +496,7 @@ function POS() {
             {lastReceipt.order.reference && <span className="font-mono"> · ref {lastReceipt.order.reference}</span>}
           </div>
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, lastReceipt.extras)}><Printer className="w-3.5 h-3.5 mr-1" /> Reprint</Button>
+            <Button size="sm" variant="outline" onClick={() => printReceipt(lastReceipt.order, { ...lastReceipt.extras, store })}><Printer className="w-3.5 h-3.5 mr-1" /> Reprint</Button>
             <Button size="sm" variant="outline" onClick={() => downloadReceipt(lastReceipt.order, lastReceipt.extras)}><Download className="w-3.5 h-3.5 mr-1" /> Download</Button>
             {lastReceipt.order.customer_id !== "walkin" && (
               <>
