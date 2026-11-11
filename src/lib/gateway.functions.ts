@@ -180,3 +180,30 @@ export const claimGatewayReceipt = createServerFn({ method: "POST" })
     await ensureTopupTable(sql);
     return claimReceiptForStaff(sql, data.store_id, data.reference, data.request_id);
   });
+
+/** Recent Lipa Namba payments received by the store's SMS phone, for cashiers at checkout. */
+export const listIncomingLipa = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => store.extend({ hours: z.number().int().min(1).max(72).default(24) }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql } = await requireStaff(data.store_id, false);
+    const since = new Date(Date.now() - data.hours * 3_600_000);
+    const rows = await sql<{ id: string; provider: string; reference: string; amount: string; sender_name: string | null; sender_phone: string | null; status: string; checkout_id: string | null; received_at: Date }[]>`
+      select id, provider, reference, amount, sender_name, sender_phone, status, checkout_id, received_at from gateway_sms
+      where store_id=${data.store_id} and not is_test and received_at > ${since} order by received_at desc limit 200`;
+    return rows.map((r) => ({ id: r.id, provider: r.provider, reference: r.reference, amount: Number(r.amount), sender_name: r.sender_name, sender_phone: r.sender_phone ? r.sender_phone.replace(/\d(?=\d{3})/g, "•") : null, used: !!r.checkout_id || r.status === "matched" || r.status === "ignored", received_at: new Date(r.received_at).getTime() }));
+  });
+
+/** Locks one received Lipa payment to a POS sale so no other till can use it. */
+export const claimLipaForSale = createServerFn({ method: "POST" })
+  .inputValidator((r: unknown) => store.extend({ sms_id: z.string().min(1).max(100) }).parse(r))
+  .handler(async ({ data }) => {
+    const { sql, uid } = await requireStaff(data.store_id, false);
+    return sql.begin(async (tx) => {
+      const [s] = await tx<{ id: string; reference: string; amount: string; status: string; checkout_id: string | null }[]>`
+        select id, reference, amount, status, checkout_id from gateway_sms where id=${data.sms_id} and store_id=${data.store_id} and not is_test for update`;
+      if (!s) return { ok: false as const, reason: "Payment not found." };
+      if (s.checkout_id || s.status === "matched" || s.status === "ignored") return { ok: false as const, reason: "This payment was already used." };
+      await tx`update gateway_sms set status='matched', checkout_id=${"pos:" + uid + ":" + Date.now()}, reason='Used at POS' where id=${s.id}`;
+      return { ok: true as const, reference: s.reference, amount: Number(s.amount) };
+    });
+  });
