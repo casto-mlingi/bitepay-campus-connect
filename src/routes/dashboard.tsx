@@ -23,24 +23,11 @@ function Dashboard() {
   const [pinCurrent, setPinCurrent] = useState("");
   const [pinNew, setPinNew] = useState("");
   const [pinMsg, setPinMsg] = useState("");
-  const [popup, setPopup] = useState<null | { title: string; body: string; kind: string }>(null);
 
   useEffect(() => {
     if (sessionReady && !currentUser) navigate({ to: "/" });
     else if (currentUser && currentUser.role === "staff") navigate({ to: "/staff" });
   }, [currentUser, navigate]);
-
-  // Auto-popup the newest unread notification on login/mount
-  useEffect(() => {
-    if (!currentUser || currentUser.role !== "customer") return;
-    const unread = notifications.filter((n) => n.user_id === currentUser.id && !n.read);
-    if (unread.length > 0) {
-      const latest = unread[0];
-      setPopup({ title: latest.title, body: latest.body, kind: latest.kind });
-    }
-    // Only run once on mount per user
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
 
   if (!currentUser || currentUser.role !== "customer") return null;
 
@@ -265,32 +252,6 @@ function Dashboard() {
               <button type="submit" className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm">Save PIN</button>
             </div>
           </form>
-        </div>
-      )}
-
-      {popup && (
-        <div className="fixed inset-0 z-[60] bg-black/60 grid place-items-center p-4 animate-in fade-in" onClick={() => setPopup(null)}>
-          <div className="bg-background rounded-3xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start gap-3">
-              <div className={`w-11 h-11 rounded-2xl grid place-items-center shrink-0 ${popup.kind === "low_balance" ? "bg-amber-100 text-amber-700" : popup.kind === "topup" ? "bg-emerald-100 text-emerald-700" : "bg-primary/10 text-primary"}`}>
-                {popup.kind === "low_balance" ? <AlertTriangle className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold">{popup.title}</div>
-                <div className="text-sm text-muted-foreground mt-1">{popup.body}</div>
-              </div>
-              <button onClick={() => setPopup(null)} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="mt-5 flex gap-2">
-              {popup.kind === "low_balance" ? (
-                <Link to="/topup" onClick={() => setPopup(null)} className="flex-1 inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground font-semibold px-4 py-2.5 rounded-xl">
-                  Top up now <ArrowRight className="w-4 h-4" />
-                </Link>
-              ) : (
-                <button onClick={() => setPopup(null)} className="flex-1 bg-primary text-primary-foreground font-semibold px-4 py-2.5 rounded-xl">Got it</button>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
