@@ -2,6 +2,8 @@ import { useSnapshotSync, type SyncState } from "@/lib/use-snapshot-sync";
 import { liveWallet, canonicalWallet, loyaltyReward } from "./wallet-balances";
 import { shiftEvidence, type FundTransfer } from "./shift-controls";
 import { confirmHandover } from "./shift.functions";
+import type { LossDisposition, LossBasis, LossCharge, StaffDebtPayment } from "./staff-debts";
+export type { StaffDebtPayment } from "./staff-debts";
 import { cashSettlement, walletSettlement, validWalletPayout, debtSince } from "./pos-payments";
 import { billBalance, dueDate, validPayment, type Vendor, type VendorPayment } from "./payables";
 export type { Vendor, VendorPayment } from "./payables";
@@ -578,7 +580,7 @@ export type Shift = {
   stock_counts?: ShiftStockLine[];
   stock_counted_at?: number;
 };
-export type ShiftStockLine = { product_id: string; name: string; expected: number; counted: number };
+export type ShiftStockLine = { product_id: string; name: string; expected: number; counted: number; disposition?: LossDisposition; basis?: LossBasis; reason?: string; loss_amount?: number; charges?: LossCharge[]; approved_by?: string };
 
 export type PendingSaleKind = "wallet" | "cash";
 export type PendingSale = {
@@ -768,6 +770,9 @@ type Ctx = {
   availablePlates: (product_id: string) => number | null;
   openShift: (opening_float: number) => Shift | null;
   saveShiftStockCount: (lines: ShiftStockLine[]) => boolean;
+  resolveStockLosses: (lines: ShiftStockLine[], approver_id: string, pin: string) => Ok | Fail;
+  staffDebtPayments: StaffDebtPayment[];
+  settleStaffDebt: (input: { staff_id: string; amount: number; method: "cash" | "salary"; note?: string }) => Ok | Fail;
   closeShift: (input: { counted_cash: number; counted_mobile: number; retained_float: number; cash_drop: number; witness_id: string; witness_pin: string; notes?: string }) => Promise<Shift>;
   enqueueSale: (payload: Omit<PendingSale, "id" | "queued_at" | "store_id">) => void;
 
@@ -957,6 +962,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [fundTransfers, setFundTransfers] = useState<FundTransfer[]>([]);
   const [vendorPayments, setVendorPayments] = useState<VendorPayment[]>([]);
+  const [staffDebtPayments, setStaffDebtPayments] = useState<StaffDebtPayment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [treasuries, setTreasuries] = useState<Record<string, Treasury>>({});
   const [receiptSeq, setReceiptSeq] = useState<{ day: string; n: number }>({ day: todayKey(), n: 0 });
@@ -1038,13 +1044,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers,
+      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
     [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
-     tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers,
+     tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments,
      adminAuditLog, subscriptionPayments, receiptSeq],
   );
   type Snapshot = typeof snapshot;
@@ -1077,6 +1083,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.openBills) setOpenBills(s.openBills);
     if (s.vendors) setVendors(s.vendors);
     if (s.vendorPayments) setVendorPayments(s.vendorPayments);
+    if (s.staffDebtPayments) setStaffDebtPayments(s.staffDebtPayments);
     if (s.fundTransfers) setFundTransfers(s.fundTransfers);
     if (s.commissionPayouts) setCommissionPayouts(s.commissionPayouts);
     if (s.stores) setStores(s.stores);
@@ -2525,6 +2532,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Opening float is counted existing cash, not new income.
       return s;
     },
+    resolveStockLosses(lines, approver_id, pin) {
+      if (!activeShift || !currentUser || activeShift.cashier_id !== currentUser.id) return { ok: false, reason: "Only the shift cashier can submit the count" };
+      const approver = profiles.find((p) => p.id === approver_id && p.role === "staff" && !p.disabled);
+      const role = approver?.memberships?.find((m) => m.store_id === activeShift.store_id)?.staff_role ?? (approver?.store_id === activeShift.store_id ? approver.staff_role : undefined);
+      if (!approver || (role !== "owner" && role !== "supervisor")) return { ok: false, reason: "A supervisor or the owner must approve stock losses" };
+      if (!approver.staff_pin || approver.staff_pin !== pin) return { ok: false, reason: "Wrong approver PIN" };
+      if (lines.some((l) => l.counted < l.expected && (!l.disposition || (l.disposition !== "spoilage" && !(l.charges?.length))))) return { ok: false, reason: "Choose who is responsible for every missing item" };
+      const now = Date.now();
+      const clean = lines.map((l) => l.counted < l.expected ? { ...l, approved_by: approver.full_name } : l);
+      setShifts((prev) => prev.map((x) => x.id === activeShift.id ? { ...x, stock_counts: clean, updated_at: now } : x));
+      return { ok: true };
+    },
+    staffDebtPayments: currentStoreId ? staffDebtPayments.filter((p) => p.store_id === currentStoreId).sort((a, b) => b.created_at - a.created_at) : [],
+    settleStaffDebt({ staff_id, amount, method, note }) {
+      if (!currentStoreId || !currentUser) return { ok: false, reason: "No store selected" };
+      if (!hasStaffRole("supervisor")) return { ok: false, reason: "Only a supervisor or the owner can settle staff debts" };
+      const amt = Math.round(amount);
+      if (!Number.isSafeInteger(amt) || amt <= 0) return { ok: false, reason: "Enter a valid amount" };
+      setStaffDebtPayments((prev) => [{ id: crypto.randomUUID(), store_id: currentStoreId, staff_id, amount: amt, method, note: note?.trim() || undefined, recorded_by: currentUser.full_name, created_at: Date.now() }, ...prev]);
+      if (method === "cash") adjustCash((c) => c + amt);
+      return { ok: true };
+    },
     saveShiftStockCount(lines) {
       if (!activeShift || !currentUser || activeShift.cashier_id !== currentUser.id) return false;
       const clean = lines.filter((l) => Number.isSafeInteger(l.counted) && l.counted >= 0 && Number.isFinite(l.expected));
@@ -3355,7 +3384,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, archivedProducts, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, archivedProducts, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is

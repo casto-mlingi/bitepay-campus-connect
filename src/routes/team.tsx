@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requiresStaffPin } from "@/lib/staff-rules";
 import { Label } from "@/components/ui/label";
+import { formatTZS } from "@/lib/store";
+import { staffDebtBalances } from "@/lib/staff-debts";
 
 export const Route = createFileRoute("/team")({
   component: TeamPage,
@@ -93,6 +95,8 @@ function TeamPage() {
       {showAdd && <AddStaffModal onClose={() => setShowAdd(false)} onSubmit={(input) => {
         const r = addStaff(input); if (r.ok) { flash("Member added"); setShowAdd(false); } return r;
       }} canManageAll={canManageAll} />}
+
+      <StaffDebts flash={flash} />
 
       {edit && <EditStaffModal p={edit} onClose={() => setEdit(null)} onSubmit={(patch) => {
         const r = updateStaff(edit.id, patch); flash(r.ok ? "Updated" : r.reason); if (r.ok) setEdit(null);
@@ -216,5 +220,38 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</Label>
       <div className="mt-1.5">{children}</div>
     </div>
+  );
+}
+
+function StaffDebts({ flash }: { flash: (m: string) => void }) {
+  const { shifts, staffDebtPayments, settleStaffDebt, hasStaffRole } = useStore();
+  const balances = useMemo(() => staffDebtBalances(shifts, staffDebtPayments), [shifts, staffDebtPayments]);
+  const rows = [...balances.entries()].filter(([, r]) => r.charged > 0);
+  const [open, setOpen] = useState<string | null>(null);
+  const [amount, setAmount] = useState(0);
+  const [method, setMethod] = useState<"cash" | "salary">("cash");
+  const [note, setNote] = useState("");
+  if (rows.length === 0) return null;
+  const nameOf = (id: string) => shifts.flatMap((s) => s.stock_counts ?? []).flatMap((l) => l.charges ?? []).find((c) => c.staff_id === id)?.name ?? "Staff";
+  const canSettle = hasStaffRole("supervisor");
+  return (
+    <section className="mt-6 bg-surface border rounded-2xl p-4">
+      <h2 className="font-bold text-lg">Staff stock debts</h2>
+      <p className="text-sm text-muted-foreground">Missing stock charged at shift close. Settle by cash or salary deduction.</p>
+      <ul className="mt-3 divide-y">{rows.map(([id, r]) => <li key={id} className="py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="font-semibold">{nameOf(id)}</p><p className="text-xs text-muted-foreground">Charged {formatTZS(r.charged)} · Paid {formatTZS(r.paid)}</p></div>
+          <div className="text-right"><p className={r.balance > 0 ? "font-bold text-destructive" : "font-bold"}>{formatTZS(r.balance)}</p>
+            {canSettle && r.balance > 0 && <Button size="sm" variant="outline" className="mt-1" onClick={() => { setOpen(open === id ? null : id); setAmount(r.balance); setNote(""); }}>Settle</Button>}</div>
+        </div>
+        <details className="mt-1 text-xs text-muted-foreground"><summary className="cursor-pointer">History ({r.incidents.length})</summary><ul className="mt-1 space-y-0.5">{r.incidents.map((i, n) => <li key={n}>{new Date(i.date).toLocaleDateString()} · {i.item} · {i.shift_id} · {formatTZS(i.amount)}</li>)}</ul></details>
+        {open === id && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto]">
+          <Input aria-label="Amount" type="number" inputMode="numeric" min={1} max={r.balance} value={amount || ""} onChange={(e) => setAmount(Math.round(Number(e.target.value) || 0))} />
+          <select aria-label="Method" className="min-h-10 rounded-lg border bg-background px-3 text-sm" value={method} onChange={(e) => setMethod(e.target.value as "cash" | "salary")}><option value="cash">Cash paid</option><option value="salary">Salary deduction</option></select>
+          <Input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <Button onClick={() => { if (amount > r.balance) return flash(`Enter up to ${formatTZS(r.balance)}`); const res = settleStaffDebt({ staff_id: id, amount, method, note }); flash(res.ok ? "Payment recorded" : res.reason); if (res.ok) setOpen(null); }}>Save</Button>
+        </div>}
+      </li>)}</ul>
+    </section>
   );
 }
