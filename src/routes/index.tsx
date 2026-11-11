@@ -7,6 +7,8 @@ import {
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand-logo";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useT } from "@/lib/i18n";
 import { PLAN_PRICE, STORE_LIMIT } from "@/lib/subscription-rules";
 
 export const Route = createFileRoute("/")({
@@ -25,6 +27,7 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 function HomePage() {
   const { hasOwner } = useStore();
+  const { t } = useT();
   const startHref = hasOwner ? "/login" : "/setup";
 
   const businesses = [
@@ -39,10 +42,10 @@ function HomePage() {
   ];
 
   const features = [
-    { icon: <ScanBarcode className="w-5 h-5" />, title: "Fast checkout (POS)", body: "Sell by tap, search or barcode. Cash, Lipa Namba and wallet with change handled for you." },
-    { icon: <Package className="w-5 h-5" />, title: "Stock that never lies", body: "Every sale and purchase updates stock. Low-stock alerts and units like pcs, kg, bags, cartons." },
-    { icon: <HandCoins className="w-5 h-5" />, title: "Customer credit (madeni)", body: "Set a debt limit, track who owes what and for how long, and collect easily." },
-    { icon: <Truck className="w-5 h-5" />, title: "Suppliers & bills", body: "Record deliveries, pay now or later, and see what you owe each supplier." },
+    { icon: <ScanBarcode className="w-5 h-5" />, title: t("Fast checkout (POS)"), body: "Sell by tap, search or barcode. Cash, Lipa Namba and wallet with change handled for you." },
+    { icon: <Package className="w-5 h-5" />, title: t("Stock that never lies"), body: "Every sale and purchase updates stock. Low-stock alerts and units like pcs, kg, bags, cartons." },
+    { icon: <HandCoins className="w-5 h-5" />, title: t("Customer credit (madeni)"), body: "Set a debt limit, track who owes what and for how long, and collect easily." },
+    { icon: <Truck className="w-5 h-5" />, title: t("Suppliers & bills"), body: "Record deliveries, pay now or later, and see what you owe each supplier." },
     { icon: <Wallet className="w-5 h-5" />, title: "Customer wallets", body: "Customers pre-pay or save their change, then pay with a QR scan next time." },
     { icon: <BarChart3 className="w-5 h-5" />, title: "Clear money reports", body: "Profit, cash, bank and balance sheet in plain words — no accountant needed." },
     { icon: <ClipboardList className="w-5 h-5" />, title: "Shifts & handovers", body: "Blind cash counts with a witness and a printed shift report stop missing money." },
@@ -71,7 +74,8 @@ function HomePage() {
             <a href="#pricing" className="hover:text-foreground">Pricing</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link to="/login" className="text-sm font-semibold px-3 py-2 rounded-lg hover:bg-muted">Sign in</Link>
+            <LanguageSwitcher />
+            <Link to="/login" className="text-sm font-semibold px-3 py-2 rounded-lg hover:bg-muted">{t("Sign in")}</Link>
             <Link to="/setup" className="text-sm font-semibold px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">Create store</Link>
           </div>
         </div>
@@ -94,7 +98,7 @@ function HomePage() {
             <div className="mt-7 flex flex-wrap gap-3">
               <Link to={startHref}>
                 <Button className="h-12 px-6 rounded-xl text-base font-semibold">
-                  {hasOwner ? "Sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" />
+                  {t(hasOwner ? "Sign in" : "Create your store")} <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>
               <a href="#features">
@@ -216,7 +220,7 @@ function HomePage() {
         </div>
 
         <div className="mt-10 flex flex-wrap justify-center gap-3">
-          <Link to={startHref}><Button className="h-11 rounded-xl font-semibold">{hasOwner ? "Sign in" : "Create your store"} <ArrowRight className="ml-2 w-4 h-4" /></Button></Link>
+          <Link to={startHref}><Button className="h-11 rounded-xl font-semibold">{t(hasOwner ? "Sign in" : "Create your store")} <ArrowRight className="ml-2 w-4 h-4" /></Button></Link>
           <Link to="/support"><Button variant="outline" className="h-11 rounded-xl font-semibold border-2">Talk to us</Button></Link>
         </div>
       </section>

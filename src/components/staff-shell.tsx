@@ -6,6 +6,8 @@ import { businessFeatures } from "@/lib/subscription-rules";
 import { useStore } from "@/lib/store";
 import { useEffect, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useT } from "@/lib/i18n";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAlertNotifications } from "@/lib/use-alert-notifications";
 
@@ -17,6 +19,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
   const retail = isRetail(store?.business_type);
   const features = businessFeatures(store?.business_type, store?.subscription.plan);
   const pendingTopUps = topUpRequests.filter((r) => r.status === "pending").length;
+  const { t } = useT();
   const navigate = useNavigate();
   const [isFull, setIsFull] = useState(false);
   useAlertNotifications();
@@ -48,7 +51,7 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               <BrandLogo className="w-9 h-9" />
               <div>
                 <div className="font-bold leading-tight">{store?.name ?? "BitePay"}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Staff Console</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Staff Console")}</div>
               </div>
             </Link>
             {myStores.length > 1 && (
@@ -63,19 +66,19 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
             )}
 
             <nav className="hidden md:flex items-center gap-1 overflow-x-auto min-w-0">
-              <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Live Orders"} active={active === "orders"} />
-              <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active={active === "pos"} />
-              <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={active === "shift"} />
-              {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />}
-              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
-              {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
-              {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
-              {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
-              {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label="Credit" active={active === "credit"} />}
-              {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
-          {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
-              {(can("settings.manage") || can("settings.credit")) && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
-              {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
+              <TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={t(retail ? "Sales" : "Live Orders")} active={active === "orders"} />
+              <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label={t("POS")} active={active === "pos"} />
+              <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label={t("Shift")} active={active === "shift"} />
+              {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label={t("Customers")} active={active === "customers"} />}
+              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label={t("Top-ups")} active={false} badge={pendingTopUps} />}
+              {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label={t("Inventory")} active={active === "inventory"} />}
+              {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label={t("Finance")} active={active === "finance"} />}
+              {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label={t("Analytics")} active={active === "analytics"} />}
+              {can("customers.topup") && <TopLink to="/credit" icon={<HandCoins className="w-4 h-4" />} label={t("Credit")} active={active === "credit"} />}
+              {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label={t("Tables")} active={active === "tables"} />}
+          {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label={t("Team")} active={active === "team"} />}
+              {(can("settings.manage") || can("settings.credit")) && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label={t("Settings")} active={active === "settings"} />}
+              {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label={t("Stores")} active={active === "stores"} />}
 
             </nav>
           </div>
@@ -86,14 +89,15 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               </Link>
             ) : (
               <Link to="/shift" className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1.5 rounded-full hover:bg-muted/70">
-                Open shift
+                {t("Open shift")}
               </Link>
             )}
+            <LanguageSwitcher />
             <SyncPill className="hidden sm:inline-flex" />
             <NotificationBell />
             <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full ${isOnline ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
               {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isOnline ? "Online" : `Offline · ${pendingSales.length} queued`}
+              {isOnline ? t("Online") : `${t("Offline")} · ${pendingSales.length} ${t("queued")}`}
             </span>
             <button
               onClick={toggleFullscreen}
@@ -101,10 +105,10 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
               title={isFull ? "Exit full screen" : "Enter full screen (kiosk mode)"}
             >
               {isFull ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              {isFull ? "Exit" : "Full Screen"}
+              {isFull ? t("Exit") : t("Full Screen")}
             </button>
             <Link to="/my-performance" search={{ id: "", period: "month" }} title="My performance & commission" className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-muted hover:bg-muted/80">
-              <Activity className="w-4 h-4" /> My stats
+              <Activity className="w-4 h-4" /> {t("My stats")}
             </Link>
             <div className="hidden sm:block text-sm text-right">
               <div className="font-semibold leading-tight">{currentUser?.full_name}</div>
@@ -114,18 +118,18 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
           </div>
         </div>
         <div className="md:hidden max-w-7xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto">
-          {active === "pos" && <><TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={retail ? "Sales" : "Orders"} active={false} />
-          <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label="POS" active /></>}
-          {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label="Tables" active={active === "tables"} />}
-          {active === "pos" && <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label="Shift" active={false} />}
-          {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label="Customers" active={active === "customers"} />}
-              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label="Top-ups" active={false} badge={pendingTopUps} />}
-          {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" active={active === "inventory"} />}
-          {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label="Finance" active={active === "finance"} />}
-          {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" active={active === "analytics"} />}
-          {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label="Team" active={active === "team"} />}
-          {(can("settings.manage") || can("settings.credit")) && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label="Settings" active={active === "settings"} />}
-          {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label="Stores" active={active === "stores"} />}
+          {active === "pos" && <><TopLink to="/staff" icon={<LayoutDashboard className="w-4 h-4" />} label={t(retail ? "Sales" : "Orders")} active={false} />
+          <TopLink to="/pos" icon={<Store className="w-4 h-4" />} label={t("POS")} active /></>}
+          {waiterTablesEnabled && can("pos.sell") && <TopLink to="/tables" icon={<Grid2X2 className="w-4 h-4" />} label={t("Tables")} active={active === "tables"} />}
+          {active === "pos" && <TopLink to="/shift" icon={<ClipboardCheck className="w-4 h-4" />} label={t("Shift")} active={false} />}
+          {can("customers.view") && <TopLink to="/customers" icon={<Users className="w-4 h-4" />} label={t("Customers")} active={active === "customers"} />}
+              {features.prepaidWallet && can("customers.topup") && <TopLink to="/topups" icon={<ReceiptText className="w-4 h-4" />} label={t("Top-ups")} active={false} badge={pendingTopUps} />}
+          {hasStaffRole("supervisor") && <TopLink to="/inventory" icon={<Package className="w-4 h-4" />} label={t("Inventory")} active={active === "inventory"} />}
+          {hasStaffRole("supervisor") && <TopLink to="/finance" icon={<Wallet className="w-4 h-4" />} label={t("Finance")} active={active === "finance"} />}
+          {hasStaffRole("supervisor") && <TopLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />} label={t("Analytics")} active={active === "analytics"} />}
+          {can("team.view") && <TopLink to="/team" icon={<Users2 className="w-4 h-4" />} label={t("Team")} active={active === "team"} />}
+          {(can("settings.manage") || can("settings.credit")) && <TopLink to="/settings" icon={<Settings className="w-4 h-4" />} label={t("Settings")} active={active === "settings"} />}
+          {(myStores.length > 1 || can("settings.manage")) && <TopLink to="/stores" icon={<Building2 className="w-4 h-4" />} label={t("Stores")} active={active === "stores"} />}
 
         </div>
       </header>
@@ -133,10 +137,10 @@ export function StaffShell({ children, active }: { children: ReactNode; active?:
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-4 md:py-6 pb-28 md:pb-6">{children}</main>
       {active !== "pos" && (
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
-          <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label={retail ? "Sales" : "Orders"} active={active === "orders"} />
-          <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label="POS" active={false} />
+          <BottomLink to="/staff" icon={<LayoutDashboard className="w-5 h-5" />} label={t(retail ? "Sales" : "Orders")} active={active === "orders"} />
+          <BottomLink to="/pos" icon={<Store className="w-5 h-5" />} label={t("POS")} active={false} />
           <BottomLink to="/my-performance" icon={<Activity className="w-5 h-5" />} label="My stats" active={active === "me"} />
-          <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label="Shift" active={active === "shift"} />
+          <BottomLink to="/shift" icon={<ClipboardCheck className="w-5 h-5" />} label={t("Shift")} active={active === "shift"} />
         </nav>
       )}
     </div>

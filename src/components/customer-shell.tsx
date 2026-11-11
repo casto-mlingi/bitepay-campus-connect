@@ -4,11 +4,14 @@ import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store 
 import { useStore } from "@/lib/store";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SyncPill } from "@/components/sync-pill";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useT } from "@/lib/i18n";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAlertNotifications } from "@/lib/use-alert-notifications";
 
 export function CustomerShell({ children, active }: { children: ReactNode; active?: string }) {
   const { currentUser, logout, availableCanteens, canteenGroups, activeOrgId, selectedCanteenId, setSelectedCanteen, store } = useStore();
+  const { t } = useT();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   useAlertNotifications();
@@ -39,19 +42,19 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
               className="w-full flex items-center gap-1.5 rounded-full border bg-background px-3 h-9 text-sm font-medium hover:bg-muted transition"
             >
               <StoreIcon className="w-4 h-4 text-primary shrink-0" />
-              <span className="truncate">{activeCanteen?.name ?? "Choose canteen"}</span>
+              <span className="truncate">{activeCanteen?.name ?? t("Choose canteen")}</span>
               <ChevronDown className={`w-4 h-4 ml-auto shrink-0 transition ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
               <div className="absolute left-0 right-0 mt-1 bg-surface border rounded-xl shadow-lg overflow-hidden z-50 max-h-72 overflow-y-auto">
                 {canteenGroups.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-muted-foreground">No canteens available yet.</div>
+                  <div className="px-3 py-3 text-xs text-muted-foreground">{t("No canteens available yet.")}</div>
                 ) : canteenGroups.map((g) => (
                   <div key={g.orgId}>
                     <div className="px-3 pt-2.5 pb-1 flex items-center justify-between gap-2">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate">{g.name}</span>
                       {g.orgId === activeOrgId && (
-                        <span className="text-[10px] font-semibold text-primary shrink-0">one wallet</span>
+                        <span className="text-[10px] font-semibold text-primary shrink-0">{t("one wallet")}</span>
                       )}
                     </div>
                     {g.canteens.map((c) => {
@@ -73,7 +76,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
                   </div>
                 ))}
                 <div className="px-3 py-2 border-t text-[11px] text-muted-foreground">
-                  Your wallet balance is shared across every canteen in the same group.
+                  {t("Your wallet balance is shared across every canteen in the same group.")}
                 </div>
               </div>
             )}
@@ -85,9 +88,10 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
               <User className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium">{currentUser?.full_name}</span>
             </div>
+            <LanguageSwitcher />
             <SyncPill />
             <NotificationBell />
-            <button onClick={handleLogout} aria-label="Sign out" className="p-2 rounded-lg hover:bg-muted">
+            <button onClick={handleLogout} aria-label={t("Sign out")} className="p-2 rounded-lg hover:bg-muted">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -99,10 +103,10 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
       {/* Bottom nav */}
       <nav className="fixed bottom-0 inset-x-0 z-40 bg-surface border-t">
         <div className="max-w-2xl mx-auto grid grid-cols-4">
-          <BottomLink to="/dashboard" icon={<Home className="w-5 h-5" />} label="Home" active={active === "home"} />
-          <BottomLink to="/menu" icon={<ShoppingBag className="w-5 h-5" />} label="Order" active={active === "menu"} />
-          <BottomLink to="/history" icon={<ClipboardList className="w-5 h-5" />} label="History" active={active === "history"} />
-          <BottomLink to="/topup" icon={<Wallet className="w-5 h-5" />} label="Top-Up" active={active === "topup"} />
+          <BottomLink to="/dashboard" icon={<Home className="w-5 h-5" />} label={t("Home")} active={active === "home"} />
+          <BottomLink to="/menu" icon={<ShoppingBag className="w-5 h-5" />} label={t("Order")} active={active === "menu"} />
+          <BottomLink to="/history" icon={<ClipboardList className="w-5 h-5" />} label={t("History")} active={active === "history"} />
+          <BottomLink to="/topup" icon={<Wallet className="w-5 h-5" />} label={t("Top-Up")} active={active === "topup"} />
         </div>
       </nav>
     </div>
