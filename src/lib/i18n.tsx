@@ -1,3 +1,4 @@
+import { PHRASES } from "./i18n-dict";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type Lang = "en" | "sw" | "fr";
@@ -38,7 +39,49 @@ const fr: Dict = {
   "Fast checkout (POS)": "Encaissement rapide (POS)", "Stock that never lies": "Un stock fiable",
   "Customer credit (madeni)": "Crédit client", "Suppliers & bills": "Fournisseurs et factures",
 };
+for (const [en, [s1, f1]] of Object.entries(PHRASES)) { if (!(en in sw)) sw[en] = s1; if (!(en in fr)) fr[en] = f1; }
 const DICTS: Record<Lang, Dict> = { en: {}, sw, fr };
+
+// Translate visible text anywhere on the page (exact phrase match), so screens
+// not yet wired to t() still switch language. Originals are remembered to switch back.
+const ORIG = new WeakMap<Node, string>();
+const ATTRS = ["placeholder", "aria-label", "title"] as const;
+function translateTree(root: Node, dict: Dict) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  let n: Node | null = root;
+  while (n) {
+    if (n.nodeType === 3) {
+      const parent = n.parentElement;
+      if (parent && !["SCRIPT", "STYLE", "TEXTAREA"].includes(parent.tagName) && !parent.closest("[data-no-translate]")) {
+        const cur = n.nodeValue ?? "";
+        let orig = ORIG.get(n);
+        // If React changed the text, the current value is the new source.
+        if (orig === undefined || (cur !== orig && cur !== (dictLookup(orig, dict) ?? orig) && !isTranslation(cur))) { orig = cur; ORIG.set(n, cur); }
+        const out = dictLookup(orig, dict) ?? orig;
+        if (cur !== out) n.nodeValue = out;
+      }
+    } else if (n.nodeType === 1) {
+      const el = n as Element;
+      for (const a of ATTRS) {
+        const key = `data-i18n-${a}`;
+        const v = el.getAttribute(a);
+        if (v == null) continue;
+        let orig = el.getAttribute(key);
+        if (orig == null || (v !== orig && !isTranslation(v))) { orig = v; el.setAttribute(key, v); }
+        const out = dictLookup(orig, dict) ?? orig;
+        if (v !== out) el.setAttribute(a, out);
+      }
+    }
+    n = walker.nextNode();
+  }
+}
+const ALL_TRANSLATIONS = new Set<string>([...Object.values(sw), ...Object.values(fr)]);
+function isTranslation(s: string) { return ALL_TRANSLATIONS.has(s.trim()); }
+function dictLookup(s: string, dict: Dict): string | undefined {
+  const t = s.trim(); if (!t) return undefined;
+  const hit = dict[t]; if (hit === undefined) return undefined;
+  return s.replace(t, hit);
+}
 const KEY = "bp-lang";
 
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (s: string) => string }>({
@@ -51,7 +94,19 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem(KEY) as Lang | null;
     if (saved && saved in DICTS) setLangState(saved);
   }, []);
-  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    const dict = DICTS[lang];
+    translateTree(document.body, dict);
+    let busy = false;
+    const obs = new MutationObserver((muts) => {
+      if (busy) return; busy = true;
+      try { for (const m of muts) translateTree(m.type === "characterData" ? m.target : m.target, dict); }
+      finally { busy = false; }
+    });
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...ATTRS] });
+    return () => obs.disconnect();
+  }, [lang]);
   const setLang = (l: Lang) => { setLangState(l); try { localStorage.setItem(KEY, l); } catch { /* ignore */ } };
   const t = (s: string) => DICTS[lang][s] ?? s;
   return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
