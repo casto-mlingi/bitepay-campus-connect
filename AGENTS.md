@@ -22,7 +22,7 @@
 - Owner registration commits its visible snapshot records in the same database transaction as the canonical account; interrupted onboarding must not strand an account without a store in the app.
 - Snapshot acks compare the exact sent payload to current device state and hydration never waits for network, so offline edits stay queued.
 - Preserve store context identity in Vite hot-module data during preview edits, never in an SSR global; provider and split-route consumers must keep the same context without sharing user state between requests.
-- Server calls carry the signed session as both a partitioned cookie and an x-bp-session header from browser storage, renewed on each launch; phones that block framed cookies must still sync.
+- Server calls send the signed session as a partitioned cookie plus an x-bp-session header, renewed each launch, so phones blocking framed cookies still sync.
 - Saved POS bills (open tabs) are status rows (open/paid/cancelled) with updated_at, never deleted, so snapshot union-merges cannot revive closed bills; an explicit waiter pick on a sale overrides table attribution.
 
 - Supplier bills are credit purchases; amounts owed are derived from append-only supplier payment rows so offline merges keep every payment.
