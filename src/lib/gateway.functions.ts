@@ -143,7 +143,12 @@ export const registerGatewayTopup = createServerFn({ method: "POST" })
       where customer_id=${uid} and status <> 'paid' and created_at > now() - interval '15 minutes'`;
     if (n >= 3) return { status: "blocked", paid_amount: null as number | null };
     const { registerTopup } = await import("./gateway.server");
-    return registerTopup(sql, { ...data, customer_id: uid });
+    const r = await registerTopup(sql, { ...data, customer_id: uid });
+    if (r.status === "paid") {
+      const { settlePaidTopupsInSnapshot } = await import("./gateway-credits");
+      await settlePaidTopupsInSnapshot(sql).catch(() => {});
+    }
+    return r;
   });
 
 export const checkGatewayTopups = createServerFn({ method: "POST" })
