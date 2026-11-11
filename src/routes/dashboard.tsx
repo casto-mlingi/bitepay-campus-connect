@@ -14,7 +14,7 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function Dashboard() {
-  const { currentUser, sessionReady, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification, verifyWalletPin, setWalletPin } = useStore();
+  const { currentUser, sessionReady, stores, orders, products, LOW_BALANCE_THRESHOLD, notifications, unreadNotifications, markNotificationsRead, dismissNotification, verifyWalletPin, setWalletPin } = useStore();
   const navigate = useNavigate();
   const [showId, setShowId] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
@@ -183,7 +183,7 @@ function Dashboard() {
                     className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70">
                     <Download className="w-3.5 h-3.5" /> Download
                   </button>
-                  <button onClick={() => printReceipt(o, { paymentMode: "wallet" })}
+                  <button onClick={() => printReceipt(o, { paymentMode: "wallet", store: stores.find((s) => s.id === o.store_id) })}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-muted hover:bg-muted/70">
                     <Printer className="w-3.5 h-3.5" /> Print
                   </button>
