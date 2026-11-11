@@ -23,7 +23,7 @@
 - Snapshot acks compare the exact sent payload to current device state and hydration never waits for network, so offline edits stay queued.
 - Preserve store context identity in Vite hot-module data during preview edits, never in an SSR global; provider and split-route consumers must keep the same context without sharing user state between requests.
 - Server calls send the signed session as a partitioned cookie plus an x-bp-session header, renewed each launch, so phones blocking framed cookies still sync.
-- Saved POS bills (open tabs) are status rows (open/paid/cancelled) with updated_at, never deleted, so snapshot union-merges cannot revive closed bills; an explicit waiter pick on a sale overrides table attribution.
+- Saved POS bills are never-deleted status rows (open/paid/cancelled) with updated_at so merges cannot revive closed bills; an explicit waiter pick overrides table attribution.
 
 - Supplier bills are credit purchases; amounts owed are derived from append-only supplier payment rows so offline merges keep every payment.
 - Customer balances (receivables) are a read-only aging view built from unpaid delivery orders, approved pay-later wallet debt and open tabs; collections go through each source's existing payment action.
@@ -41,6 +41,6 @@
 - New branches inherit verified account billing at the locked snapshot boundary; staff snapshot uploads cannot modify subscriptions or opening-stock anchors, preventing self-upgrades and stock inflation.
 - Gateway SMS payments use devices with hashed secrets, provider+reference-unique SMS rows and expiring checkouts; only an exact amount with one unambiguous checkout auto-pays.
 - Lipa Namba top-ups mirror to gateway_topups (10-min window), match on receipt number only, credit the SMS amount idempotently (gw:<id>); staff confirmations lock the receipt server-side first, so nothing is credited twice.
-- Hospitality finished goods are products flagged direct_sale whose stock lives in ingredient-free batches; raw items moved there keep a converted_product_id instead of being deleted so old cooking batches still resolve.
+- Hospitality finished goods are direct_sale products with ingredient-free batches; converted raw items keep converted_product_id so old batches resolve.
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
 - Sector wording comes from business-rules sectorTerms; shared screens stay sector-neutral.
