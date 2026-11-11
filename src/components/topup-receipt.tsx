@@ -12,7 +12,7 @@ export function TopupReceiptButton({ payment, network }: { payment: Payment; net
   const total = payment.amount + payment.fee;
   const date = new Date(payment.created_at).toLocaleString();
   const lines = [
-    `BitePay — ${store?.name ?? "Canteen"}`,
+    `BitePay — ${store?.name ?? "Store"}`,
     "Mobile money top-up receipt",
     `Date: ${date}`,
     `Customer: ${currentUser?.full_name ?? ""}`,

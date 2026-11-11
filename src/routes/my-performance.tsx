@@ -13,9 +13,9 @@ export const Route = createFileRoute("/my-performance")({
   component: PerformancePage,
   head: () => ({ meta: [
     { title: "Staff performance & commission — BitePay" },
-    { name: "description", content: "Track staff activity, customers served and commission earned in your BitePay canteen." },
+    { name: "description", content: "Track staff activity, customers served and commission earned in your BitePay business." },
     { property: "og:title", content: "Staff performance & commission — BitePay" },
-    { property: "og:description", content: "Track staff activity, customers served and commission earned in your BitePay canteen." },
+    { property: "og:description", content: "Track staff activity, customers served and commission earned in your BitePay business." },
     { property: "og:type", content: "website" },
     { name: "twitter:card", content: "summary" },
   ] }),

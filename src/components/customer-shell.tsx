@@ -1,3 +1,4 @@
+import { sectorTerms } from "@/lib/business-rules";
 import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChefHat, LogOut, User, Wallet, ShoppingBag, ClipboardList, Home, Store as StoreIcon, ChevronDown, Check } from "lucide-react";
@@ -25,6 +26,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
 
   const handleLogout = () => { logout(); navigate({ to: "/" }); };
   const activeCanteen = availableCanteens.find((s) => s.id === selectedCanteenId) ?? store;
+  const terms = sectorTerms(activeCanteen?.business_type);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -35,20 +37,20 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
             <span className="font-bold text-lg hidden xs:inline">BitePay</span>
           </Link>
 
-          {/* Canteen switcher */}
+          {/* Store switcher */}
           <div ref={ref} className="relative flex-1 min-w-0 max-w-[240px]">
             <button
               onClick={() => setOpen((v) => !v)}
               className="w-full flex items-center gap-1.5 rounded-full border bg-background px-3 h-9 text-sm font-medium hover:bg-muted transition"
             >
               <StoreIcon className="w-4 h-4 text-primary shrink-0" />
-              <span className="truncate">{activeCanteen?.name ?? t("Choose canteen")}</span>
+              <span className="truncate">{activeCanteen?.name ?? t(terms.choose)}</span>
               <ChevronDown className={`w-4 h-4 ml-auto shrink-0 transition ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
               <div className="absolute left-0 right-0 mt-1 bg-surface border rounded-xl shadow-lg overflow-hidden z-50 max-h-72 overflow-y-auto">
                 {canteenGroups.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-muted-foreground">{t("No canteens available yet.")}</div>
+                  <div className="px-3 py-3 text-xs text-muted-foreground">{t(terms.none)}</div>
                 ) : canteenGroups.map((g) => (
                   <div key={g.orgId}>
                     <div className="px-3 pt-2.5 pb-1 flex items-center justify-between gap-2">
@@ -76,7 +78,7 @@ export function CustomerShell({ children, active }: { children: ReactNode; activ
                   </div>
                 ))}
                 <div className="px-3 py-2 border-t text-[11px] text-muted-foreground">
-                  {t("Your wallet balance is shared across every canteen in the same group.")}
+                  {t(terms.shared)}
                 </div>
               </div>
             )}

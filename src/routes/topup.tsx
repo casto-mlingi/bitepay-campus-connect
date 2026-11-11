@@ -1,3 +1,4 @@
+import { sectorTerms } from "@/lib/business-rules";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { LipaNumbersList } from "@/components/lipa-numbers";
 import { useEffect, useMemo, useState } from "react";
@@ -135,7 +136,7 @@ function TopUpPage() {
           activeStoreId ? (
             <MobileMoneyTopup storeId={activeStoreId} amount={amount} onChange={mobile.refresh} />
           ) : (
-            <div className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Mobile money top-up is not available for this canteen yet.</div>
+            <div className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">{sectorTerms(store?.business_type).noMobile}</div>
           )
         ) : (
           <>
