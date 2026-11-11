@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ClipboardCheck, Play, Square, CheckCircle2, ArrowLeftRight, Printer } from "lucide-react";
-import { useStore, formatTZS, type Shift } from "@/lib/store";
+import { Boxes, ClipboardCheck, Play, Square, CheckCircle2, ArrowLeftRight, Printer } from "lucide-react";
+import { useStore, formatTZS, type Shift, type ShiftStockLine } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,7 @@ function ShiftPage() {
           <div className="space-y-4">
             <h2 className="font-bold text-lg">Drawer count</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[10000, 5000, 2000, 1000, 500, 200, 100, 50].map((value) => <label key={value} className="block"><span className="text-sm text-muted-foreground">{value.toLocaleString()} ×</span><Input aria-label={`${value} denomination count`} inputMode="numeric" type="number" min={0} step={1} value={denominations[value] || ""} placeholder="0" onChange={(e) => { const next = { ...denominations, [value]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }; setDenominations(next); setCountedCash(Object.entries(next).reduce((sum, [note, qty]) => sum + Number(note) * qty, 0)); }} /></label>)}</div>
+            <StockCount onSaved={show} />
             <PastShifts onSelect={setReport} />
           </div>
 
@@ -131,6 +132,37 @@ function ShiftPage() {
   );
 }
 
+function StockCount({ onSaved }: { onSaved: (m: string) => void }) {
+  const { products, availablePlates, activeShift, saveShiftStockCount } = useStore();
+  const items = products.filter((p) => !p.archived_at).map((p) => ({ p, expected: availablePlates(p.id) })).filter((x): x is { p: typeof x.p; expected: number } => x.expected !== null);
+  const saved = Object.fromEntries((activeShift?.stock_counts ?? []).map((l) => [l.product_id, l.counted]));
+  const [counts, setCounts] = useState<Record<string, number | undefined>>(saved);
+  const [q, setQ] = useState("");
+  if (items.length === 0) return null;
+  const shown = items.filter((x) => x.p.name.toLowerCase().includes(q.toLowerCase()));
+  const save = () => {
+    const lines: ShiftStockLine[] = items.filter((x) => counts[x.p.id] !== undefined).map((x) => ({ product_id: x.p.id, name: x.p.name, expected: x.expected, counted: counts[x.p.id]! }));
+    if (lines.length === 0) return onSaved("Enter at least one counted quantity");
+    saveShiftStockCount(lines); onSaved(`Stock count saved · ${lines.length} item(s)`);
+  };
+  return (
+    <section className="bg-surface border rounded-2xl p-4">
+      <h2 className="font-bold text-lg flex items-center gap-2"><Boxes className="w-5 h-5 text-primary" /> Stock count</h2>
+      <p className="text-xs text-muted-foreground">Count items on the shelf. Differences appear on the handover report.</p>
+      <Input placeholder="Search item…" value={q} onChange={(e) => setQ(e.target.value)} className="mt-3" />
+      <ul className="mt-3 divide-y max-h-96 overflow-y-auto">
+        {shown.map(({ p, expected }) => { const c = counts[p.id]; const diff = c === undefined ? null : c - expected; return (
+          <li key={p.id} className="flex items-center gap-3 py-2">
+            <div className="flex-1 min-w-0"><div className="font-medium truncate">{p.name}</div><div className="text-xs text-muted-foreground">System: {expected}{diff !== null && <span className={diff === 0 ? " text-success" : " text-destructive font-semibold"}> · {diff === 0 ? "OK" : diff > 0 ? `+${diff}` : diff}</span>}</div></div>
+            <Input aria-label={`${p.name} counted`} inputMode="numeric" type="number" min={0} className="w-24 h-11" placeholder="Count" value={c ?? ""} onChange={(e) => setCounts({ ...counts, [p.id]: e.target.value === "" ? undefined : Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
+          </li>); })}
+      </ul>
+      <Button onClick={save} className="w-full mt-3 h-11">Save stock count</Button>
+      {activeShift?.stock_counted_at && <p className="text-xs text-muted-foreground mt-2">Last saved {new Date(activeShift.stock_counted_at).toLocaleTimeString()}</p>}
+    </section>
+  );
+}
+
 function PastShifts({ onSelect }: { onSelect: (shift: Shift) => void }) {
   const { shifts } = useStore();
   const closed = shifts.filter((s) => s.closed_at);
@@ -160,6 +192,7 @@ function PastShifts({ onSelect }: { onSelect: (shift: Shift) => void }) {
 
 function ShiftReport({ shift, onClose }: { shift: Shift; onClose: () => void }) {
   const fields: [string, number][] = [["Starting drawer cash", shift.opening_float], ["Expected cash", shift.expected_cash ?? (shift.counted_cash ?? 0) - (shift.cash_variance ?? 0)], ["Counted cash", shift.counted_cash ?? 0], ["Shortage / surplus", shift.cash_variance ?? 0], ["Float left in drawer", shift.retained_float ?? 0], ["Handed to manager / safe", shift.cash_drop ?? 0], ["Expected mobile", shift.expected_mobile ?? (shift.counted_mobile ?? 0) - (shift.mobile_variance ?? 0)], ["Counted mobile", shift.counted_mobile ?? 0], ["Mobile difference", shift.mobile_variance ?? 0]];
-  const print = () => { const w = window.open("", "_blank"); if (!w) return; const text = ["BitePay — Shift handover", shift.id, `Cashier: ${shift.cashier_name}`, `Receiver: ${shift.witness_name ?? "Legacy report — no witness"}`, `Closed: ${new Date(shift.closed_at ?? 0).toLocaleString()}`, ...fields.map(([label, value]) => `${label}: ${value.toLocaleString()}`), shift.notes ?? ""].join("\n"); w.document.title = "BitePay Shift Handover"; const pre = w.document.createElement("pre"); pre.textContent = text; w.document.body.appendChild(pre); w.print(); };
-  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"><section role="dialog" aria-label="Shift handover report" className="bg-background border rounded-lg p-5 w-full max-w-lg max-h-[85dvh] overflow-y-auto"><h2 className="font-bold text-xl">Shift handover report</h2><p className="text-sm text-muted-foreground break-all">{shift.id}</p><p className="mt-3 text-sm">Cashier: {shift.cashier_name}<br />Receiver: {shift.witness_name ?? "Not recorded"}</p><dl className="mt-4 space-y-2">{fields.map(([label, value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt>{label}</dt><dd className={value < 0 ? "text-destructive font-bold" : "font-semibold"}>{value.toLocaleString()}</dd></div>)}</dl>{shift.notes && <p className="mt-3 text-sm">{shift.notes}</p>}<div className="mt-5 flex gap-2"><Button onClick={print}><Printer className="w-4 h-4 mr-2" />Print report</Button><Button variant="outline" onClick={onClose}>Close</Button></div></section></div>;
+  const stock = shift.stock_counts ?? [];
+  const print = () => { const w = window.open("", "_blank"); if (!w) return; const text = ["BitePay — Shift handover", shift.id, `Cashier: ${shift.cashier_name}`, `Receiver: ${shift.witness_name ?? "Legacy report — no witness"}`, `Closed: ${new Date(shift.closed_at ?? 0).toLocaleString()}`, ...fields.map(([label, value]) => `${label}: ${value.toLocaleString()}`), ...(stock.length ? ["Stock count (counted/system, difference):", ...stock.map((l) => `${l.name}: ${l.counted}/${l.expected} (${l.counted - l.expected})`)] : []), shift.notes ?? ""].join("\n"); w.document.title = "BitePay Shift Handover"; const pre = w.document.createElement("pre"); pre.textContent = text; w.document.body.appendChild(pre); w.print(); };
+  return <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"><section role="dialog" aria-label="Shift handover report" className="bg-background border rounded-lg p-5 w-full max-w-lg max-h-[85dvh] overflow-y-auto"><h2 className="font-bold text-xl">Shift handover report</h2><p className="text-sm text-muted-foreground break-all">{shift.id}</p><p className="mt-3 text-sm">Cashier: {shift.cashier_name}<br />Receiver: {shift.witness_name ?? "Not recorded"}</p><dl className="mt-4 space-y-2">{fields.map(([label, value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt>{label}</dt><dd className={value < 0 ? "text-destructive font-bold" : "font-semibold"}>{value.toLocaleString()}</dd></div>)}</dl>{shift.notes && <p className="mt-3 text-sm">{shift.notes}</p>}{stock.length > 0 && <div className="mt-4 border-t pt-3"><h3 className="font-semibold text-sm">Stock count</h3><dl className="mt-2 space-y-1">{stock.map((l) => <div key={l.product_id} className="flex justify-between gap-4 text-sm"><dt>{l.name} <span className="text-muted-foreground">({l.counted}/{l.expected})</span></dt><dd className={l.counted - l.expected < 0 ? "text-destructive font-bold" : "font-semibold"}>{l.counted - l.expected}</dd></div>)}</dl></div>}<div className="mt-5 flex gap-2"><Button onClick={print}><Printer className="w-4 h-4 mr-2" />Print report</Button><Button variant="outline" onClick={onClose}>Close</Button></div></section></div>;
 }
