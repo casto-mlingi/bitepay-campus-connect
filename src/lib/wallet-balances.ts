@@ -12,8 +12,8 @@ export function liveWallet(p: WalletProfile, org: string, siblings: string[], ro
   const anchor = p.wallet_anchors?.[org];
   if (!anchor) return canonicalWallet(p, org, siblings);
   const seen = new Set(anchor.transaction_ids);
-  const unique = new Map(rows.filter((r) => r.customer_id === p.id && (r.store_id === org || siblings.includes(r.store_id))).map((r) => [r.id, r]));
-  return anchor.balance + [...unique.values()].reduce((sum, r) => sum + (seen.has(r.id) ? 0 : r.type === "topup" ? r.amount : -r.amount), 0);
+  const unique = new Map(rows.filter((r) => r.customer_id === p.id && (r.store_id === org || siblings.includes(r.store_id))).map((r) => [(r as { reference?: string }).reference?.startsWith("gw:") ? (r as { reference?: string }).reference! : r.id, r]));
+  return anchor.balance + [...unique.values()].reduce((sum, r) => sum + (seen.has(r.id) || seen.has(`gw-${((r as { reference?: string }).reference ?? "").slice(3)}`) && (r as { reference?: string }).reference?.startsWith("gw:") ? 0 : r.type === "topup" ? r.amount : -r.amount), 0);
 }
 export function loyaltyReward(total: number, percentage: number, balanceAfter: number) {
   return balanceAfter < 0 || !Number.isFinite(percentage) || percentage <= 0 ? 0 : Math.round(total * Math.min(100, percentage) / 100);

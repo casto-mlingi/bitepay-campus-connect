@@ -1835,7 +1835,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTopUpRequests((prev) => prev.map((x) => x.id === id ? { ...x, status: "approved", amount: amt, resolved_at: Date.now() } : x));
       if (transactions.some((t) => t.reference === ref)) return true;
       setWallet(r.customer_id, r.store_id, amt);
-      setTransactions((prev) => prev.some((t) => t.reference === ref) ? prev : [{ id: uid("t"), store_id: r.store_id, customer_id: r.customer_id, type: "topup", amount: amt, description: `Lipa Namba top-up confirmed by BitePay (receipt ${r.reference})`, balance_before: walletFor(currentUser, r.store_id), tender: "mobile", created_at: Date.now(), reference: ref }, ...prev]);
+      setTransactions((prev) => prev.some((t) => t.reference === ref) ? prev : [{ id: `gw-${id}`, store_id: r.store_id, customer_id: r.customer_id, type: "topup", amount: amt, description: `Lipa Namba top-up confirmed by BitePay (receipt ${r.reference})`, balance_before: walletFor(currentUser, r.store_id), tender: "mobile", created_at: Date.now(), reference: ref }, ...prev]);
       adjustBank((b) => b + amt, r.store_id);
       pushNotification({ store_id: r.store_id, user_id: r.customer_id, title: "Payment confirmed by BitePay", body: `Receipt ${r.reference} · TZS ${amt.toLocaleString()} added to your wallet.`, kind: "topup" });
       return true;
