@@ -9,18 +9,24 @@ type Row = { id: string; provider: string; reference: string; amount: number; se
 const ago = (t: number) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "now" : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`; };
 
 /** Lipa payments the store's SMS phone received: quick picks for the last 15 min plus a full list. */
-export function IncomingLipa({ storeId, onPick }: { storeId?: string; onPick: (p: { reference: string; amount: number }) => void }) {
+export type LipaCheck = "none" | "checking" | "verified" | "used" | "missing" | "override";
+const norm = (v: string) => v.trim().toUpperCase().replace(/\s+/g, "");
+
+export function IncomingLipa({ storeId, onPick, reference = "", onStatus }: { storeId?: string; onPick: (p: { reference: string; amount: number }) => void; reference?: string; onStatus?: (s: LipaCheck) => void }) {
   const list = useServerFn(listIncomingLipa);
   const claim = useServerFn(claimLipaForSale);
   const [rows, setRows] = useState<Row[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [claimed, setClaimed] = useState<string[]>([]);
+  const [override, setOverride] = useState("");
 
   const load = useCallback(async () => {
     if (!storeId || !navigator.onLine) return;
     setLoading(true);
-    try { setRows(await list({ data: { store_id: storeId, hours: 24 } })); setMsg(""); }
+    try { setRows(await list({ data: { store_id: storeId, hours: 24 } })); setMsg(""); setLoaded(true); }
     catch { setMsg("Could not load received payments."); }
     finally { setLoading(false); }
   }, [storeId, list]);
@@ -31,9 +37,20 @@ export function IncomingLipa({ storeId, onPick }: { storeId?: string; onPick: (p
     if (!storeId || r.used) return;
     const res = await claim({ data: { store_id: storeId, sms_id: r.id } });
     if (!res.ok) { setMsg(res.reason); void load(); return; }
+    setClaimed((c) => [...c, norm(res.reference)]);
     onPick({ reference: res.reference, amount: res.amount });
     setOpen(false); void load();
   };
+
+  const ref = norm(reference);
+  const match = ref.length >= 6 ? rows.find((r) => norm(r.reference) === ref) : undefined;
+  const status: LipaCheck = ref.length < 6 ? "none" : claimed.includes(ref) ? "verified" : match && !match.used ? "checking" : match ? "used" : override === ref ? "override" : loaded || msg || (typeof navigator !== "undefined" && !navigator.onLine) ? "missing" : "checking";
+  useEffect(() => { onStatus?.(status); }, [status, onStatus]);
+  // A typed or scanned receipt that matches an unused SMS is locked to this sale and fills the amount.
+  useEffect(() => { if (match && !match.used && !claimed.includes(ref)) void pick(match); }, [match?.id, match?.used]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-check quickly while waiting for a late SMS.
+  useEffect(() => { if (status !== "missing" && status !== "override") return; const t = setInterval(load, 4_000); return () => clearInterval(t); }, [status, load]);
+  useEffect(() => { if (status === "override" && match && !match.used) void pick(match); }, [status, match]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fresh = rows.filter((r) => !r.used && Date.now() - r.received_at < 15 * 60_000).slice(0, 4);
 
@@ -52,6 +69,16 @@ export function IncomingLipa({ storeId, onPick }: { storeId?: string; onPick: (p
           ))}
         </div>
       ) : <p className="text-xs text-muted-foreground">No new Lipa payment in the last 15 minutes.</p>}
+      {status === "verified" && <p className="rounded-lg bg-success/10 px-3 py-2 text-sm font-semibold text-success inline-flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" />Payment confirmed by SMS{(() => { const r = rows.find((x) => norm(x.reference) === ref); return r ? ` · ${formatTZS(r.amount)}${r.sender_name ? ` from ${r.sender_name}` : ""}` : ""; })()}</p>}
+      {status === "checking" && <p className="text-xs text-muted-foreground">Checking receipt…</p>}
+      {status === "used" && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">This receipt was already used. Ask for another payment.</p>}
+      {status === "missing" && (
+        <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 space-y-2">
+          <p className="text-sm font-semibold">SMS not received yet — still checking.</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => setOverride(ref)}>Accept without SMS</Button>
+        </div>
+      )}
+      {status === "override" && <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs font-semibold">Accepted without SMS — marked unconfirmed for the shift check.</p>}
       {msg && <p role="alert" className="text-xs text-destructive">{msg}</p>}
       {open && (
         <div className="fixed inset-0 z-[60] bg-foreground/70 grid place-items-end sm:place-items-center" onClick={() => setOpen(false)}>

@@ -18,7 +18,7 @@ import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
 import { WalletPinDialog } from "@/components/wallet-pin-dialog";
 import { ReceiptScannerModal } from "@/components/receipt-scanner-modal";
-import { IncomingLipa } from "@/components/incoming-lipa";
+import { IncomingLipa, type LipaCheck } from "@/components/incoming-lipa";
 
 export const Route = createFileRoute("/pos")({
   component: POS,
@@ -59,6 +59,9 @@ function POS() {
   const [cashName, setCashName] = useState<string>("");
   const [tender, setTender] = useState<Tender>("cash");
   const [mobileRef, setMobileRef] = useState<string>("");
+  const [lipaCheck, setLipaCheck] = useState<LipaCheck>("none");
+  const lipaBlock = tender === "mobile" ? (lipaCheck === "used" ? "This Lipa receipt was already used" : lipaCheck === "missing" ? "SMS not received yet — wait or tap Accept without SMS" : lipaCheck === "checking" ? "Still checking the Lipa receipt" : "") : "";
+  const saleRef = tender === "mobile" && lipaCheck === "override" ? `${mobileRef.trim()} (unconfirmed)` : mobileRef;
   const [refScan, setRefScan] = useState(false);
   const [kitchenNote, setKitchenNote] = useState("");
   const [prepare, setPrepare] = useState(false);
@@ -188,17 +191,18 @@ function POS() {
     if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (walletOnly && walletShort > 0) { showToast("Wallet balance is not enough — save the bill for the cashier"); return; }
     if (!walletAllowed || !freshCustomer || !lines.length) return;
+    if (walletShort > 0 && splitCash > 0 && lipaBlock) { showToast(lipaBlock); return; }
     if (qrOnly && !isOnline) { showToast("QR wallet payments need a connection; use cash or ask a cashier"); return; }
     if (!requireShift()) return;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     const cashPortion = walletShort > 0 ? splitCash : 0;
     if (!isOnline && !allowDebt) {
-      enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
+      enqueueSale({ kind: "wallet", customer_id: freshCustomer.id, customer_name: freshCustomer.full_name, items, cash_portion: cashPortion, tender, reference: saleRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setSplitCash(0); setMobileRef("");
       return;
     }
-    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, allowDebt });
+    const res = posSale({ customerId: freshCustomer.id, items, cashPortion, tender, reference: saleRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, allowDebt });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: cashPortion > 0 ? "cash" : "wallet", cashierName: currentUser?.full_name, cashReceived: cashPortion || undefined, change: 0 };
     setLastReceipt({ order: res.order, extras });
@@ -213,17 +217,18 @@ function POS() {
     if (!canTakePayment) { showToast("Payments are taken by the cashier — save the bill instead"); return; }
     if (lines.length === 0) return;
     if (!Number.isFinite(cashReceived) || cashReceived < total) { showToast("Enter the full amount received"); return; }
+    if (lipaBlock) { showToast(lipaBlock); return; }
     if (saveChange && change > 0 && changePhone.replace(/\D/g, "").length < 9) { showToast("Enter the customer phone number to save their credit"); return; }
     if (!requireShift()) return;
     const effectiveReceived = cashReceived;
     const items = lines.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.product.price, qty: l.qty }));
     if (!isOnline && !saveChange) {
-      enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
+      enqueueSale({ kind: "cash", customer_name: cashName.trim() || "Walk-in", items, cash_received: effectiveReceived, tender, reference: saleRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare });
       showToast("Offline — sale queued to outbox");
       setLines([]); setCashReceived(0); setCashName(""); setMobileRef("");
       return;
     }
-    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: mobileRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, changeCustomer: saveChange && change > 0 ? { phone: changePhone, name: cashName || billLabel } : undefined });
+    const res = posCashSale({ items, cashReceived: effectiveReceived, customerName: cashName.trim() || (tender === "mobile" ? "Mobile Money" : "Walk-in Cash"), tender, reference: saleRef, table_no: tableNo.trim() || undefined, kitchen_note: kitchenNote, prepare, waiter_id: waiterId || undefined, changeCustomer: saveChange && change > 0 ? { phone: changePhone, name: cashName || billLabel } : undefined });
     if (!res.ok) { showToast(res.reason); return; }
     const extras: ReceiptExtras = { paymentMode: "cash", cashReceived: effectiveReceived, change, cashierName: currentUser?.full_name };
     setLastReceipt({ order: res.order, extras });
@@ -431,7 +436,7 @@ function POS() {
                   <div className="text-sm font-semibold text-amber-800">Wallet short by {formatTZS(walletShort)} — collect the rest</div>
                   <Input type="number" value={splitCash || ""} aria-label="Remaining amount received" min={0} max={total} inputMode="numeric" onChange={(e) => setSplitCash(Math.max(0, wholeAmount(Number(e.target.value)) || 0))} className="h-11 font-semibold bg-background" />
                   <TenderPicker tender={tender} onChange={setTender} />
-                  {tender === "mobile" && <IncomingLipa storeId={store?.id} onPick={(p) => { setMobileRef(p.reference); setSplitCash(Math.min(total, p.amount)); }} />}
+                  {tender === "mobile" && <IncomingLipa storeId={store?.id} reference={mobileRef} onStatus={setLipaCheck} onPick={(p) => { setMobileRef(p.reference); setSplitCash(Math.min(total, p.amount)); }} />}
                   {tender === "mobile" && <div className="relative"><Input value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 pr-12 bg-background" />
                     <Button type="button" variant="ghost" size="icon" aria-label="Scan receipt with camera" onClick={() => setRefScan(true)} className="absolute right-1 top-1/2 -translate-y-1/2 text-primary"><Camera className="w-5 h-5" /></Button></div>}
                   <label className="flex items-start gap-2 text-sm font-medium"><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={allowDebt} disabled={debtLimit <= 0} onChange={(e) => { setAllowDebt(e.target.checked); setSplitCash(e.target.checked ? 0 : Math.min(total, walletShort)); }} />Pay later · leave the shortage as customer debt</label>
@@ -455,7 +460,7 @@ function POS() {
                 ))}
               </div>
               {tender === "mobile" && <LipaNumbersList value={store?.lipa_numbers} compact />}
-              {tender === "mobile" && <IncomingLipa storeId={store?.id} onPick={(p) => { setMobileRef(p.reference); setCashReceived(p.amount); }} />}
+              {tender === "mobile" && <IncomingLipa storeId={store?.id} reference={mobileRef} onStatus={setLipaCheck} onPick={(p) => { setMobileRef(p.reference); setCashReceived(p.amount); }} />}
               {tender === "mobile" && <div className="relative"><Input aria-label="Lipa reference / token (optional)" value={mobileRef} onChange={(e) => setMobileRef(e.target.value)} placeholder="Lipa reference / token (optional)" className="h-11 pr-12" />
                 <Button type="button" variant="ghost" size="icon" aria-label="Scan receipt with camera" onClick={() => setRefScan(true)} className="absolute right-1 top-1/2 -translate-y-1/2 text-primary"><Camera className="w-5 h-5" /></Button></div>}
               {refScan && <ReceiptScannerModal onClose={() => setRefScan(false)} onScan={(r) => setMobileRef(r)} />}
