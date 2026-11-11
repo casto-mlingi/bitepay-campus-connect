@@ -20,7 +20,7 @@
 - Operational backups use a verified, repeatable-read internal archive of the current snapshot and requested business tables before any recovery; this protects current records without exposing private data in exports or logs.
 - Owner onboarding persists canonical database IDs before creating local state, so reloads and recovery cannot split one owner into unrelated accounts.
 - Owner registration commits its visible snapshot records in the same database transaction as the canonical account; interrupted onboarding must not strand an account without a store in the app.
-- Snapshot acknowledgements compare the exact sent payload to current device state, and local hydration never waits for network initialization; this keeps later offline edits queued and prevents upload replies from clearing them.
+- Snapshot acks compare the exact sent payload to current device state and hydration never waits for network, so offline edits stay queued.
 - Preserve store context identity in Vite hot-module data during preview edits, never in an SSR global; provider and split-route consumers must keep the same context without sharing user state between requests.
 - Server calls carry the signed session as both a partitioned cookie and an x-bp-session header from browser storage, renewed on each launch; phones that block framed cookies must still sync.
 - Saved POS bills (open tabs) are status rows (open/paid/cancelled) with updated_at, never deleted, so snapshot union-merges cannot revive closed bills; an explicit waiter pick on a sale overrides table attribution.
@@ -39,7 +39,7 @@
 - Account packages, prices, owner-group store caps and business eligibility live in subscription-rules; existing hospitality tools remain grandfathered to avoid daily-work regressions.
 - Retail stock is derived from immutable opening quantities, purchase rows and signed sale/refund quantities in retail-stock, never a mutable display balance, so offline merges retain deductions.
 - New branches inherit verified account billing at the locked snapshot boundary; staff snapshot uploads cannot modify subscriptions or opening-stock anchors, preventing self-upgrades and stock inflation.
-- BytePay Gateway SMS payments live in gateway tables (devices with hashed secrets, provider+reference-unique SMS rows, expiring checkouts); sms-parser matching only auto-pays an exact amount with one unambiguous checkout so typos and duplicates never double-credit.
+- Gateway SMS payments use devices with hashed secrets, provider+reference-unique SMS rows and expiring checkouts; only an exact amount with one unambiguous checkout auto-pays.
 - Lipa Namba top-ups mirror to gateway_topups (10-min window), match on receipt number only, credit the SMS amount idempotently (gw:<id>); staff confirmations lock the receipt server-side first, so nothing is credited twice.
 - Hospitality finished goods are products flagged direct_sale whose stock lives in ingredient-free batches; raw items moved there keep a converted_product_id instead of being deleted so old cooking batches still resolve.
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
