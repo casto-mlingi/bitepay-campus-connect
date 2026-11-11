@@ -43,4 +43,4 @@
 - Lipa Namba top-ups mirror to gateway_topups (10-min window), match on receipt number only, credit the SMS amount idempotently (gw:<id>); staff confirmations lock the receipt server-side first, so nothing is credited twice.
 - Hospitality finished goods are direct_sale products with ingredient-free batches; converted raw items keep converted_product_id so old batches resolve.
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
-- Sector wording comes from business-rules sectorTerms; shared screens stay sector-neutral.
+- Sector wording comes from business-rules sectorTerms; shared screens stay neutral.
