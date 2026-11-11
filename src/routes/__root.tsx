@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { StoreProvider } from "@/lib/store";
+import { LanguageProvider } from "@/lib/i18n";
 import { registerServiceWorker } from "@/lib/register-sw";
 import { InstallAlertsBanner } from "@/components/install-alerts-banner";
 
@@ -88,11 +89,11 @@ function RootComponent() {
   useEffect(() => { registerServiceWorker(); }, []);
   return (
     <QueryClientProvider client={queryClient}>
-      <StoreProvider>
+      <LanguageProvider><StoreProvider>
         <Outlet />
         <InstallAlertsBanner />
         
-      </StoreProvider>
+      </StoreProvider></LanguageProvider>
     </QueryClientProvider>
   );
 }
