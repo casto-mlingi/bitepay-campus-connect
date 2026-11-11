@@ -44,7 +44,7 @@ export function IncomingLipa({ storeId, onPick, reference = "", onStatus }: { st
 
   const ref = norm(reference);
   const match = ref.length >= 6 ? rows.find((r) => norm(r.reference) === ref) : undefined;
-  const status: LipaCheck = ref.length < 6 ? "none" : claimed.includes(ref) ? "verified" : match && !match.used ? "checking" : match ? "used" : override === ref ? "override" : loaded ? "missing" : "checking";
+  const status: LipaCheck = ref.length < 6 ? "none" : claimed.includes(ref) ? "verified" : match && !match.used ? "checking" : match ? "used" : override === ref ? "override" : loaded || msg || (typeof navigator !== "undefined" && !navigator.onLine) ? "missing" : "checking";
   useEffect(() => { onStatus?.(status); }, [status, onStatus]);
   // A typed or scanned receipt that matches an unused SMS is locked to this sale and fills the amount.
   useEffect(() => { if (match && !match.used && !claimed.includes(ref)) void pick(match); }, [match?.id, match?.used]); // eslint-disable-line react-hooks/exhaustive-deps
