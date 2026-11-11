@@ -43,3 +43,4 @@
 - Customer Lipa Namba top-ups are mirrored to gateway_topups (10-minute window); the gateway phone polls /api/public/gateway/pending, SMS ingest settles exactly one matching top-up, and the customer's device credits the wallet idempotently (reference gw:<id>) so snapshot merges never double-credit. Top-ups match on receipt number only and credit the SMS amount; staff confirmations lock the receipt server-side first so it can never be credited twice.
 - Hospitality finished goods are products flagged direct_sale whose stock lives in ingredient-free batches; raw items moved there keep a converted_product_id instead of being deleted so old cooking batches still resolve.
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
+- Sector wording (retail/hospitality/canteen) comes from business-rules sectorTerms; shared public screens stay sector-neutral so no business sees another sector's words.
