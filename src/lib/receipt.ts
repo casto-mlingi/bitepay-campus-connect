@@ -83,7 +83,7 @@ export function printReceipt(order: Order, extras: ReceiptExtras = {}) {
   w.document.write(`<!doctype html><html><head><title>Receipt ${order.id}</title>
     <style>
       body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;padding:16px;font-size:12px;white-space:pre;}
-      @media print { @page { margin: 8mm; } }
+      @media print { @page { size: 80mm auto; margin: 2mm; } body{padding:0;width:76mm;font-size:11px;color:#000;} }
     </style></head><body>${text.replace(/</g, "&lt;")}</body></html>`);
   w.document.close();
   w.focus();

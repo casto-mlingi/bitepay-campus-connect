@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /** True when keystrokes arrive as a scanner burst: >=4 chars, each within maxGap ms. */
-export function isScannerBurst(times: number[], maxGap = 35) {
+export function isScannerBurst(times: number[], maxGap = 50) {
   if (times.length < 4) return false;
   for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] > maxGap) return false;
   return true;
@@ -15,7 +15,7 @@ export function useHardwareScanner(onScan: (code: string) => void, enabled = tru
     let buf = ""; let times: number[] = [];
     const onKey = (e: KeyboardEvent) => {
       const now = performance.now();
-      if (times.length && now - times[times.length - 1] > 80) { buf = ""; times = []; }
+      if (times.length && now - times[times.length - 1] > 120) { buf = ""; times = []; }
       if (e.key === "Enter") {
         if (buf.length >= 4 && isScannerBurst(times)) { e.preventDefault(); e.stopPropagation(); const code = buf; cb.current(code); }
         buf = ""; times = []; return;
