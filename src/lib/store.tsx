@@ -3161,7 +3161,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     submitPayLaterRequest({ amount, reason }) {
       if (!currentUser || currentUser.role !== "customer") return { ok: false, reason: "Customers only" };
       const sid = activeStoreId;
-      if (!sid) return { ok: false, reason: "Choose a canteen first" };
+      if (!sid) return { ok: false, reason: "Choose a store first" };
       if (!(amount > 0)) return { ok: false, reason: "Enter the amount you need" };
       if (payLaterRequests.some((r) => r.customer_id === currentUser.id && r.status === "pending")) {
         return { ok: false, reason: "You already have a pay-later request waiting for approval" };

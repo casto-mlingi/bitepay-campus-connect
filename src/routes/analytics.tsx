@@ -9,7 +9,7 @@ export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics Dashboard — BitePay Staff" },
-      { name: "description", content: "Live P&L, batch costs, and wastage tracking for the canteen." },
+      { name: "description", content: "Live P&L, batch costs, and wastage tracking for your business." },
       { property: "og:title", content: "Analytics Dashboard — BitePay Staff" },
       { property: "og:description", content: "Compare today's sales revenue against batch costs in real time." },
     

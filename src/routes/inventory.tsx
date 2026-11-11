@@ -24,7 +24,7 @@ export const Route = createFileRoute("/inventory")({
       { title: "Store & Inventory — BitePay Staff" },
       { name: "description", content: "Manage raw materials, log cooking batches, and auto-cost every plate." },
       { property: "og:title", content: "Store & Inventory — BitePay Staff" },
-      { property: "og:description", content: "Raw material stock, batch costing, and finished goods for the canteen." },
+      { property: "og:description", content: "Raw material stock, batch costing, and finished goods for your business." },
     
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },],

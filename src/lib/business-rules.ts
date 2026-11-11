@@ -25,3 +25,16 @@ export type ScanGrant = { customerId: string; staffId: string; storeId: string; 
 export function validScanGrant(grant: ScanGrant | undefined, customerId: string, staffId: string, storeId: string, now: number) {
   return !!grant && grant.customerId === customerId && grant.staffId === staffId && grant.storeId === storeId && grant.expiresAt > now && grant.pinVerified;
 }
+export type Sector = "retail" | "hospitality" | "canteen";
+export function sectorOf(type?: BusinessType): Sector {
+  if (isRetail(type)) return "retail";
+  if (type === "restaurant" || type === "hotel" || type === "bar") return "hospitality";
+  return type === "canteen" ? "canteen" : "retail";
+}
+/** Sector-specific English wording; the page translator turns it into Kiswahili/French. */
+export const SECTOR_TERMS: Record<Sector, { place: string; choose: string; none: string; shared: string; catalog: string; noMobile: string }> = {
+  retail: { place: "Store", choose: "Choose store", none: "No stores available yet.", shared: "Your wallet balance is shared across every branch in the same business.", catalog: "Products", noMobile: "Mobile money top-up is not available for this store yet." },
+  hospitality: { place: "Venue", choose: "Choose venue", none: "No venues available yet.", shared: "Your wallet balance is shared across every venue in the same business.", catalog: "Menu & drinks", noMobile: "Mobile money top-up is not available for this venue yet." },
+  canteen: { place: "Canteen", choose: "Choose canteen", none: "No canteens available yet.", shared: "Your wallet balance is shared across every canteen in the same group.", catalog: "Menu", noMobile: "Mobile money top-up is not available for this canteen yet." },
+};
+export function sectorTerms(type?: BusinessType) { return SECTOR_TERMS[sectorOf(type)]; }

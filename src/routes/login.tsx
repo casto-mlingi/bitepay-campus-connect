@@ -133,7 +133,7 @@ function LoginPage() {
         <div className="relative flex flex-col items-center text-center">
           <BrandLogo variant="on-orange" className="w-16 h-16 rounded-2xl mb-3" />
           <h1 className="text-3xl font-extrabold tracking-tight">BitePay</h1>
-          <p className="mt-1.5 text-white/85 text-sm max-w-xs">{store?.name ? `${store.name} • Prepaid canteen wallet` : "Top-up once, order faster. No cash, no queues."}</p>
+          <p className="mt-1.5 text-white/85 text-sm max-w-xs">Smart POS & prepaid customer wallets</p>
         </div>
       </div>
 
@@ -181,12 +181,12 @@ function LoginPage() {
                       <option value="">Select a store…</option>
                       {canteenGroups.map((g) => (
                         <option key={g.orgId} value={g.orgId}>
-                          {g.name}{g.canteens.length > 1 ? ` — ${g.canteens.length} canteens` : g.canteens[0]?.location ? ` — ${g.canteens[0].location}` : ""}
+                          {g.name}{g.canteens.length > 1 ? ` — ${g.canteens.length} branches` : g.canteens[0]?.location ? ` — ${g.canteens[0].location}` : ""}
                         </option>
                       ))}
                     </select>
                     <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      One wallet works at every canteen in the store you pick. You can shop at other stores later — each keeps its own balance.
+                      One wallet works at every branch in the business you select. You can shop at other stores later — each keeps its own balance.
                     </p>
                   </div>
                 )}
@@ -238,7 +238,7 @@ function LoginPage() {
               <StoreIcon className="w-4 h-4 mr-2" /> {hasOwner ? "Create a new store account" : "Create your store (first time)"}
             </Button>
             <p className="text-center text-[11px] text-muted-foreground">
-              Any owner can open a new canteen on this device — data stays separate per store.
+              Any owner can register a new business on this device — data stays separate per store.
             </p>
 
             <div className="grid grid-cols-2 gap-2">
@@ -251,7 +251,7 @@ function LoginPage() {
             </div>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — SaaS for Canteens & Hotels</p>
+        <p className="text-center text-xs text-muted-foreground mt-6">© BitePay — Smart POS & Business Management System</p>
       </div>
     </div>
   );

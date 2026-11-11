@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/staff")({
   component: StaffDashboard,
-  head: () => ({ meta: [{ title: "Live Orders — BitePay Staff" }, { name: "description", content: "Kanban view of live canteen orders for BitePay staff." }, { property: "og:title", content: "Live Orders — BitePay Staff" }, { property: "og:description", content: "Kanban view of live canteen orders for BitePay staff." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
+  head: () => ({ meta: [{ title: "Live Orders — BitePay Staff" }, { name: "description", content: "Kanban view of live orders for BitePay staff." }, { property: "og:title", content: "Live Orders — BitePay Staff" }, { property: "og:description", content: "Kanban view of live orders for BitePay staff." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
 });
 
 const columns: { key: OrderStatus; title: string; sub: string; icon: React.ReactNode; accent: string }[] = [

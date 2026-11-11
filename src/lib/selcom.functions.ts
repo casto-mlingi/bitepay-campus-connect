@@ -82,7 +82,7 @@ export const startSelcomTopup = createServerFn({ method: "POST" })
     }
     const sql = getSql();
     const creds = await loadCreds(sql, data.store_id);
-    if (!creds) return { ok: false as const, reason: "This canteen has not set up mobile money payments yet." };
+    if (!creds) return { ok: false as const, reason: "This store has not set up mobile money payments yet." };
     await ensureSelcomTables(sql);
 
     const orderId = `BP${Date.now()}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();

@@ -166,7 +166,7 @@ function SetupWizard() {
                 <h2 className="text-xl font-bold">Store details</h2>
               </div>
               <FormRow label="Store name" required>
-                <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Campus Bites Canteen" className="h-11 rounded-xl" />
+                <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="e.g. Mama Asha Shop" className="h-11 rounded-xl" />
               </FormRow>
               <FormRow label="Location">
                 <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Main Campus, Block C" className="h-11 rounded-xl" />
@@ -175,7 +175,7 @@ function SetupWizard() {
                 <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0712 000 000" className="h-11 rounded-xl" />
               </FormRow>
               <FormRow label="Admin email" required>
-                <Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="owner@canteen.co.tz" className="h-11 rounded-xl" />
+                <Input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="owner@business.co.tz" className="h-11 rounded-xl" />
               </FormRow>
 
               <FormRow label="Type of business" required>
