@@ -15,6 +15,7 @@ import { useStore, formatTZS, type PaymentMethod, type ExpenseCategory } from "@
 import { StaffShell } from "@/components/staff-shell";
 import { PayablesPanel } from "@/components/payables-panel";
 import { ReceivablesPanel } from "@/components/receivables-panel";
+import { SafeCustodyPanel } from "@/components/safe-custody-panel";
 import { ACCOUNTS, buildLedger, trialBalance, balances, type AccountCode } from "@/lib/accounting";
 
 export const Route = createFileRoute("/finance")({
@@ -33,11 +34,11 @@ export const Route = createFileRoute("/finance")({
 
 type Section = "overview" | "operations" | "reports";
 const FINANCE_SECTIONS: Record<Section, { value: Tab; label: string }[]> = {
-  overview: [{ value: "treasury", label: "Treasury" }, { value: "receivables", label: "Customer Balances" }, { value: "payables", label: "Suppliers & Bills" }],
+  overview: [{ value: "treasury", label: "Treasury" }, { value: "receivables", label: "Customer Balances" }, { value: "payables", label: "Suppliers & Bills" }, { value: "safe", label: "Safe & Owner Handover" }],
   operations: [{ value: "procurement", label: "Record Purchase / Bill" }, { value: "expenses", label: "Operating Expenses" }],
   reports: [{ value: "pnl", label: "Income Statement" }, { value: "journal", label: "Daily Journal" }, { value: "books", label: "Books & Balance Sheet" }],
 };
-type Tab = "treasury" | "receivables" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
+type Tab = "safe" | "treasury" | "receivables" | "payables" | "procurement" | "expenses" | "pnl" | "journal" | "books";
 
 function FinancePage() {
   const {
@@ -118,6 +119,7 @@ function FinancePage() {
       {tab === "procurement" && <Procurement onSubmit={recordPurchase} />}
       {tab === "receivables" && <ReceivablesPanel />}
       {tab === "payables" && <PayablesPanel />}
+      {tab === "safe" && <SafeCustodyPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal
         orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries}
