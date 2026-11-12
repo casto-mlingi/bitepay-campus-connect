@@ -44,3 +44,4 @@
 - Hospitality finished goods are direct_sale products with ingredient-free batches; converted raw items keep converted_product_id so old batches resolve.
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
 - Sector wording comes from business-rules sectorTerms; shared screens stay neutral.
+- Safe custody (supervisor→owner) derives expected safe cash from closed-shift drops minus out-of-shift cash expenses, bank deposits and owner handovers (safe-custody); owner handovers need the owner's PIN and move custody, not revenue.
