@@ -48,6 +48,7 @@ function SettingsPage() {
   const [receiptEmail, setReceiptEmail] = useState(store?.receipt_email ?? "");
   const [tin, setTin] = useState(store?.tin_number ?? "");
   const [vrn, setVrn] = useState(store?.vrn_number ?? "");
+  const [paper, setPaper] = useState<"80" | "58">(store?.receipt_paper ?? "80");
   const [currency, setCurrency] = useState(store?.currency ?? "TZS");
   const [low, setLow] = useState<number>(store?.low_balance_threshold ?? 3000);
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
@@ -87,7 +88,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, receipt_logo: receiptLogo || undefined, receipt_email: receiptEmail.trim() || undefined, tin_number: tin.trim() || undefined, vrn_number: vrn.trim() || undefined, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
+    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, receipt_logo: receiptLogo || undefined, receipt_email: receiptEmail.trim() || undefined, tin_number: tin.trim() || undefined, vrn_number: vrn.trim() || undefined, receipt_paper: paper, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -175,6 +176,15 @@ function SettingsPage() {
         <Row label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Row>
         <Row label="Contact phone"><Input value={contact} onChange={(e) => setContact(e.target.value)} /></Row>
         <h2 className="font-bold pt-2">Receipt details</h2>
+        <Row label="Receipt printer paper">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([["80", "80mm (3-inch)", "Desktop thermal printer"], ["58", "58mm (2-inch)", "Handheld POS / Bluetooth printer"]] as const).map(([v, l, d]) => (
+              <button key={v} type="button" onClick={() => setPaper(v)} aria-pressed={paper === v} className={`rounded-lg border p-3 text-left min-h-12 ${paper === v ? "border-primary bg-primary/10" : "bg-card"}`}>
+                <div className="font-semibold">{l}</div><div className="text-xs text-muted-foreground">{d}</div>
+              </button>
+            ))}
+          </div>
+        </Row>
         <Row label="Receipt email (optional)"><Input type="email" value={receiptEmail} onChange={(e) => setReceiptEmail(e.target.value)} /></Row>
         <div className="grid grid-cols-2 gap-3">
           <Row label="TIN number"><Input value={tin} onChange={(e) => setTin(e.target.value)} placeholder="123-456-789" /></Row>

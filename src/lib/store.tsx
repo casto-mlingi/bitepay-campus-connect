@@ -82,6 +82,8 @@ export type Store = {
   receipt_email?: string;
   tin_number?: string;
   vrn_number?: string;
+  /** Thermal paper width: 80mm desktop (default) or 58mm handheld/Bluetooth. */
+  receipt_paper?: "80" | "58";
   admin_email?: string; // billing/admin contact — must be unique across stores
   currency: string;
 
