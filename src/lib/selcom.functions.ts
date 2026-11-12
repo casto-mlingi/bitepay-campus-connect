@@ -38,7 +38,7 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     base_url: z.enum(["sandbox", "live"]),
     x_api_key: z.string().trim().max(300).optional(),
     api_key: z.string().trim().min(4).max(300),
-    api_secret: z.string().trim().min(4).max(300),
+    api_secret: z.string().trim().min(4).max(4000),
     vendor: z.string().trim().min(2).max(100),
     fee_percent: z.number().min(0).max(20).default(0),
     fee_flat: z.number().int().min(0).max(100_000).default(0),
@@ -50,8 +50,8 @@ export const saveSelcomSettings = createServerFn({ method: "POST" })
     const sql = getSql();
     const existing = await loadCreds(sql, data.store_id);
     // Replacing saved keys requires proving you know the current API key.
-    if (existing && existing.api_key !== (data.current_api_key ?? "").trim()) {
-      return { ok: false as const, reason: "Enter the current client ID to replace the saved keys." };
+    if (existing && existing.api_key !== data.api_key && existing.api_key !== (data.current_api_key ?? "").trim()) {
+      return { ok: false as const, reason: "You are changing to a different client ID. Enter the old client ID in the last box to confirm." };
     }
     await sql`insert into selcom_settings (store_id, base_url, api_key, api_secret, vendor, fee_percent, fee_flat, x_api_key)
       values (${data.store_id}, ${data.base_url}, ${data.api_key}, ${data.api_secret}, ${data.vendor}, ${data.fee_percent}, ${data.fee_flat}, ${data.x_api_key || null})

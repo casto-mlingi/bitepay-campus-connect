@@ -60,7 +60,7 @@ export function SelcomSettingsCard({ storeId }: { storeId: string }) {
       </div>
       <p className="text-xs text-muted-foreground">Set these to what AzamPay charges you per transaction. The fee is added on top of the top-up, so the customer pays it and your till receives the full top-up amount. Leave both at 0 to absorb the cost yourself.</p>
       {status?.configured && (
-        <div><Label className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1"><KeyRound className="w-3 h-3" /> Current client ID (needed to replace)</Label><Input className="mt-1.5" value={currentKey} onChange={(e) => setCurrentKey(e.target.value)} autoComplete="off" /></div>
+        <div><Label className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1"><KeyRound className="w-3 h-3" /> Old client ID (only if changing client ID)</Label><Input className="mt-1.5" value={currentKey} onChange={(e) => setCurrentKey(e.target.value)} autoComplete="off" /></div>
       )}
       {msg && <div className="text-sm font-medium">{msg}</div>}
       <Button type="submit" disabled={busy} className="w-full h-11 rounded-xl">{busy ? "Saving…" : status?.configured ? "Replace keys" : "Save keys"}</Button>
