@@ -112,6 +112,14 @@ function ShiftPage() {
               </label>
               <label className="block"><span className="text-xs text-muted-foreground">Float left in drawer</span><Input aria-label="Float left in drawer" inputMode="numeric" type="number" min={0} value={retained || ""} onChange={(e) => setRetained(Math.max(0, Math.round(Number(e.target.value) || 0)))} /></label>
               <label className="block"><span className="text-xs text-muted-foreground">Cash handed to manager / safe</span><Input aria-label="Cash handed to manager" inputMode="numeric" type="number" min={0} value={drop || ""} onChange={(e) => setDrop(Math.max(0, Math.round(Number(e.target.value) || 0)))} /></label>
+              {countedCash > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setDrop(countedCash); setRetained(0); }}>All to manager</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setRetained(countedCash); setDrop(0); }}>Leave all in drawer</Button>
+                  {countedCash > retained && retained > 0 && <Button type="button" size="sm" variant="outline" onClick={() => setDrop(countedCash - retained)}>Rest to manager</Button>}
+                </div>
+              )}
+              {countedCash !== retained + drop && <p className="text-xs text-destructive">Float + manager cash must equal {formatTZS(countedCash)} (now {formatTZS(retained + drop)})</p>}
               <label className="block"><span className="text-xs text-muted-foreground">Receiving cashier or manager</span><select aria-label="Handover witness" className="w-full min-h-12 rounded-lg border bg-background px-3 text-sm" value={witness} onChange={(e) => setWitness(e.target.value)}><option value="">Select staff member</option>{profiles.filter((p) => p.role === "staff" && !p.disabled && p.id !== currentUser.id && p.staff_role !== "waiter" && p.staff_pin).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
               <label className="block"><span className="text-xs text-muted-foreground">Receiver’s staff PIN</span><Input aria-label="Receiver staff PIN" type="password" autoComplete="off" inputMode="numeric" value={witnessPin} onChange={(e) => setWitnessPin(e.target.value)} /></label>
               <label className="block">
@@ -119,6 +127,10 @@ function ShiftPage() {
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="mt-1 w-full px-3 py-2 rounded-lg border bg-background text-sm" placeholder="Explain variance if any…" />
               </label>
             </div>
+            {!closing && (() => {
+              const need = !isOnline ? "You are offline — connect to the internet to close the shift." : countedCash !== retained + drop ? "Split the counted cash between drawer float and manager." : !witness ? "Choose who is receiving the handover." : !witnessPin ? "Enter the receiver's staff PIN." : !validHandover(countedCash, retained, drop, countedMobile) ? "Check the amounts — they must be whole positive numbers." : "";
+              return need ? <p className="mt-3 text-xs text-warning-foreground bg-warning/15 rounded-lg px-3 py-2">{need}</p> : null;
+            })()}
             <Button onClick={doClose} disabled={closing || !isOnline || !witness || !witnessPin || !validHandover(countedCash, retained, drop, countedMobile)} variant="destructive" className="w-full mt-4 h-12">
               <Square className="w-4 h-4 mr-2" /> {closing ? "Confirming…" : "Confirm handover"}
             </Button>
