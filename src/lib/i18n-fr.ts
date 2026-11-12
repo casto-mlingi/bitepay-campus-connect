@@ -45,4 +45,12 @@ export const FR_APP: Record<string, string> = {
   "SMS not received yet — still checking.": "SMS pas encore reçu — vérification en cours.",
   "Accept without SMS": "Accepter sans SMS",
   "Accepted without SMS — marked unconfirmed for the shift check.": "Accepté sans SMS — marqué non confirmé pour le contrôle du service.",
+  "All to manager": "Tout au gérant",
+  "Leave all in drawer": "Tout laisser en caisse",
+  "Rest to manager": "Le reste au gérant",
+  "You are offline — connect to the internet to close the shift.": "Vous êtes hors ligne — connectez-vous pour clôturer le service.",
+  "Split the counted cash between drawer float and manager.": "Répartissez l"espèce comptée entre le fond de caisse et le gérant.",
+  "Choose who is receiving the handover.": "Choisissez qui reçoit la passation.",
+  "Enter the receiver"s staff PIN.": "Saisissez le PIN du receveur.",
+  "Check the amounts — they must be whole positive numbers.": "Vérifiez les montants — nombres entiers positifs.",
 };
