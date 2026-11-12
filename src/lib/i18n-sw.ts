@@ -38,4 +38,12 @@ export const SW_APP: Record<string, string> = {
   "SMS not received yet — still checking.": "SMS bado haijafika — tunaendelea kukagua.",
   "Accept without SMS": "Kubali bila SMS",
   "Accepted without SMS — marked unconfirmed for the shift check.": "Imekubaliwa bila SMS — imewekwa haijathibitishwa kwa ukaguzi wa zamu.",
+  "All to manager": "Zote kwa meneja",
+  "Leave all in drawer": "Acha zote droo",
+  "Rest to manager": "Zilizobaki kwa meneja",
+  "You are offline — connect to the internet to close the shift.": "Huna mtandao — unganisha intaneti ili kufunga zamu.",
+  "Split the counted cash between drawer float and manager.": "Gawanya pesa iliyohesabiwa kati ya droo na meneja.",
+  "Choose who is receiving the handover.": "Chagua anayepokea makabidhiano.",
+  "Enter the receiver's staff PIN.": "Weka PIN ya mpokeaji.",
+  "Check the amounts — they must be whole positive numbers.": "Hakiki kiasi — lazima viwe namba kamili chanya.",
 };
