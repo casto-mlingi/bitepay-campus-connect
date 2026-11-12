@@ -44,6 +44,6 @@ export const SW_APP: Record<string, string> = {
   "You are offline — connect to the internet to close the shift.": "Huna mtandao — unganisha intaneti ili kufunga zamu.",
   "Split the counted cash between drawer float and manager.": "Gawanya pesa iliyohesabiwa kati ya droo na meneja.",
   "Choose who is receiving the handover.": "Chagua anayepokea makabidhiano.",
-  "Enter the receiver"s staff PIN.": "Weka PIN ya mpokeaji.",
+  "Enter the receiver's staff PIN.": "Weka PIN ya mpokeaji.",
   "Check the amounts — they must be whole positive numbers.": "Hakiki kiasi — lazima viwe namba kamili chanya.",
 };

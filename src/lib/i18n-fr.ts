@@ -49,8 +49,8 @@ export const FR_APP: Record<string, string> = {
   "Leave all in drawer": "Tout laisser en caisse",
   "Rest to manager": "Le reste au gérant",
   "You are offline — connect to the internet to close the shift.": "Vous êtes hors ligne — connectez-vous pour clôturer le service.",
-  "Split the counted cash between drawer float and manager.": "Répartissez l"espèce comptée entre le fond de caisse et le gérant.",
+  "Split the counted cash between drawer float and manager.": "Répartissez l'espèce comptée entre le fond de caisse et le gérant.",
   "Choose who is receiving the handover.": "Choisissez qui reçoit la passation.",
-  "Enter the receiver"s staff PIN.": "Saisissez le PIN du receveur.",
+  "Enter the receiver's staff PIN.": "Saisissez le PIN du receveur.",
   "Check the amounts — they must be whole positive numbers.": "Vérifiez les montants — nombres entiers positifs.",
 };
