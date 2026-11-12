@@ -54,7 +54,10 @@ export function receiptHtml(order: Order, extras: ReceiptExtras = {}) {
   if (order.table_no) h.push(row("TABLE:", order.table_no));
   if (order.kitchen_note) h.push(row("NOTE:", order.kitchen_note));
   h.push(`<hr>`);
-  order.items.forEach((i) => h.push(row(`${i.qty > 1 ? `${i.qty}X ` : ""}${i.name.toUpperCase()}`, formatTZS(i.price * i.qty))));
+  const narrow = s?.receipt_paper === "58";
+  order.items.forEach((i) => h.push(narrow
+    ? `<div class="b">${esc(i.name.toUpperCase())}</div>${row(`  ${i.qty} x ${formatTZS(i.price)}`, formatTZS(i.price * i.qty))}`
+    : row(`${i.qty > 1 ? `${i.qty}X ` : ""}${i.name.toUpperCase()}`, formatTZS(i.price * i.qty))));
   h.push(`<hr>`);
   h.push(row("TOTAL:", formatTZS(order.total_amount), true));
   h.push(`<hr>`);
@@ -70,12 +73,12 @@ export function receiptHtml(order: Order, extras: ReceiptExtras = {}) {
 
   if (lipa.length) {
     h.push(`<hr><div class="c b">${extras.bill ? "SCAN TO PAY — LIPA NAMBA" : "LIPA NAMBA"}</div><div class="lipa">`);
-    lipa.forEach((l) => h.push(`<div class="lq">${extras.bill ? qr(lipaQrText(l, order.total_amount), 96) : ""}<div class="b">${esc(LIPA_PROVIDERS[l.provider])}</div><div class="b big">${esc(l.number)}</div><div>${esc(l.account_name)}</div></div>`));
+    lipa.forEach((l) => h.push(`<div class="lq">${extras.bill ? qr(lipaQrText(l, order.total_amount), narrow ? 84 : 96) : ""}<div class="b">${esc(LIPA_PROVIDERS[l.provider])}</div><div class="b big">${esc(l.number)}</div><div>${esc(l.account_name)}</div></div>`));
     h.push(`</div>`);
   }
 
   h.push(`<div class="c thanks">THANK YOU, KARIBU TENA!</div><hr class="solid">`);
-  h.push(`<div class="c foot"><div>Want this system? Contact</div><div class="b">${VENDOR_WHATSAPP}</div><div>via WhatsApp</div>${qr(VENDOR_WHATSAPP_LINK, 80)}</div>`);
+  h.push(`<div class="c foot"><div>Want this system? Contact</div><div class="b">${VENDOR_WHATSAPP}</div><div>via WhatsApp</div>${qr(VENDOR_WHATSAPP_LINK, narrow ? 70 : 80)}</div>`);
   return h.join("");
 }
 
@@ -88,10 +91,15 @@ hr{border:0;border-top:1px dashed #000;margin:6px 0}hr.solid{border-top:1.5px so
 .thanks{margin:8px 0 4px}.foot{font-size:11px}.foot svg{display:block;margin:4px auto 0}
 @media print{@page{size:80mm auto;margin:2mm}body{width:76mm;padding:0}}`;
 
+/** 58mm handheld printers: ~48mm printable, ~32 chars per line. */
+const CSS58 = `body{width:198px;padding:4px;font-size:10.5px}.name{font-size:14px}.logo{max-width:70px;max-height:50px}.row.b{font-size:13px}.lq{width:96px}.big{font-size:12px}.foot{font-size:9.5px}
+@media print{@page{size:58mm auto;margin:1mm}body{width:48mm;padding:0}}`;
+export const receiptCss = (store?: Store | null) => CSS + (store?.receipt_paper === "58" ? CSS58 : "");
+
 export function printReceipt(order: Order, extras: ReceiptExtras = {}) {
-  const w = window.open("", "_blank", "width=380,height=700");
+  const w = window.open("", "_blank", extras.store?.receipt_paper === "58" ? "width=260,height=700" : "width=380,height=700");
   if (!w) return;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title><style>${CSS}</style></head><body>${receiptHtml(order, extras)}</body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title><style>${receiptCss(extras.store)}</style></head><body>${receiptHtml(order, extras)}</body></html>`);
   w.document.close();
   w.focus();
   const go = () => setTimeout(() => w.print(), 200);
@@ -100,7 +108,7 @@ export function printReceipt(order: Order, extras: ReceiptExtras = {}) {
 }
 
 export function downloadReceipt(order: Order, extras: ReceiptExtras = {}) {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>${receiptHtml(order, extras)}</body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${receiptCss(extras.store)}</style></head><body>${receiptHtml(order, extras)}</body></html>`;
   const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url; a.download = `Receipt-${order.receipt_no ?? order.id}.html`;
