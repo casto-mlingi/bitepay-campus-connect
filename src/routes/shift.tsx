@@ -5,6 +5,7 @@ import { useStore, formatTZS, type Shift, type ShiftStockLine } from "@/lib/stor
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { productDepartment } from "@/lib/pack-units";
 import { validHandover } from "@/lib/shift-controls";
 import { lossCharges, shortage, unresolvedLosses, type LossBasis, type LossDisposition } from "@/lib/staff-debts";
 
@@ -142,8 +143,9 @@ function StockCount({ onSaved }: { onSaved: (m: string) => void }) {
   const saved = Object.fromEntries((activeShift?.stock_counts ?? []).map((l) => [l.product_id, l.counted]));
   const [counts, setCounts] = useState<Record<string, number | undefined>>(saved);
   const [q, setQ] = useState("");
+  const [scope, setScope] = useState<"counter" | "all">("counter");
   if (items.length === 0) return null;
-  const shown = items.filter((x) => x.p.name.toLowerCase().includes(q.toLowerCase()));
+  const shown = items.filter((x) => (scope === "all" || productDepartment(x.p) !== "food") && x.p.name.toLowerCase().includes(q.toLowerCase()));
   const save = () => {
     const lines: ShiftStockLine[] = items.filter((x) => counts[x.p.id] !== undefined).map((x) => ({ product_id: x.p.id, name: x.p.name, expected: x.expected, counted: counts[x.p.id]! }));
     if (lines.length === 0) return onSaved("Enter at least one counted quantity");
@@ -154,6 +156,8 @@ function StockCount({ onSaved }: { onSaved: (m: string) => void }) {
       <h2 className="font-bold text-lg flex items-center gap-2"><Boxes className="w-5 h-5 text-primary" /> Stock count</h2>
       <p className="text-xs text-muted-foreground">Count items on the shelf. Differences appear on the handover report.</p>
       <Input placeholder="Search item…" value={q} onChange={(e) => setQ(e.target.value)} className="mt-3" />
+      <div className="mt-3 flex gap-2">{([["counter", "Drinks & counter items"], ["all", "All items"]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setScope(k)} className={`h-10 px-4 rounded-full text-sm font-semibold border ${scope === k ? "bg-foreground text-background border-foreground" : "bg-surface border-border"}`}>{l}</button>)}</div>
+      {shown.length === 0 && <p className="mt-3 text-sm text-muted-foreground">No items in this view.</p>}
       <ul className="mt-3 divide-y max-h-96 overflow-y-auto">
         {shown.map(({ p, expected }) => { const c = counts[p.id]; const diff = c === undefined ? null : c - expected; return (
           <li key={p.id} className="flex items-center gap-3 py-2">

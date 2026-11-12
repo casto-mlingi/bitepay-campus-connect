@@ -1,5 +1,6 @@
 // French for in-app screens (English -> French, exact visible text).
 export const FR_APP: Record<string, string> = {
+  "Drinks & counter items": "Boissons et articles du comptoir", "All items": "Tous les articles", "No items in this view.": "Aucun article ici.",
   "Received by Lipa": "Re\u00e7us par Lipa",
   "No new Lipa payment in the last 15 minutes.": "Aucun nouveau paiement Lipa ces 15 derni\u00e8res minutes.",
   "Lipa payments received (24h)": "Paiements Lipa re\u00e7us (24 h)",
