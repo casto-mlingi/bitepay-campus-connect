@@ -1,5 +1,6 @@
 // Kiswahili for in-app screens (English -> Kiswahili, exact visible text).
 export const SW_APP: Record<string, string> = {
+  "Drinks & counter items": "Vinywaji na bidhaa za kaunta", "All items": "Vyote", "No items in this view.": "Hakuna bidhaa hapa.",
   "Received by Lipa": "Zilizopokelewa kwa Lipa",
   "No new Lipa payment in the last 15 minutes.": "Hakuna malipo mapya ya Lipa katika dakika 15 zilizopita.",
   "Lipa payments received (24h)": "Malipo ya Lipa yaliyopokelewa (saa 24)",
