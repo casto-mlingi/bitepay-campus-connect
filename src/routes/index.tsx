@@ -235,6 +235,7 @@ function HomePage() {
           <div className="flex items-center gap-4">
             <Link to="/admin" className="inline-flex items-center gap-1 hover:text-foreground"><ShieldCheck className="w-3.5 h-3.5" /> Admin</Link>
             <Link to="/support" className="inline-flex items-center gap-1 hover:text-foreground"><LifeBuoy className="w-3.5 h-3.5" /> Support</Link>
+            <Link to="/privacy" className="inline-flex items-center gap-1 hover:text-foreground">Privacy</Link>
             <Link to="/login" className="inline-flex items-center gap-1 hover:text-foreground">Sign in</Link>
           </div>
         </div>
