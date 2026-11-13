@@ -24,6 +24,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as MyPerformanceRouteImport } from './routes/my-performance'
 import { Route as PosRouteImport } from './routes/pos'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ShiftRouteImport } from './routes/shift'
@@ -114,6 +115,11 @@ const MyPerformanceRoute = MyPerformanceRouteImport.update({
 const PosRoute = PosRouteImport.update({
   id: '/pos',
   path: '/pos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
@@ -280,6 +288,7 @@ export interface FileRoutesById {
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
   '/pos': typeof PosRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/setup': typeof SetupRoute
   '/shift': typeof ShiftRoute
@@ -315,6 +324,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/my-performance'
     | '/pos'
+    | '/privacy'
     | '/settings'
     | '/setup'
     | '/shift'
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/my-performance'
     | '/pos'
+    | '/privacy'
     | '/settings'
     | '/setup'
     | '/shift'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/my-performance'
     | '/pos'
+    | '/privacy'
     | '/settings'
     | '/setup'
     | '/shift'
@@ -415,6 +427,7 @@ export interface RootRouteChildren {
   MenuRoute: typeof MenuRoute
   MyPerformanceRoute: typeof MyPerformanceRoute
   PosRoute: typeof PosRoute
+  PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   SetupRoute: typeof SetupRoute
   ShiftRoute: typeof ShiftRoute
@@ -538,6 +551,13 @@ declare module '@tanstack/react-router' {
       path: '/pos'
       fullPath: '/pos'
       preLoaderRoute: typeof PosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -671,6 +691,7 @@ const rootRouteChildren: RootRouteChildren = {
   MenuRoute: MenuRoute,
   MyPerformanceRoute: MyPerformanceRoute,
   PosRoute: PosRoute,
+  PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   SetupRoute: SetupRoute,
   ShiftRoute: ShiftRoute,
