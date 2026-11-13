@@ -35,6 +35,7 @@ import { Route as TablesRouteImport } from './routes/tables'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as TopupsRouteImport } from './routes/topups'
+import { Route as DotwellKnownAssetlinksDotjsonRouteImport } from './routes/[.]well-known/assetlinks[.]json'
 import { Route as ApiPublicAzampayWebhookRouteImport } from './routes/api/public/azampay/webhook'
 import { Route as ApiPublicGatewayPendingRouteImport } from './routes/api/public/gateway/pending'
 import { Route as ApiPublicGatewaySmsRouteImport } from './routes/api/public/gateway/sms'
@@ -172,6 +173,12 @@ const TopupsRoute = TopupsRouteImport.update({
   path: '/topups',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownAssetlinksDotjsonRoute =
+  DotwellKnownAssetlinksDotjsonRouteImport.update({
+    id: '/.well-known/assetlinks.json',
+    path: '/.well-known/assetlinks.json',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicAzampayWebhookRoute = ApiPublicAzampayWebhookRouteImport.update({
   id: '/api/public/azampay/webhook',
   path: '/api/public/azampay/webhook',
@@ -230,6 +237,7 @@ export interface FileRoutesByFullPath {
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
+  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
   '/api/public/gateway/pending': typeof ApiPublicGatewayPendingRoute
   '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
@@ -264,6 +272,7 @@ export interface FileRoutesByTo {
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
+  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
   '/api/public/gateway/pending': typeof ApiPublicGatewayPendingRoute
   '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
@@ -299,6 +308,7 @@ export interface FileRoutesById {
   '/team': typeof TeamRoute
   '/topup': typeof TopupRoute
   '/topups': typeof TopupsRoute
+  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/api/public/azampay/webhook': typeof ApiPublicAzampayWebhookRoute
   '/api/public/gateway/pending': typeof ApiPublicGatewayPendingRoute
   '/api/public/gateway/sms': typeof ApiPublicGatewaySmsRoute
@@ -335,6 +345,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/topup'
     | '/topups'
+    | '/.well-known/assetlinks.json'
     | '/api/public/azampay/webhook'
     | '/api/public/gateway/pending'
     | '/api/public/gateway/sms'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/topup'
     | '/topups'
+    | '/.well-known/assetlinks.json'
     | '/api/public/azampay/webhook'
     | '/api/public/gateway/pending'
     | '/api/public/gateway/sms'
@@ -403,6 +415,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/topup'
     | '/topups'
+    | '/.well-known/assetlinks.json'
     | '/api/public/azampay/webhook'
     | '/api/public/gateway/pending'
     | '/api/public/gateway/sms'
@@ -438,6 +451,7 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRoute
   TopupRoute: typeof TopupRoute
   TopupsRoute: typeof TopupsRoute
+  DotwellKnownAssetlinksDotjsonRoute: typeof DotwellKnownAssetlinksDotjsonRoute
   ApiPublicAzampayWebhookRoute: typeof ApiPublicAzampayWebhookRoute
   ApiPublicGatewayPendingRoute: typeof ApiPublicGatewayPendingRoute
   ApiPublicGatewaySmsRoute: typeof ApiPublicGatewaySmsRoute
@@ -630,6 +644,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopupsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/assetlinks.json': {
+      id: '/.well-known/assetlinks.json'
+      path: '/.well-known/assetlinks.json'
+      fullPath: '/.well-known/assetlinks.json'
+      preLoaderRoute: typeof DotwellKnownAssetlinksDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/azampay/webhook': {
       id: '/api/public/azampay/webhook'
       path: '/api/public/azampay/webhook'
@@ -702,6 +723,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRoute,
   TopupRoute: TopupRoute,
   TopupsRoute: TopupsRoute,
+  DotwellKnownAssetlinksDotjsonRoute: DotwellKnownAssetlinksDotjsonRoute,
   ApiPublicAzampayWebhookRoute: ApiPublicAzampayWebhookRoute,
   ApiPublicGatewayPendingRoute: ApiPublicGatewayPendingRoute,
   ApiPublicGatewaySmsRoute: ApiPublicGatewaySmsRoute,
