@@ -30,7 +30,6 @@ function TopupsDesk() {
   const [mLook, setMLook] = useState<Lookup | null>(null);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
-  const [pin, setPin] = useState("");
   const [msg, setMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -60,7 +59,9 @@ function TopupsDesk() {
   const allowed = can("customers.topup");
 
   const smsAmount = (ref: string) => { const g = gw[ref]; return g && g.found && !g.used ? g.amount : null; };
-  const confirm = async (id: string) => {
+  const [ask, setAsk] = useState<null | { kind: "req"; id: string } | { kind: "manual" }>(null);
+  const [askPin, setAskPin] = useState("");
+  const confirm = async (id: string, pin: string) => {
     const r = pending.find((x) => x.id === id); if (!r || busy) return;
     let amt = Math.round(Number(verified[id] ?? smsAmount(r.reference) ?? r.amount));
     if (!Number.isSafeInteger(amt) || amt <= 0) return setMsg({ id, ok: false, text: "Enter the amount shown on the till SMS." });
@@ -84,7 +85,7 @@ function TopupsDesk() {
     setMLook(l ?? null);
     if (l?.found && !l.used) setMAmt(String(l.amount));
   };
-  const manualVerify = async () => {
+  const manualVerify = async (pin: string) => {
     let amt = Math.round(Number(mAmt));
     const ref = mRef.trim().toUpperCase();
     if (!mCust) return setMMsg({ ok: false, text: "Choose the customer." });
@@ -113,12 +114,7 @@ function TopupsDesk() {
 
       {!allowed ? (
         <div className="mt-5 rounded-lg bg-muted p-4 text-sm">Your role can't confirm top-ups. Ask a supervisor.</div>
-      ) : (
-        <div className="mt-5 max-w-xs">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your staff PIN</label>
-          <Input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Needed to confirm" className="mt-1" />
-        </div>
-      )}
+      ) : null      )}
 
       {allowed && (
         <section className="mt-6 bg-surface border rounded-2xl p-4">
@@ -135,7 +131,7 @@ function TopupsDesk() {
           {mLook && <GwBadge l={mLook} />}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="outline" onClick={checkManual} disabled={busy || mRef.trim().length < 4}>Check payment phone</Button>
-            <Button onClick={manualVerify} disabled={!pin || busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Verify & credit wallet</Button>
+            <Button onClick={() => { setAskPin(""); setAsk({ kind: "manual" }); }} disabled={busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Verify & credit wallet</Button>
           </div>
           {mMsg && <div className={`mt-2 text-sm font-medium ${mMsg.ok ? "text-success" : "text-destructive"}`}>{mMsg.text}</div>}
         </section>
@@ -172,7 +168,7 @@ function TopupsDesk() {
                     <label className="flex items-center gap-1 text-xs text-muted-foreground">Amount on SMS
                       <Input type="number" inputMode="numeric" className="h-9 w-28" value={verified[r.id] ?? String(smsAmount(r.reference) ?? r.amount)} onChange={(e) => setVerified((v) => ({ ...v, [r.id]: e.target.value }))} />
                     </label>
-                    <Button onClick={() => confirm(r.id)} disabled={!pin || busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Confirm</Button>
+                    <Button onClick={() => { setAskPin(""); setAsk({ kind: "req", id: r.id }); }} disabled={busy}><CheckCircle2 className="w-4 h-4 mr-1" /> Confirm</Button>
                     <Button variant="outline" onClick={() => { setRejecting(r.id); setReason(""); }}><XCircle className="w-4 h-4 mr-1" /> Reject</Button>
                   </div>
                 ))}
@@ -194,7 +190,7 @@ function TopupsDesk() {
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold">{formatTZS(r.amount)} · {r.customer_name} <span className="font-mono text-xs text-muted-foreground">ref {r.reference}</span></div>
                   <div className="text-xs text-muted-foreground">
-                    {r.status === "approved" ? "Confirmed" : "Rejected"} by {nameOf(r.resolved_by)} · {r.resolved_at ? new Date(r.resolved_at).toLocaleString() : ""}
+                    {r.status === "approved" ? "Confirmed" : "Rejected"} by {r.resolved_by_name ?? nameOf(r.resolved_by)} · {r.resolved_at ? new Date(r.resolved_at).toLocaleString() : ""}
                     {r.reject_reason ? ` · ${r.reject_reason}` : ""}
                   </div>
                 </div>
@@ -204,6 +200,20 @@ function TopupsDesk() {
           </div>
         )}
       </section>
+      {ask && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4" onClick={() => setAsk(null)}>
+          <form className="w-full max-w-sm rounded-2xl bg-background p-5 shadow-xl" onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => { e.preventDefault(); const p = askPin; const a = ask; setAsk(null); setAskPin(""); if (a.kind === "req") confirm(a.id, p); else manualVerify(p); }}>
+            <h3 className="text-lg font-bold">Confirm top-up</h3>
+            <p className="text-sm text-muted-foreground">Signed in as <b>{currentUser.full_name}</b>. Enter your password or staff PIN.</p>
+            <Input autoFocus type="password" value={askPin} onChange={(e) => setAskPin(e.target.value)} placeholder="Password or PIN" className="mt-3" />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setAsk(null)}>Cancel</Button>
+              <Button type="submit" disabled={!askPin}>Confirm</Button>
+            </div>
+          </form>
+        </div>
+      )}
     </StaffShell>
   );
 }

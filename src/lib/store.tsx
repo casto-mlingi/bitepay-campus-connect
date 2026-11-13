@@ -204,6 +204,7 @@ export type TopUpRequest = {
   created_at: number;
   resolved_at?: number;
   resolved_by?: string;
+  resolved_by_name?: string;
   reject_reason?: string;
   /** Customer asked a cashier to verify this receipt manually. */
   assist_requested_at?: number;
@@ -1866,7 +1867,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return true;
     },
     rejectTopUpRequest(id, reason) {
-      setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, reject_reason: reason } : r));
+      setTopUpRequests((prev) => prev.map((r) => r.id === id ? { ...r, status: "rejected", resolved_at: Date.now(), resolved_by: currentUser?.id, resolved_by_name: currentUser?.full_name, reject_reason: reason } : r));
     },
     serviceRate: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.service_rate ?? 5),
     deliveryFee: (stores.find((st) => st.id === (activeStoreId ?? currentStoreId))?.delivery_fee ?? 0),
@@ -1905,8 +1906,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     staffTopUp({ customerId, amount, tender, reference, pin, requestId }) {
       if (!currentUser || currentUser.role !== "staff") return { ok: false, reason: "Not signed in as staff" };
       if (!can("customers.topup")) return { ok: false, reason: "Not allowed" };
-      if (!currentUser.staff_pin) return { ok: false, reason: "Set your staff PIN first" };
-      if (currentUser.staff_pin !== pin) return { ok: false, reason: "Incorrect PIN" };
+      if (!pin || (pin !== currentUser.staff_pin && pin !== currentUser.password)) return { ok: false, reason: "Incorrect password or PIN" };
       if (!currentStoreId || !Number.isSafeInteger(amount) || amount <= 0) return { ok: false, reason: "Enter a whole positive amount" };
       if (requestId && topUpRequests.find((r) => r.id === requestId)?.status !== "pending") return { ok: false, reason: "Top-up already processed" };
       if (tender === "mobile" && !reference?.trim()) return { ok: false, reason: "Mobile payment reference required" };
@@ -1914,11 +1914,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!cust) return { ok: false, reason: "Customer not found" };
       const desc = tender === "mobile" ? `Mobile top-up · ref ${reference}` : "Cash top-up at counter";
       setWallet(customerId, currentStoreId, amount);
-      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: `${desc} · by ${currentUser.full_name}`, created_at: Date.now(), reference, tender, balance_before: walletFor(cust, currentStoreId), shift_id: activeShift?.id, by_name: currentUser.full_name }, ...prev]);
+      setTransactions((prev) => [{ id: uid("t"), store_id: currentStoreId, customer_id: customerId, type: "topup", amount, description: `${desc} · confirmed by ${currentUser.full_name}`, created_at: Date.now(), reference, tender, balance_before: walletFor(cust, currentStoreId), shift_id: activeShift?.id, by_name: currentUser.full_name }, ...prev]);
       if (tender === "mobile") adjustBank((b) => b + amount);
       else adjustCash((c) => c + amount);
       if (requestId) {
-        setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id } : r));
+        setTopUpRequests((prev) => prev.map((r) => r.id === requestId ? { ...r, status: "approved", resolved_at: Date.now(), resolved_by: currentUser.id, resolved_by_name: currentUser.full_name } : r));
       }
       const prevBal = walletFor(cust, currentStoreId);
       pushNotification({
