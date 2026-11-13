@@ -11,7 +11,8 @@ export function PosSectionSelect({ value, onChange, allowAuto }: { value: string
   const add = () => {
     const name = window.prompt("New POS section name (you can start with an emoji, e.g. 🥐 Bakery):")?.trim().slice(0, 40);
     if (!name) return;
-    const existing = options.find((o) => o.toLowerCase() === name.toLowerCase() || deptLabel(o).toLowerCase().includes(name.toLowerCase()) && name.length > 3 && BASE_DEPARTMENTS.includes(o as never));
+    const key = name.toLowerCase();
+    const existing = options.find((o) => o.toLowerCase() === key || deptLabel(o).toLowerCase().replace(/^\W+/, "").trim() === key);
     const v = existing ?? name;
     if (!existing) setExtra((x) => [...x, v]);
     onChange(v);
