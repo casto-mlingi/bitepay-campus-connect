@@ -12,7 +12,7 @@ import { QRScannerModal } from "@/components/qr-scanner-modal";
 import { BarcodeScannerModal } from "@/components/barcode-scanner-modal";
 import { useHardwareScanner } from "@/lib/use-hardware-scanner";
 import { scanBeep } from "@/lib/scan-feedback";
-import { productDepartment, DEPARTMENT_LABELS } from "@/lib/pack-units";
+import { productDepartment, deptLabel } from "@/lib/pack-units";
 import { isRetail, waiterCanTakePayment, waiterWalletOnly } from "@/lib/business-rules";
 import { businessFeatures } from "@/lib/subscription-rules";
 import { walletSettlement, wholeAmount } from "@/lib/pos-payments";
@@ -569,10 +569,10 @@ function POS() {
           </div>
 
           {departments.length > 1 && (
-            <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${departments.length + 1}, minmax(0, 1fr))` }} role="group" aria-label="Product type">
+            <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(departments.length + 1, 4)}, minmax(0, 1fr))` }} role="group" aria-label="Product type">
               {(["all", ...departments] as const).map((kind) => (
                 <Button key={kind} variant={productKind === kind ? "default" : "outline"} className="h-11 text-base" onClick={() => { setProductKind(kind); setCategory("All"); }}>
-                  {kind === "all" ? "All" : DEPARTMENT_LABELS[kind]}
+                  {kind === "all" ? "All" : deptLabel(kind)}
                 </Button>
               ))}
             </div>
