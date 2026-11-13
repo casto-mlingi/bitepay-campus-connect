@@ -1,8 +1,8 @@
 import { DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR, marginStatus } from "@/lib/costing-rules";
 import { isRetail } from "@/lib/business-rules";
 import { TRADE_UNITS } from "@/lib/retail-stock";
-import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, deptLabel, type Department }
-import { PosSectionSelect } from "@/components/pos-section-select"; from "@/lib/pack-units";
+import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, deptLabel, type Department } from "@/lib/pack-units";
+import { PosSectionSelect } from "@/components/pos-section-select";
 import { retailUnitCost } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
 import { BarcodeField } from "@/components/barcode-field";
@@ -611,7 +611,7 @@ function MenuPanel() {
           <div className="flex flex-wrap gap-2">
             <input aria-label="Search items" placeholder="Search items or category" value={menuQ} onChange={(e) => { setMenuQ(e.target.value); setMPage(1); }} className="flex-1 min-w-[160px] h-11 px-3 rounded-xl border bg-background" />
             {!retail && <select aria-label="POS section filter" value={dept} onChange={(e) => { setDept(e.target.value as typeof dept); setMPage(1); }} className="h-11 px-3 rounded-xl border bg-background">
-              <option value="all">All sections</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale</option>
+              <option value="all">All sections</option>{Array.from(new Set(["food", "drinks", "resale", ...products.map(productDepartment)])).map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
             </select>}
           </div>
           <div className="space-y-2">
