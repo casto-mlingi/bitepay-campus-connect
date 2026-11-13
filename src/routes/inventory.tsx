@@ -642,6 +642,7 @@ function MenuPanel() {
             ))}
             {filteredMenu.length === 0 && <div className="bg-surface border rounded-2xl p-6 text-center text-sm text-muted-foreground">No items match this search.</div>}
           </div>
+          <Pager total={filteredMenu.length} page={mPage} size={mSize} onPage={setMPage} onSize={setMSize} />
         </>
       )}
 
