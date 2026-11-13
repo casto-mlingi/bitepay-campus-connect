@@ -324,7 +324,7 @@ export type Product = {
   unit?: TradeUnit;
   pack_unit?: TradeUnit; // wholesale pack bought from suppliers, e.g. crate
   pack_size?: number; // stocking pieces inside one pack, e.g. 25 bottles
-  department?: "food" | "drinks" | "resale";
+  department?: string; // food | drinks | resale or an owner-created POS section name
   direct_sale?: boolean; // finished good sold as bought (no kitchen batch); listed under Finished Goods
   sku?: string;
   barcode?: string;

@@ -1,7 +1,8 @@
 import { DEFAULT_FOOD_MARGIN, DEFAULT_FOOD_FLOOR, marginStatus } from "@/lib/costing-rules";
 import { isRetail } from "@/lib/business-rules";
 import { TRADE_UNITS } from "@/lib/retail-stock";
-import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, DEPARTMENT_LABELS, type Department } from "@/lib/pack-units";
+import { PACK_UNITS, normalizePack, packLabel, packSize, productDepartment, deptLabel, type Department } from "@/lib/pack-units";
+import { PosSectionSelect } from "@/components/pos-section-select";
 import { retailUnitCost } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
 import { BarcodeField } from "@/components/barcode-field";
@@ -431,7 +432,7 @@ function FinishedGoodsPanel() {
         <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="col-span-2 md:col-span-1 md:row-span-2"><DishImagePicker value={form.image} onChange={(image) => setForm((f) => ({ ...f, image }))} onBusyChange={setUploading} /></div>
           <label className="col-span-2 text-sm"><div className="text-muted-foreground mb-1">Item name</div><input required placeholder="e.g. Safari Lager" className={inp} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label className="text-sm"><div className="text-muted-foreground mb-1">POS section</div><select className={inp} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value as Department })}>{(["drinks", "resale", "food"] as Department[]).map((d) => <option key={d} value={d}>{DEPARTMENT_LABELS[d]}</option>)}</select></label>
+          <div className="text-sm"><div className="text-muted-foreground mb-1">POS section</div><PosSectionSelect value={form.department} onChange={(department) => setForm({ ...form, department })} /></div>
           <label className="text-sm"><div className="text-muted-foreground mb-1">Category</div><input placeholder="e.g. Beer" className={inp} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label>
           <div className="col-span-2 text-sm"><div className="text-muted-foreground mb-1">Barcode (optional)</div><BarcodeField value={form.barcode} onChange={(v) => setForm({ ...form, barcode: v })} /></div>
           <label className="text-sm"><div className="text-muted-foreground mb-1">Selling price / pc</div><input required type="number" min={1} className={inp} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></label>
@@ -449,7 +450,7 @@ function FinishedGoodsPanel() {
               <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center text-xl shrink-0">{p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : p.emoji}</div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{p.name}</div>
-                <div className="text-xs text-muted-foreground">{DEPARTMENT_LABELS[productDepartment(p)]} · {formatTZS(p.price)}{cost ? ` · cost ${formatTZS(cost)}` : ""}{margin != null ? ` · ${margin.toFixed(0)}%` : ""} · {packLabel(p)}</div>
+                <div className="text-xs text-muted-foreground">{deptLabel(productDepartment(p))} · {formatTZS(p.price)}{cost ? ` · cost ${formatTZS(cost)}` : ""}{margin != null ? ` · ${margin.toFixed(0)}%` : ""} · {packLabel(p)}</div>
               </div>
               <div className={`font-mono font-bold text-sm ${stock <= 0 ? "text-destructive" : ""}`}>{qty(stock)} pcs</div>
               {can("inventory.edit") && <><button type="button" onClick={() => edit(p)} className="h-9 px-2 rounded-lg border" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
@@ -573,7 +574,7 @@ function MenuPanel() {
               ))}
             </div>
           </label>
-          <label className="col-span-2 text-sm">POS section<select aria-label="POS section" value={form.department ?? ""} onChange={(e) => setForm({ ...form, department: (e.target.value || undefined) as Product["department"] })} className="w-full h-11 border rounded-md bg-background px-3"><option value="">Automatic (from category)</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale (cigarettes, snacks…)</option></select></label>
+          <div className="col-span-2 text-sm">POS section<PosSectionSelect allowAuto value={form.department ?? ""} onChange={(d) => setForm({ ...form, department: d || undefined })} /></div>
           <label className="col-span-1 text-sm">Supplier pack<select aria-label="Supplier pack" value={form.pack_unit ?? ""} onChange={(e) => setForm({ ...form, pack_unit: (e.target.value || undefined) as Product["pack_unit"] })} className="w-full h-11 border rounded-md bg-background px-3"><option value="">None</option>{TRADE_UNITS.filter((u) => ["crate", "carton", "box", "bale", "packet", "bag"].includes(u)).map((u) => <option key={u}>{u}</option>)}</select></label>
           <label className="col-span-1 text-sm">Pieces per pack<input aria-label="Pieces per pack" type="number" min={0} inputMode="numeric" value={form.pack_size ?? ""} onChange={(e) => setForm({ ...form, pack_size: Math.max(0, Math.round(Number(e.target.value) || 0)) || undefined })} placeholder="e.g. 25" className="w-full h-11 border rounded-md px-3 bg-background" /></label>
           {retail && <><label className="col-span-2 text-sm">Sale unit<select aria-label="Sale unit" value={form.unit ?? "pcs"} onChange={(e) => setForm({ ...form, unit: e.target.value as Product["unit"] })} className="w-full h-11 border rounded-md bg-background px-3">{TRADE_UNITS.map((u) => <option key={u}>{u}</option>)}</select></label><label className="col-span-2 text-sm">SKU<input aria-label="SKU" value={form.sku ?? ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><div className="col-span-2 text-sm">Barcode<BarcodeField value={form.barcode ?? ""} onChange={(v) => setForm({ ...form, barcode: v })} /></div><label className="col-span-2 text-sm">Cost per unit<input aria-label="Cost per unit" type="number" min={0} value={form.cost_price ?? 0} onChange={(e) => setForm({ ...form, cost_price: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Opening stock<input aria-label="Opening stock" disabled={!!editingId} type="number" min={0} value={form.opening_stock ?? 0} onChange={(e) => setForm({ ...form, opening_stock: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label><label className="col-span-2 text-sm">Low-stock alert<input aria-label="Low-stock alert" type="number" min={0} value={form.low_stock_threshold ?? 0} onChange={(e) => setForm({ ...form, low_stock_threshold: Math.max(0, Number(e.target.value) || 0) })} className="w-full h-11 border rounded-md px-3 bg-background" /></label></>}
@@ -610,7 +611,7 @@ function MenuPanel() {
           <div className="flex flex-wrap gap-2">
             <input aria-label="Search items" placeholder="Search items or category" value={menuQ} onChange={(e) => { setMenuQ(e.target.value); setMPage(1); }} className="flex-1 min-w-[160px] h-11 px-3 rounded-xl border bg-background" />
             {!retail && <select aria-label="POS section filter" value={dept} onChange={(e) => { setDept(e.target.value as typeof dept); setMPage(1); }} className="h-11 px-3 rounded-xl border bg-background">
-              <option value="all">All sections</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale</option>
+              <option value="all">All sections</option>{Array.from(new Set(["food", "drinks", "resale", ...products.map(productDepartment)])).map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
             </select>}
           </div>
           <div className="space-y-2">
@@ -621,7 +622,7 @@ function MenuPanel() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-bold truncate">{p.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">{p.category || "Uncategorized"}{!retail ? ` · ${DEPARTMENT_LABELS[dep]}` : ""}{packSize(p) ? ` · ${packLabel(p)}` : ""}{p.sku ? ` · ${p.sku}` : ""}</div>
+                      <div className="text-xs text-muted-foreground truncate">{p.category || "Uncategorized"}{!retail ? ` · ${deptLabel(dep)}` : ""}{packSize(p) ? ` · ${packLabel(p)}` : ""}{p.sku ? ` · ${p.sku}` : ""}</div>
                     </div>
                     {status === "none" ? <span className="text-[11px] font-semibold bg-muted text-muted-foreground px-2 py-1 rounded-full whitespace-nowrap">No stock yet</span> : <RawStatusPill status={status} />}
                   </div>
