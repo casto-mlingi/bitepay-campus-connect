@@ -13,6 +13,7 @@ import { useStore, formatTZS, type BatchIngredient, type Product, type CustomDis
 import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 import { ListFilter, useListFilter } from "@/components/list-filter";
+import { ItemBulkTools, Pager } from "@/components/item-bulk-tools";
 
 
 
@@ -134,7 +135,32 @@ function RawMaterialsPanel() {
     out: rows.filter((x) => x.status === "out").length,
   }), [rows]);
 
-  const shown = rows.filter((x) => match({ text: `${x.r.name} ${x.r.category}`, status: x.status }));
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(10);
+  const [catF, setCatF] = useState("all");
+  const cats = useMemo(() => [...new Set(rows.map((x) => x.r.category).filter(Boolean))].sort(), [rows]);
+  const filtered = rows.filter((x) => (catF === "all" || x.r.category === catF) && match({ text: `${x.r.name} ${x.r.category}`, status: x.status }));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / size));
+  const shown = filtered.slice((Math.min(page, pageCount) - 1) * size, Math.min(page, pageCount) * size);
+  const rawCols = [
+    { key: "name", label: "Name", example: "Rice" }, { key: "category", label: "Category", example: "Grains" },
+    { key: "unit", label: "Unit (kg/liters/pcs)", example: "kg" }, { key: "stock", label: "Stock", example: 50 },
+    { key: "avg_cost", label: "Cost per unit", example: 2500 }, { key: "low_threshold", label: "Low stock alert", example: 10 },
+    { key: "pack_unit", label: "Pack type", example: "" }, { key: "pack_size", label: "Pieces per pack", example: "" },
+  ];
+  const importRaw = (list: Record<string, string>[]) => {
+    const names = new Set(rawMaterials.map((r) => r.name.trim().toLowerCase()));
+    let added = 0, skipped = 0;
+    for (const x of list) {
+      const name = (x.name ?? "").trim();
+      if (!name || names.has(name.toLowerCase())) { skipped++; continue; }
+      const unit = (RAW_UNITS as string[]).includes((x.unit ?? "").toLowerCase()) ? (x.unit.toLowerCase() as RawUnit) : "kg";
+      const pk = normalizePack(x.pack_unit ?? "", Number(x.pack_size) || 0);
+      addRawMaterial({ name, category: x.category ?? "", unit, stock: Math.max(0, Number(x.stock) || 0), avg_cost: Math.max(0, Number(x.avg_cost) || 0), low_threshold: Math.max(0, Number(x.low_threshold) || 0), pack_unit: pk.pack_unit, pack_size: pk.pack_size });
+      names.add(name.toLowerCase()); added++;
+    }
+    return { added, skipped };
+  };
 
   const pack = normalizePack(form.pack_unit, Number(form.pack_size) || 0);
   const packMissing = !!form.pack_unit && !pack.pack_size;
@@ -142,11 +168,13 @@ function RawMaterialsPanel() {
   const reset = () => { setForm(blankRaw()); setEditingId(null); };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    const again = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "new";
     if (!form.name.trim() || packMissing) return;
     const data = { name: form.name, category: form.category, unit: form.unit, stock: Number(form.stock) || 0, avg_cost: Number(form.avg_cost) || 0, low_threshold: Number(form.low_threshold) || 0, pack_unit: pack.pack_unit, pack_size: pack.pack_size };
     if (editingId) updateRawMaterial(editingId, data); else addRawMaterial(data);
     reset();
-    setShowForm(false);
+    if (again) { setForm({ ...blankRaw(), category: form.category, unit: form.unit }); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else setShowForm(false);
   };
   const startEdit = (r: RawMaterial) => {
     setForm({ name: r.name, category: r.category, unit: r.unit, stock: r.stock, avg_cost: r.avg_cost, low_threshold: r.low_threshold, pack_unit: r.pack_unit ?? "", pack_size: r.pack_size ? String(r.pack_size) : "" });
@@ -170,12 +198,16 @@ function RawMaterialsPanel() {
         showPeriod={false}
         placeholder="Search items or categories…"
         statuses={[{ value: "ok", label: "In stock" }, { value: "low", label: "Low stock" }, { value: "out", label: "Out of stock" }]}
-        right={
+        right={<>
+          <select aria-label="Filter by category" value={catF} onChange={(e) => { setCatF(e.target.value); setPage(1); }} className="h-10 rounded-xl border bg-background px-3 text-sm">
+            <option value="all">All categories</option>{cats.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <button onClick={() => { reset(); setShowForm((v) => !v); }} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 h-10 rounded-xl text-sm font-semibold hover:opacity-90">
             <Plus className="w-4 h-4" /> Add Item
           </button>
-        }
+        </>}
       />
+      <ItemBulkTools cols={rawCols} fileBase="raw-materials" rows={filtered.map(({ r }) => ({ ...r, pack_unit: r.pack_unit ?? "", pack_size: r.pack_size ?? "" }))} onImport={importRaw} />
 
       {showForm && (
         <form onSubmit={submit} className="bg-surface border rounded-2xl p-4 space-y-4">
@@ -246,6 +278,7 @@ function RawMaterialsPanel() {
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => { reset(); setShowForm(false); }} className="px-4 h-10 rounded-lg border text-sm font-semibold">Cancel</button>
             <button type="submit" className="px-4 h-10 bg-foreground text-background rounded-lg font-semibold text-sm">{editingId ? "Save changes" : "Save item"}</button>
+            {!editingId && <button type="submit" value="new" className="px-4 h-10 bg-primary text-primary-foreground rounded-lg font-semibold text-sm">Save & new</button>}
           </div>
         </form>
       )}
@@ -254,7 +287,7 @@ function RawMaterialsPanel() {
         <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">
           No raw materials yet. Add your first item — you can buy it loose, or by the crate, carton or box.
         </div>
-      ) : shown.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">No items match this filter.</div>
       ) : (
         <>
@@ -294,8 +327,8 @@ function RawMaterialsPanel() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/40 font-semibold">
-                    <td className="px-4 py-3" colSpan={4}>{shown.length} of {rows.length} items</td>
-                    <td className="px-4 py-3 text-right font-mono">{formatTZS(shown.reduce((s, x) => s + x.value, 0))}</td>
+                    <td className="px-4 py-3" colSpan={4}>{filtered.length} of {rows.length} items</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatTZS(filtered.reduce((s, x) => s + x.value, 0))}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -336,6 +369,7 @@ function RawMaterialsPanel() {
               </div>
             ))}
           </div>
+          <Pager total={filtered.length} page={page} size={size} onPage={setPage} onSize={setSize} />
         </>
       )}
     </div>
@@ -449,7 +483,29 @@ function MenuPanel() {
     const status = (stock == null ? "none" : stock <= 0 ? "out" : stock <= low ? "low" : "ok") as "none" | "ok" | "low" | "out";
     return { p, stock, cost, margin, status, dep: productDepartment(p), value: Math.round(Math.max(0, stock ?? 0) * cost) };
   }), [products, batches, purchases, availablePlates, retail]);
-  const shownMenu = menuRows.filter((x) => (dept === "all" || x.dep === dept) && (!menuQ.trim() || `${x.p.name} ${x.p.category} ${x.p.sku ?? ""} ${x.p.barcode ?? ""}`.toLowerCase().includes(menuQ.trim().toLowerCase())));
+  const [mPage, setMPage] = useState(1);
+  const [mSize, setMSize] = useState(10);
+  const filteredMenu = menuRows.filter((x) => (dept === "all" || x.dep === dept) && (!menuQ.trim() || `${x.p.name} ${x.p.category} ${x.p.sku ?? ""} ${x.p.barcode ?? ""}`.toLowerCase().includes(menuQ.trim().toLowerCase())));
+  const mPages = Math.max(1, Math.ceil(filteredMenu.length / mSize));
+  const shownMenu = filteredMenu.slice((Math.min(mPage, mPages) - 1) * mSize, Math.min(mPage, mPages) * mSize);
+  const menuCols = [
+    { key: "name", label: "Name", example: retail ? "Sugar 1kg" : "Pilau" }, { key: "category", label: "Category", example: retail ? "Groceries" : "Main Course" },
+    { key: "price", label: "Price (TZS)", example: 3000 }, { key: "description", label: "Description", example: "" },
+    ...(retail ? [{ key: "unit", label: "Sale unit", example: "pcs" }, { key: "sku", label: "SKU", example: "" }, { key: "barcode", label: "Barcode", example: "" }, { key: "cost_price", label: "Cost per unit", example: 2400 }, { key: "opening_stock", label: "Opening stock", example: 20 }, { key: "low_stock_threshold", label: "Low-stock alert", example: 5 }] : []),
+  ];
+  const importMenu = (list: Record<string, string>[]) => {
+    const names = new Set(products.map((p) => p.name.trim().toLowerCase()));
+    let added = 0, skipped = 0;
+    for (const x of list) {
+      const name = (x.name ?? "").trim(); const price = Math.round(Number(x.price) || 0);
+      if (!name || price <= 0 || names.has(name.toLowerCase())) { skipped++; continue; }
+      const n = (v?: string) => Math.max(0, Number(v) || 0);
+      addProduct({ name, description: x.description ?? "", price, category: x.category ?? "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined,
+        ...(retail ? { unit: ((TRADE_UNITS as readonly string[]).includes(x.unit) ? x.unit : "pcs") as Product["unit"], sku: x.sku || undefined, barcode: x.barcode || undefined, cost_price: Math.round(n(x.cost_price)), opening_stock: n(x.opening_stock), low_stock_threshold: n(x.low_stock_threshold) } : {}) });
+      names.add(name.toLowerCase()); added++;
+    }
+    return { added, skipped };
+  };
 
   const reset = () => { setEditingId(null);
     setForm({ name: "", description: "", price: 0, category: "", emoji: "🍽️", gradient: GRADIENTS[0], image: undefined }); };
@@ -463,11 +519,14 @@ function MenuPanel() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    const again = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "new";
     if (uploading) return;
     if (!form.name.trim() || form.price <= 0) return;
     if (editingId) updateProduct(editingId, form); else addProduct(form);
+    const keep = { category: form.category, department: form.department, unit: form.unit };
     reset();
-    setShowForm(false);
+    if (again) { setForm((f) => ({ ...f, ...keep })); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else setShowForm(false);
   };
 
   return (
@@ -528,11 +587,13 @@ function MenuPanel() {
             >
               {uploading ? "Processing photo…" : editingId ? "Save changes" : retail ? "Save product" : "Save Dish"}
             </button>
+            {!editingId && <button type="submit" value="new" disabled={uploading} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold text-sm disabled:opacity-50">Save & new</button>}
           </div>
 
         </form>
       )}
 
+      <ItemBulkTools cols={menuCols} fileBase={retail ? "products" : "menu"} rows={filteredMenu.map(({ p }) => ({ ...p }))} onImport={importMenu} />
       {retail && <Button asChild variant="outline"><Link to="/finance">Record stock purchase</Link></Button>}
       {products.length === 0 ? (
         <div className="bg-surface border rounded-2xl p-10 text-center text-sm text-muted-foreground">
@@ -547,8 +608,8 @@ function MenuPanel() {
             <StatTile label="Out of stock" value={String(menuRows.filter((x) => x.status === "out").length)} tone="out" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <input aria-label="Search items" placeholder="Search items or category" value={menuQ} onChange={(e) => setMenuQ(e.target.value)} className="flex-1 min-w-[160px] h-11 px-3 rounded-xl border bg-background" />
-            {!retail && <select aria-label="POS section filter" value={dept} onChange={(e) => setDept(e.target.value as typeof dept)} className="h-11 px-3 rounded-xl border bg-background">
+            <input aria-label="Search items" placeholder="Search items or category" value={menuQ} onChange={(e) => { setMenuQ(e.target.value); setMPage(1); }} className="flex-1 min-w-[160px] h-11 px-3 rounded-xl border bg-background" />
+            {!retail && <select aria-label="POS section filter" value={dept} onChange={(e) => { setDept(e.target.value as typeof dept); setMPage(1); }} className="h-11 px-3 rounded-xl border bg-background">
               <option value="all">All sections</option><option value="food">Food</option><option value="drinks">Drinks</option><option value="resale">Resale</option>
             </select>}
           </div>
@@ -579,8 +640,9 @@ function MenuPanel() {
                 </div>
               </div>
             ))}
-            {shownMenu.length === 0 && <div className="bg-surface border rounded-2xl p-6 text-center text-sm text-muted-foreground">No items match this search.</div>}
+            {filteredMenu.length === 0 && <div className="bg-surface border rounded-2xl p-6 text-center text-sm text-muted-foreground">No items match this search.</div>}
           </div>
+          <Pager total={filteredMenu.length} page={mPage} size={mSize} onPage={setMPage} onSize={setMSize} />
         </>
       )}
 
