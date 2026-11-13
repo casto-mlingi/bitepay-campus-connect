@@ -1,5 +1,6 @@
 // Kiswahili for in-app screens (English -> Kiswahili, exact visible text).
 export const SW_APP: Record<string, string> = {
+  "Privacy": "Faragha",
   "Receipt printer paper": "Karatasi ya printa ya risiti", "Desktop thermal printer": "Printa ya mezani", "Handheld POS / Bluetooth printer": "POS ya mkononi / printa ya Bluetooth",
   "Drinks & counter items": "Vinywaji na bidhaa za kaunta", "All items": "Vyote", "No items in this view.": "Hakuna bidhaa hapa.",
   "Received by Lipa": "Zilizopokelewa kwa Lipa",

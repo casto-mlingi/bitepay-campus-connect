@@ -1,5 +1,6 @@
 // French for in-app screens (English -> French, exact visible text).
 export const FR_APP: Record<string, string> = {
+  "Privacy": "Confidentialité",
   "Receipt printer paper": "Papier de l'imprimante", "Desktop thermal printer": "Imprimante thermique de bureau", "Handheld POS / Bluetooth printer": "TPE portable / imprimante Bluetooth",
   "Drinks & counter items": "Boissons et articles du comptoir", "All items": "Tous les articles", "No items in this view.": "Aucun article ici.",
   "Received by Lipa": "Re\u00e7us par Lipa",
