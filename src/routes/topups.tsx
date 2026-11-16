@@ -114,7 +114,7 @@ function TopupsDesk() {
 
       {!allowed ? (
         <div className="mt-5 rounded-lg bg-muted p-4 text-sm">Your role can't confirm top-ups. Ask a supervisor.</div>
-      ) : null      )}
+      ) : null}
 
       {allowed && (
         <section className="mt-6 bg-surface border rounded-2xl p-4">
