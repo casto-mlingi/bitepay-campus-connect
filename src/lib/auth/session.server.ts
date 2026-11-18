@@ -17,7 +17,7 @@ export type SessionPayload = {
   uid: string;          // profile.id
   sid: string | null;   // active store_id (nullable for super_admin)
   role: "customer" | "staff" | "super_admin";
-  staffRole?: "cashier" | "supervisor" | "owner" | null;
+  staffRole?: "cashier" | "waiter" | "kitchen" | "supervisor" | "owner" | null;
   exp: number;          // unix seconds
 };
 

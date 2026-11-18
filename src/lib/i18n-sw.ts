@@ -1,6 +1,7 @@
 // Kiswahili for in-app screens (English -> Kiswahili, exact visible text).
 export const SW_APP: Record<string, string> = {
-  "Privacy": "Faragha",
+  "Kitchen":"Jiko","Kitchen production":"Uzalishaji jikoni","Live orders":"Oda za sasa","No pots cooked yet. Log the first pot below.":"Bado hakuna sufuria lililopikwa. Andika la kwanza hapa chini.","Sold out":"Kimeisha","Running low":"Kinakaribia kuisha","Leftover / waste":"Mabaki / upotevu","Close pot":"Funga sufuria","Close this pot? It will stop selling.":"Funga sufuria hili? Litaacha kuuzwa.","Recorded":"Imeandikwa","Quantity":"Kiasi","Leftover":"Mabaki","Staff meal":"Chakula cha wafanyakazi","Log a cooked pot":"Andika sufuria lililopikwa","It goes on sale at the counter immediately. Raw stock used is deducted now.":"Kinaanza kuuzwa kaunta papo hapo. Malighafi iliyotumika inapunguzwa sasa.","Portions cooked":"Sahani zilizopikwa","Unit":"Kipimo","plates / pieces":"sahani / vipande","liters":"lita","Raw material used (optional)":"Malighafi iliyotumika (si lazima)","Raw quantity used":"Kiasi cha malighafi kilichotumika","Add pot \u2014 sell now":"Ongeza sufuria — uza sasa","Added":"Imeongezwa","Only kitchen staff, a supervisor or owner can open this page.":"Ni mpishi, msimamizi au mmiliki tu anayeweza kufungua ukurasa huu.","kitchen":"mpishi",
+"Privacy": "Faragha",
   "Receipt printer paper": "Karatasi ya printa ya risiti", "Desktop thermal printer": "Printa ya mezani", "Handheld POS / Bluetooth printer": "POS ya mkononi / printa ya Bluetooth",
   "Drinks & counter items": "Vinywaji na bidhaa za kaunta", "All items": "Vyote", "No items in this view.": "Hakuna bidhaa hapa.",
   "Received by Lipa": "Zilizopokelewa kwa Lipa",

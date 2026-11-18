@@ -23,6 +23,7 @@ import { normalizePack } from "./pack-units";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
+import { platesFromPots, potTotals } from "@/lib/cooked-availability";
 import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
 export type { StaffRole, Permission } from "@/lib/staff-rules";
 /** A staff member's role in one specific store (multi-store support). */
@@ -764,7 +765,7 @@ type Ctx = {
   logWastage: (batch_id: string, plates: number, reason: string) => void;
   updateBatch: (batch_id: string, patch: { plates?: number; plates_remaining?: number; labor_cost?: number; ingredients?: BatchIngredient[] }) => Ok | Fail;
   deleteBatch: (batch_id: string) => Ok | Fail;
-  createCookedCommodityBatch: (input: { raw_material_id?: string; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
+  createCookedCommodityBatch: (input: { raw_material_id?: string; raw_quantity?: number; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
   logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
@@ -952,7 +953,7 @@ const todayKey = () => {
   return `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
 };
 
-const roleRank: Record<StaffRole, number> = { waiter: 1, cashier: 1, supervisor: 2, owner: 3 };
+const roleRank: Record<StaffRole, number> = { kitchen: 0, waiter: 1, cashier: 1, supervisor: 2, owner: 3 };
 const uid = (prefix: string) => `${prefix}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -2019,7 +2020,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
     advanceOrder(id) {
-      if (!can("pos.sell")) return { ok: false, reason: "Staff only" };
+      if (!can("pos.sell") && !can("kitchen.produce")) return { ok: false, reason: "Staff only" };
       const flow: Record<OrderStatus, OrderStatus> = { "new": "in-progress", "in-progress": "ready", "ready": "completed", "completed": "completed" };
       const current = orders.find((o) => o.id === id);
       if (current && current.status === "ready" && current.payment_status === "unpaid" && !current.closed_out) {
@@ -2297,27 +2298,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => [batch, ...prev]);
       return batch;
     },
-    createCookedCommodityBatch({ raw_material_id, name, unit, quantity }) {
+    createCookedCommodityBatch({ raw_material_id, raw_quantity, name, unit, quantity }) {
       if (!currentStoreId) return { ok: false, reason: "No store context" };
-      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can create cooked batches" };
+      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Only kitchen staff, a supervisor or owner can log cooked pots" };
       const cleanName = name.trim();
       if (!cleanName || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
       if (raw_material_id) {
         const raw = rawMaterials.find((r) => r.id === raw_material_id && r.store_id === currentStoreId);
         if (!raw) return { ok: false, reason: "Raw material not found" };
-        if (raw.unit !== unit) return { ok: false, reason: `Use ${raw.unit} for ${raw.name}` };
-        if (raw.stock < quantity) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
-        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - quantity } : r));
+        // Raw used may differ from portions cooked (e.g. 10 kg beans -> 70 plates); legacy callers pass none.
+        const rawUsed = raw_quantity ?? (raw.unit === unit ? quantity : 0);
+        if (raw_quantity === undefined && raw.unit !== unit) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
+        if (!(rawUsed > 0)) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
+        if (raw.stock < rawUsed) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
+        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - rawUsed } : r));
       }
       const now = Date.now();
       const batch: CookedCommodityBatch = {
-        id: `CB-${now}`, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
+        id: `CB-${now}-${Math.random().toString(36).slice(2, 7)}`, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
         initial_quantity: quantity, remaining_quantity: quantity, created_at: now, active: true,
       };
-      setCookedCommodityBatches((prev) => [batch, ...prev.map((b) =>
-        b.store_id === currentStoreId && b.name.toLowerCase() === cleanName.toLowerCase() && b.unit === unit
-          ? { ...b, active: false }
-          : b)]);
+      // Extra pots add to what is left; older pots are used first and stay open until empty or closed.
+      setCookedCommodityBatches((prev) => [batch, ...prev]);
       return { ok: true, value: batch };
     },
     setProductPortionMappings(product_id, mappings) {
@@ -2348,7 +2350,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     closeCookedCommodityBatch(batch_id) {
-      if (!can("inventory.edit")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
+      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
       if (!cookedCommodityBatches.some((b) => b.id === batch_id && b.store_id === currentStoreId)) return { ok: false, reason: "Cooked batch not found" };
       setCookedCommodityBatches((prev) => prev.map((b) => b.id === batch_id ? { ...b, active: false } : b));
       return { ok: true };
@@ -2530,8 +2532,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return p ? retailStock(p, scopedPurchases, scopedOrders) : 0;
       }
       const rel = batches.filter((b) => b.product_id === product_id && b.store_id === currentStoreId);
-      if (rel.length === 0) return null;
-      return rel.reduce((s, b) => s + b.plates_remaining, 0);
+      const fromPlates = rel.length === 0 ? null : rel.reduce((s, b) => s + b.plates_remaining, 0);
+      if (!currentStoreId) return fromPlates;
+      const fromPots = platesFromPots(product_id, menuPortionMappings, potTotals(cookedCommodityBatches, cookedCommodityUsages, currentStoreId), currentStoreId);
+      if (fromPots === null) return fromPlates;
+      return fromPlates === null ? fromPots : fromPlates + fromPots;
     },
     openShift(opening_float) {
       if (!currentUser || currentUser.role !== "staff" || !currentStoreId) return null;

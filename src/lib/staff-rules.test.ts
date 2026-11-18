@@ -29,3 +29,10 @@ describe("waiter access", () => {
     assert.equal(canAssignStaffRole("owner", false), false);
   });
 });
+describe("kitchen role", () => {
+  test("cooks log pots but cannot sell, refund or see money", () => {
+    assert.ok(PERMISSIONS.kitchen.includes("kitchen.produce"));
+    for (const p of ["pos.sell", "pos.refund", "customers.topup", "finance.view", "inventory.edit"] as const) assert.ok(!PERMISSIONS.kitchen.includes(p));
+  });
+  test("supervisors can add cooks", () => assert.equal(canAssignStaffRole("kitchen", false), true));
+});

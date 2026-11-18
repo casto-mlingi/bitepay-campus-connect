@@ -20,6 +20,7 @@ import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as GatewayRouteImport } from './routes/gateway'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as KitchenRouteImport } from './routes/kitchen'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as MyPerformanceRouteImport } from './routes/my-performance'
@@ -96,6 +97,11 @@ const HistoryRoute = HistoryRouteImport.update({
 const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KitchenRoute = KitchenRouteImport.update({
+  id: '/kitchen',
+  path: '/kitchen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -222,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/gateway': typeof GatewayRoute
   '/history': typeof HistoryRoute
   '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/my-performance': typeof MyPerformanceRoute
@@ -330,6 +339,7 @@ export interface FileRouteTypes {
     | '/gateway'
     | '/history'
     | '/inventory'
+    | '/kitchen'
     | '/login'
     | '/menu'
     | '/my-performance'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/gateway'
     | '/history'
     | '/inventory'
+    | '/kitchen'
     | '/login'
     | '/menu'
     | '/my-performance'
@@ -400,6 +411,7 @@ export interface FileRouteTypes {
     | '/gateway'
     | '/history'
     | '/inventory'
+    | '/kitchen'
     | '/login'
     | '/menu'
     | '/my-performance'
@@ -436,6 +448,7 @@ export interface RootRouteChildren {
   GatewayRoute: typeof GatewayRoute
   HistoryRoute: typeof HistoryRoute
   InventoryRoute: typeof InventoryRoute
+  KitchenRoute: typeof KitchenRoute
   LoginRoute: typeof LoginRoute
   MenuRoute: typeof MenuRoute
   MyPerformanceRoute: typeof MyPerformanceRoute
@@ -537,6 +550,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kitchen': {
+      id: '/kitchen'
+      path: '/kitchen'
+      fullPath: '/kitchen'
+      preLoaderRoute: typeof KitchenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -708,6 +728,7 @@ const rootRouteChildren: RootRouteChildren = {
   GatewayRoute: GatewayRoute,
   HistoryRoute: HistoryRoute,
   InventoryRoute: InventoryRoute,
+  KitchenRoute: KitchenRoute,
   LoginRoute: LoginRoute,
   MenuRoute: MenuRoute,
   MyPerformanceRoute: MyPerformanceRoute,

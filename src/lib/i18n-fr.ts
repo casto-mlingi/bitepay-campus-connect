@@ -1,6 +1,7 @@
 // French for in-app screens (English -> French, exact visible text).
 export const FR_APP: Record<string, string> = {
-  "Privacy": "Confidentialité",
+  "Kitchen":"Cuisine","Kitchen production":"Production cuisine","Live orders":"Commandes en direct","No pots cooked yet. Log the first pot below.":"Aucune marmite cuisinée. Enregistrez la première ci-dessous.","Sold out":"Épuisé","Running low":"Bientôt épuisé","Leftover / waste":"Restes / pertes","Close pot":"Fermer la marmite","Close this pot? It will stop selling.":"Fermer cette marmite ? Elle ne sera plus vendue.","Recorded":"Enregistré","Quantity":"Quantité","Leftover":"Restes","Staff meal":"Repas du personnel","Log a cooked pot":"Enregistrer une marmite","It goes on sale at the counter immediately. Raw stock used is deducted now.":"Mise en vente immédiate au comptoir. Les matières premières sont déduites maintenant.","Portions cooked":"Portions cuisinées","Unit":"Unité","plates / pieces":"assiettes / pièces","liters":"litres","Raw material used (optional)":"Matière première utilisée (facultatif)","Raw quantity used":"Quantité de matière utilisée","Add pot \u2014 sell now":"Ajouter — vendre maintenant","Added":"Ajouté","Only kitchen staff, a supervisor or owner can open this page.":"Seuls la cuisine, un superviseur ou le propriétaire peuvent ouvrir cette page.","kitchen":"cuisinier",
+"Privacy": "Confidentialité",
   "Receipt printer paper": "Papier de l'imprimante", "Desktop thermal printer": "Imprimante thermique de bureau", "Handheld POS / Bluetooth printer": "TPE portable / imprimante Bluetooth",
   "Drinks & counter items": "Boissons et articles du comptoir", "All items": "Tous les articles", "No items in this view.": "Aucun article ici.",
   "Received by Lipa": "Re\u00e7us par Lipa",

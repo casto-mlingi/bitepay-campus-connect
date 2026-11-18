@@ -139,8 +139,8 @@ function AddStaffModal({ onClose, onSubmit, canManageAll }: { onClose: () => voi
         {requiresStaffPin(role) && <Field label="Staff PIN (4–6 digits)"><Input required type="password" pattern="[0-9]{4,6}" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••" /></Field>}
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
-            {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
-              const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
+            {(["cashier", "waiter", "kitchen", "supervisor", "owner"] as StaffRole[]).map((r) => {
+              const disabled = r !== "cashier" && r !== "waiter" && r !== "kitchen" && !canManageAll;
               return (
                 <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => { setRole(r); setError(""); }}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
@@ -170,8 +170,8 @@ function EditStaffModal({ p, onClose, onSubmit, canManageAll }: { p: Profile; on
         <Field label="Phone"><Input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">
-            {(["cashier", "waiter", "supervisor", "owner"] as StaffRole[]).map((r) => {
-              const disabled = r !== "cashier" && r !== "waiter" && !canManageAll;
+            {(["cashier", "waiter", "kitchen", "supervisor", "owner"] as StaffRole[]).map((r) => {
+              const disabled = r !== "cashier" && r !== "waiter" && r !== "kitchen" && !canManageAll;
               return (
                 <Button key={r} type="button" variant="outline" disabled={disabled} onClick={() => setRole(r)}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold border capitalize ${role === r ? "border-primary bg-primary/10 text-primary" : "border-transparent bg-muted"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>

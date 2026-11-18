@@ -170,7 +170,7 @@ export const loginUser = createServerFn({ method: "POST" })
       {
         id: string;
         role: "customer" | "staff" | "super_admin";
-        staff_role: "cashier" | "supervisor" | "owner" | null;
+        staff_role: "cashier" | "waiter" | "kitchen" | "supervisor" | "owner" | null;
         home_store_id: string | null;
         password_hash: string;
         is_disabled: boolean;

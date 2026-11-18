@@ -1,21 +1,23 @@
-export type StaffRole = "cashier" | "waiter" | "supervisor" | "owner";
+export type StaffRole = "cashier" | "waiter" | "kitchen" | "supervisor" | "owner";
 export type Permission =
   | "pos.sell" | "pos.wallet" | "pos.wallet_qr" | "pos.refund" | "shift.manage"
   | "customers.view" | "customers.topup"
   | "inventory.view" | "inventory.edit"
   | "finance.view" | "finance.edit" | "analytics.view"
-  | "team.view" | "team.manage_cashier" | "team.manage_all" | "settings.manage" | "settings.credit";
+  | "team.view" | "team.manage_cashier" | "team.manage_all" | "settings.manage" | "settings.credit" | "kitchen.produce";
 
 export const PERMISSIONS: Record<StaffRole, Permission[]> = {
   waiter: ["pos.sell", "pos.wallet_qr", "shift.manage"],
+  // Cooks log pots and move orders; no money, wallets, refunds or settings.
+  kitchen: ["kitchen.produce"],
   cashier: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view"],
-  supervisor: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier", "settings.credit"],
-  owner: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier", "team.manage_all", "settings.manage"],
+  supervisor: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier", "settings.credit", "kitchen.produce"],
+  owner: ["pos.sell", "pos.wallet", "pos.refund", "shift.manage", "customers.view", "customers.topup", "inventory.view", "inventory.edit", "finance.view", "finance.edit", "analytics.view", "team.view", "team.manage_cashier", "team.manage_all", "settings.manage", "kitchen.produce"],
 };
 
 export function requiresStaffPin(role: StaffRole) { return role !== "waiter"; }
 export function canAssignStaffRole(role: StaffRole, manageAll: boolean) {
-  return manageAll || role === "cashier" || role === "waiter";
+  return manageAll || role === "cashier" || role === "waiter" || role === "kitchen";
 }
 export function validateStaffInput(input: { full_name: string; phone: string; password: string; role: StaffRole; staff_pin?: string }) {
   if (!input.full_name.trim() || !input.phone.trim() || !input.password) return "Name, phone and password are required";
