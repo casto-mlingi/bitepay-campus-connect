@@ -45,3 +45,4 @@
 - Finance uses hospitality-costing; Journal and Books share buildLedger to prevent report drift.
 - Sector wording comes from business-rules sectorTerms; shared screens stay neutral.
 - Safe custody (supervisor→owner) derives expected safe cash from closed-shift drops minus out-of-shift cash expenses, bank deposits and owner handovers (safe-custody); owner handovers need the owner's PIN and move custody, not revenue.
+- Kitchen staff log shared cooked pots (cooked-availability derives dish plates from pot portions); extra pots add to open ones instead of replacing them, so rush top-ups never lose remaining portions.

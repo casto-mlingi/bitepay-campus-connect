@@ -117,6 +117,7 @@ function RoleBadge({ role }: { role: StaffRole }) {
     supervisor: { label: "Supervisor", cls: "bg-primary/10 text-primary", icon: <ShieldCheck className="w-3 h-3" /> },
     cashier: { label: "Cashier", cls: "bg-slate-100 text-slate-700", icon: <Shield className="w-3 h-3" /> },
     waiter: { label: "Waiter", cls: "bg-sky-100 text-sky-700", icon: <ConciergeBell className="w-3 h-3" /> },
+    kitchen: { label: "Kitchen", cls: "bg-orange-100 text-orange-700", icon: <ConciergeBell className="w-3 h-3" /> },
   };
   const m = map[role];
   return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${m.cls}`}>{m.icon}{m.label}</span>;
