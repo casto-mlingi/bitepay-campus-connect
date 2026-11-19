@@ -46,6 +46,24 @@ function KitchenPage() {
     return [...groups.values()];
   }, [cookedCommodityBatches, cookedCommodityUsages]);
 
+  // Device-side presets: last portions + raw usage per pot name, so repeat cooks are 2 taps.
+  const [presets, setPresets] = useState<Record<string, { portions: number; unit: Unit; rawId: string; rawQty: number }>>({});
+  useEffect(() => { try { setPresets(JSON.parse(localStorage.getItem("bp-pot-presets") || "{}")); } catch { /* ignore */ } }, []);
+  const savePreset = (name: string, v: { portions: number; unit: Unit; rawId: string; rawQty: number }) => {
+    const next = { ...presets, [name.toLowerCase()]: v }; setPresets(next);
+    try { localStorage.setItem("bp-pot-presets", JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const knownPots = useMemo(() => {
+    const m = new Map<string, { name: string; unit: Unit }>();
+    for (const b of [...cookedCommodityBatches].sort((a, c) => c.created_at - a.created_at)) if (!m.has(b.name.toLowerCase())) m.set(b.name.toLowerCase(), { name: b.name, unit: b.unit });
+    return [...m.values()];
+  }, [cookedCommodityBatches]);
+  const pickPreset = (name: string, unit: Unit) => {
+    const pr = presets[name.toLowerCase()];
+    setForm({ name, unit: pr?.unit ?? unit, portions: pr?.portions ?? 50, rawId: pr?.rawId ?? "", rawQty: pr?.rawQty ?? 0 });
+    document.getElementById("log-pot")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   const queue = orders.filter((o) => o.status === "new" || o.status === "in-progress").length;
   if (!currentUser || currentUser.role !== "staff") return null;
   if (!can("kitchen.produce")) return <StaffShell active="kitchen"><p className="text-sm text-muted-foreground">{t("Only kitchen staff, a supervisor or owner can open this page.")}</p></StaffShell>;
@@ -111,12 +129,23 @@ function KitchenPage() {
         })}
       </section>
 
-      <section className="rounded-xl border bg-card p-4">
+      {knownPots.length > 0 && <section className="mb-4">
+        <h2 className="font-bold mb-2">{t("Quick cook")}</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {knownPots.map((k) => { const pr = presets[k.name.toLowerCase()]; return (
+            <button key={k.name} type="button" onClick={() => pickPreset(k.name, k.unit)} className="min-h-16 rounded-xl border-2 border-primary/30 bg-primary/5 px-3 py-2 text-left active:scale-95 transition">
+              <div className="font-bold">+ {k.name}</div>
+              <div className="text-xs text-muted-foreground">{pr ? `${pr.portions} ${pr.unit}` : t("Tap to cook")}</div>
+            </button>); })}
+        </div>
+      </section>}
+
+      <section id="log-pot" className="rounded-xl border bg-card p-4">
         <h2 className="font-bold mb-1">{t("Log a cooked pot")}</h2>
         <p className="text-xs text-muted-foreground mb-3">{t("It goes on sale at the counter immediately. Raw stock used is deducted now.")}</p>
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => {
           e.preventDefault();
-          if (addPot(form.name.trim(), form.unit, form.portions, form.rawId, form.rawQty)) setForm({ ...form, name: "", rawId: "", rawQty: 0 });
+          if (addPot(form.name.trim(), form.unit, form.portions, form.rawId, form.rawQty)) savePreset(form.name.trim(), { portions: form.portions, unit: form.unit, rawId: form.rawId, rawQty: form.rawQty }), setForm({ ...form, name: "", rawId: "", rawQty: 0 });
         }}>
           <label className="grid gap-1 text-sm"><span>{t("Cooked item, e.g. Beans")}</span>
             <Input required list="pot-names" value={form.name} onChange={(e) => {
