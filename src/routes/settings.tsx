@@ -9,6 +9,7 @@ import { ownerPackage, STORE_LIMIT, PAID_PLANS, businessFeatures } from "@/lib/s
 import { StaffShell } from "@/components/staff-shell";
 import { AccessDenied } from "@/components/access-denied";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelcomSettingsCard } from "@/components/selcom-settings-card";
@@ -51,6 +52,7 @@ function SettingsPage() {
   const [paper, setPaper] = useState<"80" | "58">(store?.receipt_paper ?? "80");
   const [currency, setCurrency] = useState(store?.currency ?? "TZS");
   const [low, setLow] = useState<number>(store?.low_balance_threshold ?? 3000);
+  const [carryOver, setCarryOver] = useState(store?.allow_safe_carry_over ?? false);
   const [mobile, setMobile] = useState<boolean>(store?.enable_mobile_tender ?? true);
   const [serviceRate, setServiceRate] = useState<number>(store?.service_rate ?? 5);
   const [commissionRate, setCommissionRate] = useState<number>(store?.commission_rate ?? 0);
@@ -68,6 +70,7 @@ function SettingsPage() {
     if (!store) return;
     setName(store.name); setLocation(store.location); setContact(store.contact_phone);
     setCurrency(store.currency); setLow(store.low_balance_threshold); setMobile(store.enable_mobile_tender);
+    setCarryOver(store.allow_safe_carry_over ?? false);
     setServiceRate(store.service_rate ?? 5);
     setCommissionRate(store.commission_rate ?? 0);
     setWaiterTables(store.enable_waiter_tables ?? false);
@@ -88,7 +91,7 @@ function SettingsPage() {
     e.preventDefault();
     updateStore({ loyalty_percentage: loyalty });
     if (!can("settings.manage")) { updateStore({ customer_debt_limit: debtLimit }); setToast("Customer settings saved"); return; }
-    updateStore({ customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, receipt_logo: receiptLogo || undefined, receipt_email: receiptEmail.trim() || undefined, tin_number: tin.trim() || undefined, vrn_number: vrn.trim() || undefined, receipt_paper: paper, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
+    updateStore({ allow_safe_carry_over: carryOver, customer_debt_limit: debtLimit, business_type: businessType, name, location, contact_phone: contact, receipt_logo: receiptLogo || undefined, receipt_email: receiptEmail.trim() || undefined, tin_number: tin.trim() || undefined, vrn_number: vrn.trim() || undefined, receipt_paper: paper, currency, low_balance_threshold: low, enable_mobile_tender: mobile, service_rate: Math.max(0, Math.min(100, serviceRate)), commission_rate: Math.max(0, Math.min(100, commissionRate)), enable_waiter_tables: waiterTables, waiter_payment_mode: waiterPay, allow_waiter_payments: waiterPay !== "none", delivery_fee: Math.max(0, deliveryFee), retail_markup_percentage: markup, food_margin_percentage: foodMargin, food_margin_floor_percentage: Math.min(foodFloor, foodMargin) });
     setToast("Settings saved");
     setTimeout(() => setToast(""), 1800);
   };
@@ -211,7 +214,10 @@ function SettingsPage() {
               onChange={(e) => setServiceRate(Number(e.target.value) || 0)} className="w-24 text-right" />
           </div>
         </div>
-        {!retail && <><div className="p-3 rounded-lg border">
+        {!retail && <><div className="flex items-center justify-between gap-3 border rounded-lg p-3">
+          <Label htmlFor="safe-carry" className="grid gap-1"><span>Allow Safe Carry-Over</span><span className="text-xs font-normal text-muted-foreground">Off: closed pot leftovers are wastage. On: safely stored portions may return next day after a food safety check.</span></Label>
+          <Switch id="safe-carry" checked={carryOver} onCheckedChange={setCarryOver} />
+        </div><div className="p-3 rounded-lg border">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="font-semibold text-sm">Delivery cost</div>

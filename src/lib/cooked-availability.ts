@@ -1,9 +1,11 @@
 /** How many plates of a dish the shared cooked pots can still serve (null = dish is not linked to any pot). */
 export type PotLike = { name: string; unit: string; initial_quantity: number; active: boolean; id: string; store_id: string };
-export type UsageLike = { batch_id: string; quantity: number };
+export type UsageLike = { batch_id: string; quantity: number; closes_batch?: boolean };
 export type PortionLike = { product_id: string; commodity_name: string; quantity: number; unit: string; store_id: string };
 
 export function potRemaining(pot: PotLike, usages: UsageLike[]) {
+  // Immutable closure beats a stale device's active flag, including later refunds.
+  if (usages.some((u) => u.batch_id === pot.id && u.closes_batch)) return 0;
   const used = usages.reduce((s, u) => (u.batch_id === pot.id ? s + u.quantity : s), 0);
   return Math.max(0, pot.initial_quantity - used);
 }

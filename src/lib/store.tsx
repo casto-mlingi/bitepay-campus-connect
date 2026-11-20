@@ -23,7 +23,8 @@ import { normalizePack } from "./pack-units";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
-import { platesFromPots, potTotals } from "@/lib/cooked-availability";
+import { planPotClosure, pendingCarryOvers, isNextKitchenDay, type DisposalMode } from "./pot-closure";
+import { potRemaining, platesFromPots, potTotals } from "@/lib/cooked-availability";
 import { PERMISSIONS, requiresStaffPin, canAssignStaffRole, validateStaffInput, type StaffRole, type Permission } from "@/lib/staff-rules";
 export type { StaffRole, Permission } from "@/lib/staff-rules";
 /** A staff member's role in one specific store (multi-store support). */
@@ -97,6 +98,7 @@ export type Store = {
   credit_terms_days?: number;
   customer_debt_limit?: number;
   loyalty_percentage?: number;
+  allow_safe_carry_over?: boolean;
   /** Retail: markup used to suggest selling prices from purchase cost. */
   retail_markup_percentage?: number;
   /** Food: target margin and safety floor for cooked dishes. */
@@ -493,6 +495,8 @@ export type CookedCommodityBatch = {
   remaining_quantity: number;
   created_at: number;
   active: boolean;
+  updated_at?: number;
+  carried_from?: string;
 };
 
 export type StandardPortion = "full" | "half" | "side" | "custom";
@@ -517,7 +521,13 @@ export type CookedCommodityUsage = {
   quantity: number;
   created_at: number;
   /** "waste" rows record spoiled/discarded stock; absent = sold. */
-  kind?: "sale" | "waste";
+  kind?: "sale" | "waste" | "carry_over" | "carry_over_release";
+  closes_batch?: boolean;
+  source_usage_id?: string;
+  carried_quantity?: number;
+  by_id?: string;
+  by_role?: string;
+  shift_id?: string;
   reason?: string;
   by_name?: string;
 };
@@ -768,6 +778,8 @@ type Ctx = {
   createCookedCommodityBatch: (input: { raw_material_id?: string; raw_quantity?: number; name: string; unit: CookedCommodityBatch["unit"]; quantity: number }) => Ok<CookedCommodityBatch> | Fail;
   setProductPortionMappings: (product_id: string, mappings: Array<Omit<MenuPortionMapping, "id" | "store_id" | "product_id">>) => Ok | Fail;
   closeCookedCommodityBatch: (batch_id: string) => Ok | Fail;
+  closeAndDisposeCookedBatch: (batch_id: string, quantity: number, mode: DisposalMode, reason: string) => Ok | Fail;
+  releaseCookedCarryOver: (usage_id: string, disposition: "sell" | "waste", safetyConfirmed?: boolean) => Ok | Fail;
   logCookedCommodityWaste: (batch_id: string, quantity: number, reason: string) => Ok | Fail;
   recordPurchaseVoucher: (input: { supplier: string; vendor_id?: string; on_credit?: boolean; terms_days?: number; payment_method: PaymentMethod; invoice_no?: string; lines: { item_id: string; qty: number; total_cost: number; new_price?: number }[] }) => { voucher_id: string; total: number; count: number } | null;
   recordPurchase: (input: { supplier: string; raw_id: string; product_id?: string; qty: number; total_cost: number; payment_method: PaymentMethod; date?: number; vendor_id?: string; on_credit?: boolean; terms_days?: number }) => Purchase | null;
@@ -1342,9 +1354,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => a.created_at - b.created_at)
       .map((b) => ({
         ...b,
-        remaining_quantity: Math.max(0, b.initial_quantity - cookedCommodityUsages
-          .filter((u) => u.batch_id === b.id)
-          .reduce((sum, u) => sum + u.quantity, 0)),
+        remaining_quantity: potRemaining(b, cookedCommodityUsages),
       }));
     for (const item of items) {
       const mappings = menuPortionMappings.filter((m) => m.store_id === sid && m.product_id === item.product_id);
@@ -2334,25 +2344,72 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     },
     logCookedCommodityWaste(batch_id, quantity, reason) {
+      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Not allowed" };
       if (!currentStoreId || !currentUser) return { ok: false, reason: "Sign in first" };
       const b = cookedCommodityBatches.find((x) => x.id === batch_id && x.store_id === currentStoreId);
       if (!b) return { ok: false, reason: "Cooked batch not found" };
-      if (!(quantity > 0)) return { ok: false, reason: "Enter a quantity above zero" };
+      if (!b.active || cookedCommodityUsages.some((u) => u.batch_id === b.id && u.closes_batch)) return { ok: false, reason: "This pot is already closed" };
+      if (!Number.isFinite(quantity) || !(quantity > 0)) return { ok: false, reason: "Enter a quantity above zero" };
       if (!reason.trim()) return { ok: false, reason: "Give a reason" };
-      const used = cookedCommodityUsages.filter((u) => u.batch_id === b.id).reduce((n, u) => n + u.quantity, 0);
-      const remaining = Math.max(0, b.initial_quantity - used);
+      const remaining = potRemaining(b, cookedCommodityUsages);
       if (quantity > remaining + 1e-9) return { ok: false, reason: `Only ${remaining} ${b.unit} left in this batch` };
       setCookedCommodityUsages((prev) => [{
         id: uid("cw"), store_id: currentStoreId, batch_id, order_id: "WASTE", product_id: "",
-        quantity, created_at: Date.now(), kind: "waste", reason: reason.trim(), by_name: currentUser.full_name,
+        quantity, created_at: Date.now(), kind: "waste", reason: reason.trim(), by_name: currentUser.full_name, by_id: currentUser.id, by_role: currentUser.staff_role, shift_id: activeShift?.id,
       }, ...prev]);
       setCookedCommodityBatches((prev) => prev.map((x) => x.id === batch_id ? { ...x, remaining_quantity: Math.max(0, remaining - quantity) } : x));
       return { ok: true };
     },
+    closeAndDisposeCookedBatch(batch_id, quantity, mode, reason) {
+      if (!currentStoreId || !currentUser) return { ok: false, reason: "Sign in first" };
+      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Not allowed" };
+      const batch = cookedCommodityBatches.find((b) => b.id === batch_id && b.store_id === currentStoreId);
+      if (!batch) return { ok: false, reason: "Cooked batch not found" };
+      if (!reason.trim()) return { ok: false, reason: "Give a reason" };
+      if (mode !== "waste" && mode !== "carry_over") return { ok: false, reason: "Not allowed" };
+      const plan = planPotClosure(batch, cookedCommodityUsages, quantity, mode, store?.allow_safe_carry_over === true);
+      if (!plan.ok) return plan;
+      const now = Date.now();
+      const base = { store_id: currentStoreId, batch_id, order_id: "CLOSURE", product_id: "", created_at: now,
+        by_name: currentUser.full_name, by_id: currentUser.id, by_role: currentUser.staff_role, shift_id: activeShift?.id };
+      const rows: CookedCommodityUsage[] = [{ ...base, id: `close:${batch_id}`, quantity: plan.quantity,
+        kind: mode, closes_batch: true, reason: reason.trim() }];
+      if (plan.discrepancy > 0) rows.push({ ...base, id: `close-gap:${batch_id}`, quantity: plan.discrepancy,
+        kind: "waste", reason: "Physical count shortage" });
+      setCookedCommodityUsages((prev) => [...rows.filter((r) => !prev.some((u) => u.id === r.id)), ...prev]);
+      setCookedCommodityBatches((prev) => prev.map((b) => b.id === batch_id ? { ...b, active: false, remaining_quantity: 0, updated_at: now } : b));
+      return { ok: true };
+    },
     closeCookedCommodityBatch(batch_id) {
-      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Only a supervisor or owner can close cooked batches" };
-      if (!cookedCommodityBatches.some((b) => b.id === batch_id && b.store_id === currentStoreId)) return { ok: false, reason: "Cooked batch not found" };
-      setCookedCommodityBatches((prev) => prev.map((b) => b.id === batch_id ? { ...b, active: false } : b));
+      const batch = cookedCommodityBatches.find((b) => b.id === batch_id && b.store_id === currentStoreId);
+      if (!batch) return { ok: false, reason: "Cooked batch not found" };
+      return api.closeAndDisposeCookedBatch(batch_id, potRemaining(batch, cookedCommodityUsages), "waste", "Unsold / End of Day");
+    },
+    releaseCookedCarryOver(usage_id, disposition, safetyConfirmed = false) {
+      if (!currentStoreId || !currentUser) return { ok: false, reason: "Sign in first" };
+      if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Not allowed" };
+      const source = pendingCarryOvers(cookedCommodityUsages).find((u) => u.id === usage_id);
+      const batch = source && cookedCommodityBatches.find((b) => b.id === source.batch_id && b.store_id === currentStoreId);
+      if (!source || !batch) return { ok: false, reason: "This carry-over has already been handled" };
+      const now = Date.now();
+      if (disposition !== "sell" && disposition !== "waste") return { ok: false, reason: "Not allowed" };
+      if (disposition === "sell" && (!store?.allow_safe_carry_over || !safetyConfirmed || !isNextKitchenDay(source.created_at, now)))
+        return { ok: false, reason: "Confirm food safety on the next day before selling" };
+      const release: CookedCommodityUsage = { id: `release:${usage_id}`, store_id: currentStoreId, batch_id: batch.id,
+        order_id: "CARRY_RELEASE", product_id: "", quantity: 0, carried_quantity: source.quantity,
+        kind: "carry_over_release", source_usage_id: usage_id, created_at: now,
+        reason: disposition === "sell" ? "Food safety checked" : "Carry-over discarded",
+        by_name: currentUser.full_name, by_id: currentUser.id, by_role: currentUser.staff_role, shift_id: activeShift?.id };
+      const rows = [release];
+      if (disposition === "waste") rows.push({ ...release, id: `carry-waste:${usage_id}`, quantity: source.quantity,
+        kind: "waste", source_usage_id: usage_id, reason: "Carry-over discarded" });
+      setCookedCommodityUsages((prev) => [...rows.filter((r) => !prev.some((u) => u.id === r.id)), ...prev]);
+      if (disposition === "sell") {
+        const fresh: CookedCommodityBatch = { id: `carry:${usage_id}`, store_id: currentStoreId, name: batch.name, unit: batch.unit,
+          initial_quantity: source.quantity, remaining_quantity: source.quantity, created_at: now, active: true, carried_from: usage_id };
+        // No new production or raw deduction: these portions were cooked yesterday.
+        setCookedCommodityBatches((prev) => prev.some((b) => b.id === fresh.id) ? prev : [fresh, ...prev]);
+      }
       return { ok: true };
     },
     updateBatch(batch_id, patch) {
