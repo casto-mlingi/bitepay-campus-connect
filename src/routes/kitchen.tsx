@@ -5,6 +5,9 @@ import { useStore } from "@/lib/store";
 import { StaffShell } from "@/components/staff-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PotCloseDialog } from "@/components/pot-close-dialog";
+import { KitchenDisposalSummary } from "@/components/kitchen-disposal-summary";
+import { pendingCarryOvers, isNextKitchenDay } from "@/lib/pot-closure";
 import { potRemaining } from "@/lib/cooked-availability";
 import { useT } from "@/lib/i18n";
 
@@ -23,9 +26,11 @@ type Unit = "kg" | "liters" | "pcs";
 
 function KitchenPage() {
   const { currentUser, sessionReady, can, cookedCommodityBatches, cookedCommodityUsages, rawMaterials, orders,
-    createCookedCommodityBatch, logCookedCommodityWaste, closeCookedCommodityBatch } = useStore();
+    store, releaseCookedCarryOver, createCookedCommodityBatch, logCookedCommodityWaste } = useStore();
   const { t } = useT();
   const navigate = useNavigate();
+  const [closeId, setCloseId] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState({ name: "", portions: 50, unit: "pcs" as Unit, rawId: "", rawQty: 0 });
   const [waste, setWaste] = useState<{ id: string; qty: string; reason: string } | null>(null);
@@ -37,7 +42,7 @@ function KitchenPage() {
 
   const pots = useMemo(() => {
     const groups = new Map<string, { name: string; unit: Unit; made: number; left: number; ids: string[]; oldest: string }>();
-    for (const b of cookedCommodityBatches.filter((x) => x.active).sort((a, c) => a.created_at - c.created_at)) {
+    for (const b of cookedCommodityBatches.filter((x) => x.active && !cookedCommodityUsages.some((u) => u.batch_id === x.id && u.closes_batch)).sort((a, c) => a.created_at - c.created_at)) {
       const key = `${b.name.toLowerCase()}|${b.unit}`;
       const g = groups.get(key) ?? { name: b.name, unit: b.unit, made: 0, left: 0, ids: [], oldest: b.id };
       g.made += b.initial_quantity; g.left += potRemaining(b, cookedCommodityUsages); g.ids.push(b.id);
@@ -64,6 +69,8 @@ function KitchenPage() {
     document.getElementById("log-pot")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const carryOvers = pendingCarryOvers(cookedCommodityUsages);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const queue = orders.filter((o) => o.status === "new" || o.status === "in-progress").length;
   if (!currentUser || currentUser.role !== "staff") return null;
   if (!can("kitchen.produce")) return <StaffShell active="kitchen"><p className="text-sm text-muted-foreground">{t("Only kitchen staff, a supervisor or owner can open this page.")}</p></StaffShell>;
@@ -101,7 +108,10 @@ function KitchenPage() {
               </div>
               <div className="mt-2 flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setWaste({ id: g.ids[0], qty: "", reason: "Leftover" })}><Trash2 className="w-4 h-4" />{t("Leftover / waste")}</Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => { if (confirm(t("Close this pot? It will stop selling."))) g.ids.forEach((id) => closeCookedCommodityBatch(id)); }}><Lock className="w-4 h-4" />{t("Close pot")}</Button>
+                <div className="grid gap-1 min-w-0">{g.ids.map((id, index) => <div key={id}>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setCloseId(id)}><Lock className="w-4 h-4" />{t("Close / Waste")}{g.ids.length > 1 ? ` #${index + 1}` : ""}</Button>
+                  {cookedCommodityBatches.find((b) => b.id === id)?.carried_from && <span className="block text-xs text-primary">{t("Carried-over portions")}</span>}
+                </div>)}</div>
               </div>
               {waste && g.ids.includes(waste.id) && (
                 <form className="mt-2 grid gap-2" onSubmit={(e) => {
@@ -129,6 +139,29 @@ function KitchenPage() {
         })}
       </section>
 
+      {closeId && <PotCloseDialog batchId={closeId} onClose={() => setCloseId(null)} />}
+      <KitchenDisposalSummary from={today.getTime()} />
+      {carryOvers.length > 0 && <section className="mb-5 border-t pt-4">
+        <h2 className="font-bold mb-2">{t("Stored for next day")}</h2>
+        <div className="grid sm:grid-cols-2 gap-3">{carryOvers.map((u) => {
+          const b = cookedCommodityBatches.find((p) => p.id === u.batch_id);
+          if (!b) return null;
+          const later = isNextKitchenDay(u.created_at);
+          return <div key={u.id} className="border rounded-lg p-3 space-y-2">
+            <p className="font-semibold">{b.name} · {u.quantity} {b.unit}</p>
+            <p className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleString()} · {u.by_name} · {t(u.reason ?? "")}</p>
+            <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={checked[u.id] ?? false} onChange={(e) => setChecked({ ...checked, [u.id]: e.target.checked })} />{t("Food was stored safely and checked before serving")}</label>
+            {!later && <p className="text-xs text-muted-foreground">{t("Available to return next day")}</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={!later || !checked[u.id] || !store?.allow_safe_carry_over} onClick={() => { const r = releaseCookedCarryOver(u.id, "sell", checked[u.id]); flash(r.ok ? t("Returned to sale") : t(r.reason)); }}>{t("Return to sale")}</Button>
+              <Button type="button" variant="outline" onClick={() => { if (!confirm(t("Discard stored portions?"))) return; const r = releaseCookedCarryOver(u.id, "waste"); flash(r.ok ? t("Recorded") : t(r.reason)); }}>{t("Discard")}</Button>
+            </div>
+          </div>;
+        })}</div>
+      </section>}
+      <section className="mb-5 border-t pt-3"><h2 className="font-bold mb-2">{t("Closure history")}</h2>
+        <ul className="space-y-1 text-sm">{cookedCommodityUsages.filter((u) => u.kind && u.kind !== "sale").slice(0, 20).map((u) => <li key={u.id} className="border-b py-2 break-words">{cookedCommodityBatches.find((b) => b.id === u.batch_id)?.name} · {u.kind === "carry_over_release" ? u.carried_quantity : u.quantity} · {t(u.kind === "waste" ? "Wastage" : u.kind === "carry_over" ? "Safe Carry-Over" : "Carry-over handled")} · {t(u.reason ?? "")} · {u.by_name} {u.by_role ? `(${t(u.by_role)})` : ""} · {new Date(u.created_at).toLocaleString()}</li>)}</ul>
+      </section>
       {knownPots.length > 0 && <section className="mb-4">
         <h2 className="font-bold mb-2">{t("Quick cook")}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">

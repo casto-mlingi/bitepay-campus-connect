@@ -1,9 +1,9 @@
 # Roadmap
 
 ## Evening kitchen closure (Nov 20)
-- [ ] Add default-off safe carry-over setting and immutable closure/release records without changing paid orders or recipe costs.
-- [ ] Add per-pot closure dialog, next-day safety confirmation and kitchen/inventory/shift summaries in EN/SW/FR.
-- [ ] Run regression tests and isolated browser checks; never upload test business records.
+- [x] Add default-off safe carry-over setting and immutable closure/release records without changing paid orders or recipe costs.
+- [x] Add per-pot closure dialog, next-day safety confirmation and kitchen/inventory/shift summaries in EN/SW/FR.
+- [x] Run 158 regression tests and isolated desktop/mobile closure, POS sold-out, next-day release and reload checks; no test records uploaded. Live cross-device checks require deployment and real staff use.
 
 ## Finance costing and navigation (Nov 10)
 - [x] Recognize hospitality COGS only for evidenced sales, preserve unsold inventory and reverse refunded costs.

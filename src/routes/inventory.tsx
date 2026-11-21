@@ -6,6 +6,9 @@ import { PosSectionSelect } from "@/components/pos-section-select";
 import { retailUnitCost } from "@/lib/retail-stock";
 import { Link } from "@tanstack/react-router";
 import { BarcodeField } from "@/components/barcode-field";
+import { PotCloseDialog } from "@/components/pot-close-dialog";
+import { KitchenDisposalSummary } from "@/components/kitchen-disposal-summary";
+import { potRemaining } from "@/lib/cooked-availability";
 import { Button } from "@/components/ui/button";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -671,7 +674,7 @@ function BatchesPanel() {
   const {
     rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages,
     createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
-    setProductPortionMappings, closeCookedCommodityBatch, logCookedCommodityWaste, store,
+    setProductPortionMappings, logCookedCommodityWaste, store,
   } = useStore();
   const target = store?.food_margin_percentage ?? DEFAULT_FOOD_MARGIN;
   const floor = store?.food_margin_floor_percentage ?? DEFAULT_FOOD_FLOOR;
@@ -680,6 +683,7 @@ function BatchesPanel() {
     const latest = batches.filter((b) => b.product_id === p.id && b.plates > 0).sort((a, b) => b.created_at - a.created_at)[0];
     return latest ? [{ product: p, cost: latest.unit_cost, ...marginStatus(p.price, latest.unit_cost, target, floor) }] : [];
   });
+  const [closeId, setCloseId] = useState<string | null>(null);
   const [wasteFor, setWasteFor] = useState<string | null>(null);
   const [wasteQty, setWasteQty] = useState("");
   const [wasteReason, setWasteReason] = useState("Spoiled");
@@ -805,20 +809,24 @@ function BatchesPanel() {
           </form>
         </div>
         {commodityMessage && <div className="text-sm rounded-lg bg-muted px-3 py-2">{commodityMessage}</div>}
+        {closeId && <PotCloseDialog batchId={closeId} onClose={() => setCloseId(null)} />}
+        <KitchenDisposalSummary />
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {cookedCommodityBatches.map((batch) => {
             const rows = cookedCommodityUsages.filter((u) => u.batch_id === batch.id);
-            const sold = rows.filter((u) => u.kind !== "waste").reduce((sum, u) => sum + u.quantity, 0);
+            const sold = rows.filter((u) => (u.kind === "sale" || !u.kind)).reduce((sum, u) => sum + u.quantity, 0);
             const wasted = rows.filter((u) => u.kind === "waste").reduce((sum, u) => sum + u.quantity, 0);
-            const remaining = Math.max(0, batch.initial_quantity - sold - wasted);
-            const percent = batch.initial_quantity > 0 ? Math.min(100, ((sold + wasted) / batch.initial_quantity) * 100) : 0;
-            const wasteRows = rows.filter((u) => u.kind === "waste");
+            const carried = rows.filter((u) => u.kind === "carry_over").reduce((sum, u) => sum + u.quantity, 0);
+            const closed = !batch.active || rows.some((u) => u.closes_batch);
+            const remaining = closed ? 0 : potRemaining(batch, rows);
+            const percent = batch.initial_quantity > 0 ? Math.min(100, ((sold + wasted + carried) / batch.initial_quantity) * 100) : 0;
+            const wasteRows = rows.filter((u) => u.kind === "waste" || u.kind === "carry_over" || u.kind === "carry_over_release");
             return <div key={batch.id} className="border rounded-lg p-3">
-              <div className="flex justify-between gap-3"><span className="font-semibold">{batch.name}</span><span className="text-xs text-muted-foreground">{batch.active ? "Active" : "Closed"}</span></div>
+              <div className="flex justify-between gap-3"><span className="font-semibold">{batch.name}</span><span className="text-xs text-muted-foreground">{closed ? "Closed" : batch.carried_from ? "Carried-over portions" : "Active"}</span></div>
               <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${percent}%` }} /></div>
-              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold − {wasted.toFixed(3)} wasted = <strong className="text-foreground">{remaining.toFixed(3)} {batch.unit}</strong></div>
+              <div className="mt-2 text-xs text-muted-foreground">{batch.initial_quantity.toFixed(3)} − {sold.toFixed(3)} sold − {wasted.toFixed(3)} wasted − {carried.toFixed(3)} carry-over = <strong className="text-foreground">{remaining.toFixed(3)} {batch.unit}</strong></div>
               {wasteRows.length > 0 && <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
-                {wasteRows.slice(0, 4).map((w) => <li key={w.id}>🗑 {w.quantity} {batch.unit} · {w.reason}{w.by_name ? ` · ${w.by_name}` : ""} · {new Date(w.created_at).toLocaleString()}</li>)}
+                {wasteRows.slice(0, 4).map((w) => <li key={w.id}>{w.kind === "carry_over" ? "Safe Carry-Over" : w.kind === "waste" ? "Wastage" : "Carry-over handled"} · {w.quantity} {batch.unit} · {w.reason}{w.by_name ? ` · ${w.by_name}` : ""} · {new Date(w.created_at).toLocaleString()}</li>)}
               </ul>}
               {wasteFor === batch.id ? (
                 <form className="mt-3 space-y-2" onSubmit={(e) => {
@@ -842,7 +850,7 @@ function BatchesPanel() {
               ) : (
                 <div className="mt-3 flex gap-4">
                   {remaining > 0 && <button type="button" onClick={() => { setWasteFor(batch.id); setWasteErr(""); }} className="text-xs font-semibold text-primary">Log waste</button>}
-                  {batch.active && <button type="button" onClick={() => closeCookedCommodityBatch(batch.id)} className="text-xs font-semibold text-destructive">Close batch</button>}
+                  {!closed && <Button type="button" variant="ghost" size="sm" onClick={() => setCloseId(batch.id)}>Close / Waste</Button>}
                 </div>
               )}
             </div>;

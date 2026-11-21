@@ -16,7 +16,7 @@ export function planPotClosure(pot: PotLike, usages: ClosureUsage[], quantity: n
   return { ok: true as const, quantity: Math.min(quantity, remaining), discrepancy: Math.max(0, remaining - quantity), mode };
 }
 
-export function pendingCarryOvers(usages: ClosureUsage[]) {
+export function pendingCarryOvers<T extends ClosureUsage>(usages: T[]): T[] {
   const released = new Set(usages.filter((u) => u.kind === "carry_over_release").map((u) => u.source_usage_id));
   return usages.filter((u) => u.kind === "carry_over" && u.quantity > 0 && !released.has(u.id));
 }

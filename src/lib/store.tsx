@@ -2383,7 +2383,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     closeCookedCommodityBatch(batch_id) {
       const batch = cookedCommodityBatches.find((b) => b.id === batch_id && b.store_id === currentStoreId);
       if (!batch) return { ok: false, reason: "Cooked batch not found" };
-      return api.closeAndDisposeCookedBatch(batch_id, potRemaining(batch, cookedCommodityUsages), "waste", "Unsold / End of Day");
+      return value.closeAndDisposeCookedBatch(batch_id, potRemaining(batch, cookedCommodityUsages), "waste", "Unsold / End of Day");
     },
     releaseCookedCarryOver(usage_id, disposition, safetyConfirmed = false) {
       if (!currentStoreId || !currentUser) return { ok: false, reason: "Sign in first" };
