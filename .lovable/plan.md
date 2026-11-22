@@ -8,6 +8,7 @@ Meneja aweke mapishi mara moja; mpishi achague sufuria, aweke kiasi anachopika n
 - **Kiasi cha kupika si idadi ya sahani:** Meneja aweke kipimo cha msingi, mfano kilo 1 ya maharage makavu, na portions zinazotarajiwa kutoka kwenye kipimo hicho. Mpishi akiweka kilo 3, mfumo uhesabu viungo na portions kwa msingi huo. Usikisie portions kutoka kwenye kilo bila mpangilio wa meneja.
 - **Uwiano katika hatua hii ni wa mstari:** Ikiwa kilo 1 hutumia mafuta lita 0.5, kilo 3 hutumia lita 1.5; kilo 8 hutumia lita 4; kilo 10 hutumia lita 5. Mapishi yanayotumia lita 5 kwa kilo 8 na kilo 10 yanahitaji kanuni tofauti, si uwiano huu.
 - **Viungo vidogo:** Chumvi, sotojo na vingine vinavyohesabiwa stoo viwekwe kama malighafi zenye kiasi. Kisanduku cha gharama ya ziada kitaongeza gharama tu, si kupunguza stock ya kiungo kisichoainishwa. Kiungo kimoja kisihesabiwe mara mbili.
+- Gharama ya ziada iwe makadirio ya recipe, si malipo mapya yanayotoka cash. Ripoti zitenganishe makadirio na gharama zenye ushahidi; matumizi yaliyorekodiwa tayari yasihesabiwe tena.
 - **Faida ni ya sahani zinazouzwa:** Sufuria isiyouzwa peke yake haina bei ya mauzo. Onyesha gharama ya sufuria, ya kipimo cha msingi na ya portion; faida inayotarajiwa ionyeshwe kwa sahani iliyounganishwa yenye bei na gharama zinazojulikana.
 
 ## 1. Meneja — Inventory
@@ -40,6 +41,7 @@ Meneja aweke mapishi mara moja; mpishi achague sufuria, aweke kiasi anachopika n
 - Mapishi yahifadhiwe ndani ya taarifa za biashara zinazohifadhiwa kwenye kifaa na kusawazishwa kwa njia iliyopo; tenganisha biashara na matawi.
 - Marekebisho ya mapishi yaruhusiwe kwa meneja/mmiliki tu, uzalishaji uruhusiwe kwa mpishi kulingana na ruhusa zilizopo; biashara za retail zisioneshwe zana za jikoni.
 - Matumizi ya viungo yahifadhiwe kama rekodi zenye vitambulisho vya kipekee ili kuunganisha taarifa kutoka vifaa tofauti kusifute matumizi ya kifaa kingine.
+- Stoo ya malighafi ya sasa ni salio linalobadilishwa. Kabla ya kutumia rekodi mpya, weka salio la kuanzia lililothibitishwa na linganisha manunuzi, adjustments na njia zote za kupika. Hii ni sehemu ya ujenzi: matumizi mapya yasipunguzwe tena kutoka salio lililokwisha kupunguzwa, wala historia isiyopo kubuniwa.
 - Hifadhi ulinzi wa kikao, marekebisho ya taarifa na rekodi za zamani. Usibadilishe huduma iliyounganishwa wala kupakia taarifa za majaribio kwenye biashara halisi.
 - Bila intaneti, stock inayojulikana na kifaa ikaguliwe na matumizi yahifadhiwe kwa kusawazishwa baadaye. Hii **si dhamana** kwamba vifaa viwili visivyo na intaneti haviwezi kutumia stock ileile; tofauti baada ya kuunganisha zisiondolewe kwa kufuta matumizi.
 - Uwekaji wa data mpya uwe wa kuongeza tu; rekodi za malipo, mauzo, mapishi na sufuria za zamani zibaki salama.
@@ -65,7 +67,7 @@ Meneja aweke mapishi mara moja; mpishi achague sufuria, aweke kiasi anachopika n
 - Helper mpya ya recipe scaling/validation/costing pamoja na tests karibu na tests zilizopo; units za recipe lazima zilingane na stock units, bila kubuni kg↔liters conversion.
 - `src/routes/inventory.tsx` na component ndogo ya recipe editor: manager setup na batch preview. `src/routes/kitchen.tsx` na component ndogo ya Quick Cook: recipe selection, quantity na confirm.
 - `src/lib/cooked-availability.ts`, POS deduction/reservation paths na `src/lib/hospitality-costing.ts`: tumia availability iliyopo; ongeza costing compatibility tu pale inapotakiwa.
-- Snapshot normalization/merge na server validation zinazohusika: kuongeza collections/fields na manager-only recipe updates bila kulegeza session/revision protections.
+- `src/lib/use-snapshot-sync.ts`, `src/lib/snapshot-merge.ts`, `src/lib/snapshot-safety.ts` na `src/lib/sync.functions.ts`: kuongeza collections/fields na manager-only recipe updates bila kulegeza session/revision protections. Recipes ziwe na UUID, `updated_at` na archive marker. Unganisha duplicate ingredient IDs kabla ya stock checks.
 - `src/lib/pot-closure.ts` na summaries: preserve immutable closure/release na carry original cost, bila kubadilisha paid-order usage rows.
 - `src/lib/i18n-sw.ts`, `src/lib/i18n-fr.ts`: maandishi mapya; hakikisha Kitchen na Inventory zina head metadata inayofaa.
 - Sasisha `roadmap.md`; rekodi sheria mpya za muundo katika `AGENTS.md` ikiwa nafasi inaruhusu.
