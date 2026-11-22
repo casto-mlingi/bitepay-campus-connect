@@ -1,5 +1,10 @@
 # Roadmap
 
+## Multi-ingredient pot recipes (Nov 22)
+- [x] Review requested recipe scaling, yield, stock deductions, costing and existing kitchen/POS safeguards; prepare the approval plan.
+- [ ] Implement manager recipes, fast recipe-based cooking, immutable ingredient usage and evidenced costing (waiting for plan approval).
+- [ ] Verify scaled quantities, atomic stock validation, permissions, POS sales, waste/carry-over, reload/merges and phone/desktop flow (waiting for implementation approval).
+
 ## Evening kitchen closure (Nov 20)
 - [x] Add default-off safe carry-over setting and immutable closure/release records without changing paid orders or recipe costs.
 - [x] Add per-pot closure dialog, next-day safety confirmation and kitchen/inventory/shift summaries in EN/SW/FR.
