@@ -43,12 +43,12 @@ type Tab = "safe" | "treasury" | "receivables" | "payables" | "procurement" | "e
 function FinancePage() {
   const {
     currentUser, sessionReady, cash, bank, rawMaterials, batches, profiles, orders, purchases, expenses,
-    recordPurchase, recordExpense, hasStaffRole, vendorPayments, transactions, fundTransfers, products, store,
+    recordPurchase, recordExpense, hasStaffRole, vendorPayments, transactions, fundTransfers, products, store, cookedCommodityBatches, cookedCommodityUsages,
   } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("treasury");
   const [section, setSection] = useState<Section>("overview");
-  const hospitality = useMemo(() => hospitalityCosting(orders, batches), [orders, batches]);
+  const hospitality = useMemo(() => hospitalityCosting(orders, batches, cookedCommodityBatches, cookedCommodityUsages), [orders, batches, cookedCommodityBatches, cookedCommodityUsages]);
 
   useEffect(() => {
     if (!sessionReady) return;
@@ -75,6 +75,7 @@ function FinancePage() {
   );
 
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
+  const recognizedExpenses = retail ? expenses : [...expenses, ...hospitality.wasteEntries.filter((e) => e.amount > 0).map((e) => ({ id: e.id, store_id: store?.id ?? "", date: e.date, category: "other" as const, amount: e.amount, description: "Cooked food wastage", payment_method: "cash" as const }))];
   const costEntries = retail ? orders.map((o) => ({ id: o.id, date: o.created_at, amount: o.cost_amount ?? Math.round(o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0)) })) : hospitality.entries;
   const cogs = retail ? costEntries.reduce((sum, e) => sum + e.amount, 0) : hospitality.cogs;
   const grossProfit = grossRevenue - cogs;

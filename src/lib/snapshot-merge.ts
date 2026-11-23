@@ -34,6 +34,7 @@ function pick(local: Row, remote: Row): Row {
   if (local.closed_at && local.witness_id) return local;
   const winner = stamp(local) > stamp(remote) ? local : remote;
   if (local.wallet_anchors || remote.wallet_anchors) return { ...winner, wallet_anchors: { ...(local.wallet_anchors as object ?? {}), ...(remote.wallet_anchors as object ?? {}) } };
+  if (local.stock_anchor != null || remote.stock_anchor != null) return { ...winner, stock_anchor: remote.stock_anchor ?? local.stock_anchor };
   return winner;
 }
 

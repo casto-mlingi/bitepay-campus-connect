@@ -1,4 +1,5 @@
 import { ownerPackage, storeCreationReason, type PlanStore } from "./subscription-rules";
+import { validatePotSnapshot } from "./pot-snapshot-safety";
 export type SnapshotData = Record<string, unknown>;
 
 export function isLocalSyncHost(host: string): boolean {
@@ -28,6 +29,7 @@ export function assertPreservesRecords(previous: SnapshotData, next: SnapshotDat
 
 /** Ignore stale copies belonging to other stores; clients cannot replace them. */
 export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotData, userId: string, storeIds: Set<string>, role = "staff"): SnapshotData {
+  validatePotSnapshot(previous, incoming, userId, storeIds, role);
   const result = { ...previous };
   // Authorize new branches against the locked server snapshot, never client-selected plans.
   const authorizedStores = new Set(storeIds);
@@ -89,6 +91,7 @@ export function scopedSnapshotUpdate(previous: SnapshotData, incoming: SnapshotD
             if (branch) next.subscription = branch.subscription;
           }
           if (field === "products" && existing) next.opening_stock = existing.opening_stock;
+          if (field === "rawMaterials" && existing?.stock_anchor != null) next.stock_anchor = existing.stock_anchor;
           if (field === "subscriptionPayments") {
             next.status = existing?.status ?? "pending";
             if (existing) { next.reviewed_at = existing.reviewed_at; next.note = existing.note; }

@@ -20,6 +20,9 @@ import { ownerPackage, businessFeatures, storeCreationReason, PLAN_PRICE, PLAN_L
 import { retailStock, retailUnitCost, type TradeUnit } from "./retail-stock";
 import { voucherTotal, validPercent } from "./costing-rules";
 import { normalizePack } from "./pack-units";
+import { scalePotRecipe, type CookedPotRecipe, type FrozenIngredient } from "./pot-recipes";
+import { applyRawChanges, rawStock, type RawStockMovement } from "./raw-stock";
+export type { CookedPotRecipe } from "./pot-recipes";
 export { PLAN_PRICE, PLAN_LABEL, PLAN_FEATURES, type SubscriptionPlan } from "./subscription-rules";
 
 export type Role = "customer" | "staff";
@@ -462,6 +465,8 @@ export type RawMaterial = {
   category: string;
   unit: "kg" | "liters" | "pcs";
   stock: number;
+  stock_anchor?: number;
+  updated_at?: number;
   avg_cost: number;
   low_threshold: number;
   /** Wholesale pack the supplier delivers in, e.g. crate of 25 bottles. */
@@ -497,6 +502,15 @@ export type CookedCommodityBatch = {
   active: boolean;
   updated_at?: number;
   carried_from?: string;
+  recipe_id?: string;
+  recipe_name?: string;
+  base_quantity?: number;
+  ingredients_snapshot?: FrozenIngredient[];
+  raw_cost?: number | null;
+  unit_cost?: number | null;
+  estimated_extra?: number;
+  estimated_unit_cost?: number | null;
+  produced_by?: string;
 };
 
 export type StandardPortion = "full" | "half" | "side" | "custom";
@@ -679,6 +693,10 @@ type Ctx = {
   transactions: Transaction[]; // filtered
   cart: CartItem[];
   rawMaterials: RawMaterial[];
+  cookedPotRecipes: CookedPotRecipe[];
+  rawStockMovements: RawStockMovement[];
+  saveCookedPotRecipe: (input: Omit<CookedPotRecipe, "id" | "store_id" | "updated_at"> & { id?: string }) => Ok<CookedPotRecipe> | Fail;
+  cookPotRecipe: (recipe_id: string, quantity: number, operation_id: string) => Ok<CookedCommodityBatch> | Fail;
   batches: CookingBatch[];
   cookedCommodityBatches: CookedCommodityBatch[];
   menuPortionMappings: MenuPortionMapping[];
@@ -977,7 +995,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedCanteenId, setSelectedCanteenId] = useState<string | null>(null);
 
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [rawInventory, setRawInventory] = useState<{ materials: RawMaterial[]; movements: RawStockMovement[] }>({ materials: [], movements: [] });
+  const rawInventoryRef = useRef(rawInventory);
+  rawInventoryRef.current = rawInventory;
+  const rawStockMovements = rawInventory.movements;
+  const rawMaterials = useMemo(() => rawInventory.materials.map((r) => ({ ...r, stock: rawStock(r, rawInventory.movements) })), [rawInventory]);
+  const setRawMaterials = useCallback((change: RawMaterial[] | ((prev: RawMaterial[]) => RawMaterial[]), operation_id = crypto.randomUUID()) => {
+    const before = rawInventoryRef.current;
+    const visible = before.materials.map((r) => ({ ...r, stock: rawStock(r, before.movements) }));
+    const next = typeof change === "function" ? change(visible) : change;
+    const updated = applyRawChanges(visible, next, before.movements, operation_id, Date.now(), currentUserId ?? undefined);
+    rawInventoryRef.current = updated;
+    setRawInventory(updated);
+  }, [currentUserId]);
+  const [cookedPotRecipes, setCookedPotRecipes] = useState<CookedPotRecipe[]>([]);
+  const productionOps = useRef(new Map<string, CookedCommodityBatch>());
   const [batches, setBatches] = useState<CookingBatch[]>([]);
   const [cookedCommodityBatches, setCookedCommodityBatches] = useState<CookedCommodityBatch[]>([]);
   const [menuPortionMappings, setMenuPortionMappings] = useState<MenuPortionMapping[]>([]);
@@ -1067,13 +1099,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---- Offline-first snapshot sync (localStorage ⇄ Postgres) -------------
   const snapshot = useMemo(
     () => ({
-      profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
+      profiles, products, orders, transactions, rawMaterials, rawStockMovements, cookedPotRecipes, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
       purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
       smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
       tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments, safeMovements,
       adminAuditLog, subscriptionPayments, receiptSeq,
     }),
-    [profiles, products, orders, transactions, rawMaterials, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
+    [profiles, products, orders, transactions, rawMaterials, rawStockMovements, cookedPotRecipes, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, wastage,
      purchases, expenses, treasuries, shifts, activeShiftId, pendingSales,
      smsLogs, notifications, topUpRequests, customDishRequests, payLaterRequests, menuAudits, stores, tickets,
      tableAssignments, commissionPayouts, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments, safeMovements,
@@ -1087,7 +1119,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (s.products) setProducts(s.products);
     if (s.orders) setOrders(s.orders);
     if (s.transactions) setTransactions(s.transactions);
-    if (s.rawMaterials) setRawMaterials(s.rawMaterials);
+    if (s.rawMaterials) {
+      const restored = { materials: s.rawMaterials, movements: s.rawStockMovements ?? [] };
+      rawInventoryRef.current = restored;
+      setRawInventory(restored);
+    }
+    setCookedPotRecipes(s.cookedPotRecipes ?? []);
     if (s.batches) setBatches(s.batches);
     if (s.cookedCommodityBatches) setCookedCommodityBatches(s.cookedCommodityBatches);
     if (s.menuPortionMappings) setMenuPortionMappings(s.menuPortionMappings);
@@ -1330,6 +1367,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setBatches((prev) => {
       const taken: Record<string, number> = {};
       for (const it of items) {
+        if (menuPortionMappings.some((m) => m.store_id === sid && m.product_id === it.product_id)) continue;
         let remaining = it.qty;
         const order = prev
           .map((b, idx) => ({ b, idx }))
@@ -1605,6 +1643,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     orders: scopedOrders, transactions: scopedTx, cart,
     rawMaterials: scopedRaw, batches: scopedBatches,
+    cookedPotRecipes: cookedPotRecipes.filter((r) => r.store_id === currentStoreId),
+    rawStockMovements: rawStockMovements.filter((r) => r.store_id === currentStoreId),
     cookedCommodityBatches: currentStoreId ? cookedCommodityBatches.filter((b) => b.store_id === currentStoreId) : [],
     menuPortionMappings: currentStoreId ? menuPortionMappings.filter((m) => m.store_id === currentStoreId) : [],
     cookedCommodityUsages: currentStoreId ? cookedCommodityUsages.filter((u) => u.store_id === currentStoreId) : [],
@@ -2308,18 +2348,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBatches((prev) => [batch, ...prev]);
       return batch;
     },
+    saveCookedPotRecipe(input) {
+      if (!currentStoreId || !can("inventory.edit") || isRetail(store?.business_type)) return { ok: false, reason: "Only a supervisor or owner can edit recipes" };
+      const existing = input.id ? cookedPotRecipes.find((r) => r.id === input.id && r.store_id === currentStoreId) : undefined;
+      if (input.id && !existing) return { ok: false, reason: "Recipe not found" };
+      const recipe: CookedPotRecipe = { ...input, id: existing?.id ?? crypto.randomUUID(), store_id: currentStoreId, name: input.name.trim(), updated_at: Date.now() };
+      const preview = scalePotRecipe({ ...recipe, archived_at: undefined }, 1, rawMaterials, false);
+      if (!preview.ok) return preview;
+      if (cookedPotRecipes.some((r) => r.id !== recipe.id && !r.archived_at && r.store_id === currentStoreId && r.name.toLowerCase() === recipe.name.toLowerCase())) return { ok: false, reason: "A recipe with this name already exists" };
+      if (existing && cookedCommodityBatches.some((b) => b.recipe_id === existing.id) && (existing.name !== recipe.name || existing.output_unit !== recipe.output_unit)) return { ok: false, reason: "Used recipe name and output unit cannot change" };
+      const ingredients = preview.value.ingredients.map((i) => ({ raw_id: i.raw_id, unit: i.unit, qty_per_base_unit: i.qty }));
+      const saved = { ...recipe, ingredients };
+      setCookedPotRecipes((prev) => [...prev.filter((r) => r.id !== saved.id), saved]);
+      return { ok: true, value: saved };
+    },
+    cookPotRecipe(recipe_id, quantity, operation_id) {
+      if (!currentStoreId || !currentUser || isRetail(store?.business_type) || (!can("inventory.edit") && !can("kitchen.produce"))) return { ok: false, reason: "Not allowed" };
+      if (!/^[0-9a-f-]{36}$/i.test(operation_id)) return { ok: false, reason: "Invalid production reference" };
+      const previous = productionOps.current.get(operation_id) ?? cookedCommodityBatches.find((b) => b.id === operation_id);
+      if (previous) return previous.store_id === currentStoreId ? { ok: true, value: previous } : { ok: false, reason: "Not allowed" };
+      const recipe = cookedPotRecipes.find((r) => r.id === recipe_id && r.store_id === currentStoreId && !r.archived_at);
+      if (!recipe) return { ok: false, reason: "Recipe not found" };
+      const current = rawInventoryRef.current;
+      const stock = current.materials.map((r) => ({ ...r, stock: rawStock(r, current.movements) }));
+      const plan = scalePotRecipe(recipe, quantity, stock);
+      if (!plan.ok) return plan;
+      const now = Date.now(), v = plan.value;
+      const batch: CookedCommodityBatch = { id: operation_id, store_id: currentStoreId, name: recipe.name, unit: recipe.output_unit,
+        initial_quantity: v.output, remaining_quantity: v.output, active: true, created_at: now, recipe_id, recipe_name: recipe.name,
+        base_quantity: quantity, ingredients_snapshot: v.ingredients, raw_cost: v.raw_cost, unit_cost: v.unit_cost,
+        estimated_extra: v.estimated_extra, estimated_unit_cost: v.estimated_unit_cost, produced_by: currentUser.id };
+      productionOps.current.set(operation_id, batch);
+      const used = new Map(v.ingredients.map((i) => [i.raw_id, i.qty]));
+      setRawMaterials((prev) => prev.map((r) => used.has(r.id) ? { ...r, stock: r.stock - (used.get(r.id) ?? 0) } : r), operation_id);
+      setCookedCommodityBatches((prev) => prev.some((b) => b.id === batch.id) ? prev : [batch, ...prev]);
+      return { ok: true, value: batch };
+    },
     createCookedCommodityBatch({ raw_material_id, raw_quantity, name, unit, quantity }) {
       if (!currentStoreId) return { ok: false, reason: "No store context" };
       if (!can("inventory.edit") && !can("kitchen.produce")) return { ok: false, reason: "Only kitchen staff, a supervisor or owner can log cooked pots" };
       const cleanName = name.trim();
-      if (!cleanName || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
+      if (cookedPotRecipes.some((r) => r.store_id === currentStoreId && !r.archived_at && r.name.toLowerCase() === cleanName.toLowerCase())) return { ok: false, reason: "Use the saved recipe to cook this item" };
+      if (!cleanName || !Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
       if (raw_material_id) {
         const raw = rawMaterials.find((r) => r.id === raw_material_id && r.store_id === currentStoreId);
         if (!raw) return { ok: false, reason: "Raw material not found" };
         // Raw used may differ from portions cooked (e.g. 10 kg beans -> 70 plates); legacy callers pass none.
         const rawUsed = raw_quantity ?? (raw.unit === unit ? quantity : 0);
         if (raw_quantity === undefined && raw.unit !== unit) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
-        if (!(rawUsed > 0)) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
+        if (!Number.isFinite(rawUsed) || !(rawUsed > 0)) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
         if (raw.stock < rawUsed) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
         setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - rawUsed } : r));
       }
@@ -2405,7 +2482,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         kind: "waste", source_usage_id: usage_id, reason: "Carry-over discarded" });
       setCookedCommodityUsages((prev) => [...rows.filter((r) => !prev.some((u) => u.id === r.id)), ...prev]);
       if (disposition === "sell") {
-        const fresh: CookedCommodityBatch = { id: `carry:${usage_id}`, store_id: currentStoreId, name: batch.name, unit: batch.unit,
+        const fresh: CookedCommodityBatch = { ...batch, id: `carry:${usage_id}`, store_id: currentStoreId, name: batch.name, unit: batch.unit,
           initial_quantity: source.quantity, remaining_quantity: source.quantity, created_at: now, active: true, carried_from: usage_id };
         // No new production or raw deduction: these portions were cooked yesterday.
         setCookedCommodityBatches((prev) => prev.some((b) => b.id === fresh.id) ? prev : [fresh, ...prev]);
@@ -2593,7 +2670,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!currentStoreId) return fromPlates;
       const fromPots = platesFromPots(product_id, menuPortionMappings, potTotals(cookedCommodityBatches, cookedCommodityUsages, currentStoreId), currentStoreId);
       if (fromPots === null) return fromPlates;
-      return fromPlates === null ? fromPots : fromPlates + fromPots;
+      return fromPots;
     },
     openShift(opening_float) {
       if (!currentUser || currentUser.role !== "staff" || !currentStoreId) return null;
@@ -3485,7 +3562,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (s.expires_at < Date.now()) return true;
       return false;
     },
-  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, archivedProducts, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments, safeMovements]);
+  }), [currentUser, sessionReady, canteenGroups, orgOfCurrent, profiles, scopedProfiles, scopedProducts, scopedOrders, scopedTx, cart, scopedRaw, scopedBatches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, scopedWaste, scopedPurchases, scopedExpenses, cash, bank, receiptSeq, scopedShifts, activeShift, scopedPending, scopedSms, scopedNotifs, scopedRequests, scopedCustomDishes, customDishRequests, isOnline, sync, store, stores, currentStoreId, hasOwner, LOW_BALANCE_THRESHOLD, hasStaffRole, can, _executePosSale, _executeCashSale, archivedProducts, pushNudgeIfLow, pushNotification, tickets, scopedTickets, superAdminSignedIn, adminAuditLog, subscriptionPayments, treasuries, orders, batches, products, rawMaterials, rawStockMovements, cookedPotRecipes, setRawMaterials, pendingSales, adjustBank, adjustCash, activeStoreId, transactions, topUpRequests, purchases, expenses, wastage, shifts, notifications, menuAudits, payLaterRequests, scopedTables, scopedPayouts, commissionPayouts, tableAssignments, setTableAssignments, openBills, vendors, vendorPayments, fundTransfers, staffDebtPayments, safeMovements]);
 
   // ---- Nightly commission payout run -------------------------------------
   // Once a day (first staff session after midnight) yesterday's commission is

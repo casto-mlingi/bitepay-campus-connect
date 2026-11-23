@@ -1,9 +1,13 @@
+import { potRemaining } from "./cooked-availability";
+import { pendingCarryOvers } from "./pot-closure";
 /** Read-only FIFO reconstruction for legacy hospitality sales; never edits stock. */
 type Batch = { id: string; product_id: string; plates: number; plates_remaining: number; unit_cost: number; created_at: number };
 type Sale = { id: string; created_at: number; items: { product_id: string; qty: number }[]; cost_amount?: number; is_reversal?: boolean; reversal_of?: string };
 export type SaleCost = { id: string; date: number; amount: number };
 
-export function hospitalityCosting(orders: Sale[], batches: Batch[]) {
+type Pot = { id: string; initial_quantity: number; active: boolean; unit_cost?: number | null };
+type Usage = { id: string; batch_id: string; order_id: string; product_id: string; quantity: number; created_at: number; kind?: "sale" | "waste" | "carry_over" | "carry_over_release"; source_usage_id?: string; closes_batch?: boolean };
+export function hospitalityCosting(orders: Sale[], batches: Batch[], pots: Pot[] = [], usages: Usage[] = []) {
   const stock = batches.slice().sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id))
     .map((b) => ({ ...b, available: Math.max(0, b.plates) }));
   const allocations = new Map<string, { batch: typeof stock[number]; qty: number }[]>();
@@ -21,6 +25,17 @@ export function hospitalityCosting(orders: Sale[], batches: Batch[]) {
     } else {
       const draws: { batch: typeof stock[number]; qty: number }[] = [];
       for (const item of order.items) {
+        const potDraws = usages.filter((u) => u.order_id === order.id && u.product_id === item.product_id && (!u.kind || u.kind === "sale"));
+        if (potDraws.length) {
+          let incomplete = false;
+          for (const u of potDraws) {
+            const pot = pots.find((p) => p.id === u.batch_id);
+            if (pot?.unit_cost == null) incomplete = true;
+            else amount += u.quantity * pot.unit_cost;
+          }
+          if (incomplete && order.cost_amount == null) uncostedQuantity += Math.max(0, item.qty);
+          continue; // Actual pot usage wins over reconstructed dish batches, never add both.
+        }
         let remaining = Math.max(0, item.qty);
         for (const batch of stock) {
           if (batch.product_id !== item.product_id || batch.created_at > order.created_at || batch.available <= 0) continue;
@@ -40,8 +55,13 @@ export function hospitalityCosting(orders: Sale[], batches: Batch[]) {
     costs.set(order.id, amount);
     entries.push({ id: order.id, date: order.created_at, amount });
   }
+  const pending = pendingCarryOvers(usages);
+  const potInventory = pots.reduce((sum, p) => sum + potRemaining(p, usages) * (p.unit_cost ?? 0), 0)
+    + pending.reduce((sum, u) => sum + u.quantity * (pots.find((p) => p.id === u.batch_id)?.unit_cost ?? 0), 0);
+  const wasteEntries = usages.filter((u) => u.kind === "waste").map((u) => ({ id: u.id, date: u.created_at, amount: Math.round(u.quantity * (pots.find((p) => p.id === u.batch_id)?.unit_cost ?? 0)) }));
   return {
+    wasteEntries, wasteCost: wasteEntries.reduce((n, e) => n + e.amount, 0),
     cogs: entries.reduce((sum, e) => sum + e.amount, 0), entries, uncostedQuantity,
-    inventoryValue: Math.round(batches.reduce((sum, b) => sum + Math.max(0, b.plates_remaining) * b.unit_cost, 0)),
+    inventoryValue: Math.round(potInventory + batches.reduce((sum, b) => sum + Math.max(0, b.plates_remaining) * b.unit_cost, 0)),
   };
 }
