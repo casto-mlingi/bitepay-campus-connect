@@ -75,11 +75,11 @@ function FinancePage() {
   );
 
   const grossRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
-  const recognizedExpenses = retail ? expenses : [...expenses, ...hospitality.wasteEntries.filter((e) => e.amount > 0).map((e) => ({ id: e.id, store_id: store?.id ?? "", date: e.date, category: "other" as const, amount: e.amount, description: "Cooked food wastage", payment_method: "cash" as const }))];
+  const wasteEntries = retail ? [] : hospitality.wasteEntries;
   const costEntries = retail ? orders.map((o) => ({ id: o.id, date: o.created_at, amount: o.cost_amount ?? Math.round(o.items.reduce((sum, i) => { const p = products.find((p) => p.id === i.product_id); return sum + (p ? retailUnitCost(p, purchases) * i.qty : 0); }, 0)) })) : hospitality.entries;
   const cogs = retail ? costEntries.reduce((sum, e) => sum + e.amount, 0) : hospitality.cogs;
   const grossProfit = grossRevenue - cogs;
-  const opex = expenses.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
+  const opex = expenses.reduce((s, e) => s + e.amount, 0) + wasteEntries.reduce((s, e) => s + e.amount, 0) + orders.reduce((s, o) => s + (o.loyalty_earned ?? 0), 0);
   const netProfit = grossProfit - opex;
 
   if (!currentUser || currentUser.role !== "staff" || !hasStaffRole("supervisor")) return null;
@@ -123,7 +123,7 @@ function FinancePage() {
       {tab === "safe" && <SafeCustodyPanel />}
       {tab === "expenses" && <Expenses onSubmit={recordExpense} />}
       {tab === "journal" && <Journal
-        orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries}
+        orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries} wasteEntries={wasteEntries}
         cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
         walletReceivables={profiles.filter((p) => p.role === "customer").reduce((sum, p) => sum + Math.max(0, -p.wallet_balance), 0)}
         walletPayouts={transactions.filter((t) => t.wallet_payout)} walletTopups={transactions.filter((t) => t.type === "topup")} fundTransfers={fundTransfers}
@@ -131,7 +131,7 @@ function FinancePage() {
       {tab === "books" && !features.fullAccounting && <p className="mb-4 border-y py-3 text-sm text-muted-foreground">Full accounting is included in Business Pro. Existing financial records remain readable below.</p>}
       {tab === "books" && (
         <Books
-          orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries}
+          orders={orders} purchases={purchases} vendorPayments={vendorPayments} expenses={expenses} cogs={cogs} costEntries={costEntries} wasteEntries={wasteEntries}
           cash={cash} bank={bank} walletLiabilities={walletLiabilities} inventoryValue={totalInventoryValue}
           walletReceivables={profiles.filter((p) => p.role === "customer").reduce((s, p) => s + Math.max(0, -p.wallet_balance), 0)}
           walletPayouts={transactions.filter((t) => t.wallet_payout)}

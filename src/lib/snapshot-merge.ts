@@ -9,6 +9,7 @@
  * contains everybody's work with no user decision required.
  */
 
+import { rawStock, type AnchoredRaw, type RawStockMovement } from "./raw-stock";
 type Row = Record<string, unknown> & { id?: unknown };
 
 const TIME_FIELDS = [
@@ -67,6 +68,9 @@ export function mergeSnapshots<T>(local: T, remote: T): T {
     if (Array.isArray(lv) && Array.isArray(rv)) out[k] = mergeArrays(lv, rv);
     else if (typeof lv === "number" && typeof rv === "number") out[k] = Math.max(lv, rv);
     else if (lv !== undefined && lv !== null) out[k] = lv;
+  }
+  if (Array.isArray(out.rawMaterials) && Array.isArray(out.rawStockMovements)) {
+    out.rawMaterials = (out.rawMaterials as AnchoredRaw[]).map((r) => ({ ...r, stock: rawStock(r, out.rawStockMovements as RawStockMovement[]) }));
   }
   return out as T;
 }

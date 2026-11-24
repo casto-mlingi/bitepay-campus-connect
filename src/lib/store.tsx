@@ -1000,7 +1000,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   rawInventoryRef.current = rawInventory;
   const rawStockMovements = rawInventory.movements;
   const rawMaterials = useMemo(() => rawInventory.materials.map((r) => ({ ...r, stock: rawStock(r, rawInventory.movements) })), [rawInventory]);
-  const setRawMaterials = useCallback((change: RawMaterial[] | ((prev: RawMaterial[]) => RawMaterial[]), operation_id = crypto.randomUUID()) => {
+  const setRawMaterials = useCallback((change: RawMaterial[] | ((prev: RawMaterial[]) => RawMaterial[]), operation_id: string = crypto.randomUUID()) => {
     const before = rawInventoryRef.current;
     const visible = before.materials.map((r) => ({ ...r, stock: rawStock(r, before.movements) }));
     const next = typeof change === "function" ? change(visible) : change;
@@ -2352,14 +2352,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!currentStoreId || !can("inventory.edit") || isRetail(store?.business_type)) return { ok: false, reason: "Only a supervisor or owner can edit recipes" };
       const existing = input.id ? cookedPotRecipes.find((r) => r.id === input.id && r.store_id === currentStoreId) : undefined;
       if (input.id && !existing) return { ok: false, reason: "Recipe not found" };
-      const recipe: CookedPotRecipe = { ...input, id: existing?.id ?? crypto.randomUUID(), store_id: currentStoreId, name: input.name.trim(), updated_at: Date.now() };
+      const recipe: CookedPotRecipe = { ...input, id: input.archived_at && existing ? existing.id : crypto.randomUUID(), store_id: currentStoreId, name: input.name.trim(), updated_at: Date.now() };
       const preview = scalePotRecipe({ ...recipe, archived_at: undefined }, 1, rawMaterials, false);
       if (!preview.ok) return preview;
-      if (cookedPotRecipes.some((r) => r.id !== recipe.id && !r.archived_at && r.store_id === currentStoreId && r.name.toLowerCase() === recipe.name.toLowerCase())) return { ok: false, reason: "A recipe with this name already exists" };
+      if (cookedPotRecipes.some((r) => r.id !== existing?.id && !r.archived_at && r.store_id === currentStoreId && r.name.toLowerCase() === recipe.name.toLowerCase())) return { ok: false, reason: "A recipe with this name already exists" };
       if (existing && cookedCommodityBatches.some((b) => b.recipe_id === existing.id) && (existing.name !== recipe.name || existing.output_unit !== recipe.output_unit)) return { ok: false, reason: "Used recipe name and output unit cannot change" };
       const ingredients = preview.value.ingredients.map((i) => ({ raw_id: i.raw_id, unit: i.unit, qty_per_base_unit: i.qty }));
       const saved = { ...recipe, ingredients };
-      setCookedPotRecipes((prev) => [...prev.filter((r) => r.id !== saved.id), saved]);
+      setCookedPotRecipes((prev) => [...prev.filter((r) => r.id !== saved.id).map((r) => r.id === existing?.id ? { ...r, archived_at: recipe.updated_at, updated_at: recipe.updated_at } : r), saved]);
       return { ok: true, value: saved };
     },
     cookPotRecipe(recipe_id, quantity, operation_id) {
@@ -2390,6 +2390,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const cleanName = name.trim();
       if (cookedPotRecipes.some((r) => r.store_id === currentStoreId && !r.archived_at && r.name.toLowerCase() === cleanName.toLowerCase())) return { ok: false, reason: "Use the saved recipe to cook this item" };
       if (!cleanName || !Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: "Enter an item and cooked quantity" };
+      const operationId = crypto.randomUUID();
+      let legacyIngredients: FrozenIngredient[] | undefined;
       if (raw_material_id) {
         const raw = rawMaterials.find((r) => r.id === raw_material_id && r.store_id === currentStoreId);
         if (!raw) return { ok: false, reason: "Raw material not found" };
@@ -2398,11 +2400,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (raw_quantity === undefined && raw.unit !== unit) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
         if (!Number.isFinite(rawUsed) || !(rawUsed > 0)) return { ok: false, reason: `Enter how many ${raw.unit} of ${raw.name} were used` };
         if (raw.stock < rawUsed) return { ok: false, reason: `Not enough ${raw.name} in raw stock` };
-        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - rawUsed } : r));
+        legacyIngredients = [{ raw_id: raw.id, name: raw.name, unit: raw.unit, qty: rawUsed, unit_cost: raw.avg_cost > 0 ? raw.avg_cost : null }];
+        setRawMaterials((prev) => prev.map((r) => r.id === raw.id ? { ...r, stock: r.stock - rawUsed } : r), operationId);
       }
       const now = Date.now();
       const batch: CookedCommodityBatch = {
-        id: `CB-${now}-${Math.random().toString(36).slice(2, 7)}`, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
+        id: operationId, store_id: currentStoreId, raw_material_id, name: cleanName, unit,
+        ingredients_snapshot: legacyIngredients, produced_by: currentUser?.id,
         initial_quantity: quantity, remaining_quantity: quantity, created_at: now, active: true,
       };
       // Extra pots add to what is left; older pots are used first and stay open until empty or closed.

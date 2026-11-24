@@ -64,6 +64,7 @@ export function buildLedger(input: {
   fundTransfers?: { id: string; amount: number; from: "cash" | "bank"; created_at: number }[];
   cogs: number; cash: number; bank: number; walletLiabilities: number; inventoryValue: number; walletReceivables?: number;
   costEntries?: { id: string; date: number; amount: number }[];
+  wasteEntries?: { id: string; date: number; amount: number }[];
 }): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
   for (const t of input.fundTransfers ?? []) entries.push({ id: `transfer-${t.id}`, date: t.created_at, memo: "Cash / bank transfer", source: "payment", lines: [dr(t.from === "cash" ? "1010" : "1000", t.amount), cr(t.from === "cash" ? "1000" : "1010", t.amount)] });
@@ -86,6 +87,7 @@ export function buildLedger(input: {
     const acct = x.payment_method === "bank" ? "1010" : "1000";
     entries.push({ id: `exp-${x.id}`, date: x.date, memo: `${x.category}${x.description ? ` · ${x.description}` : ""}`, source: "expense", lines: [dr("6000", x.amount), cr(acct, x.amount)] });
   }
+  for (const waste of input.wasteEntries ?? []) if (tzs(waste.amount)) entries.push({ id: `waste-${waste.id}`, date: waste.date, memo: "Cooked food wastage", source: "adjustment", lines: [dr("6000", waste.amount), cr("1200", waste.amount)] });
   if (input.costEntries) {
     for (const cost of input.costEntries) if (tzs(cost.amount)) entries.push({ id: `cogs-${cost.id}`, date: cost.date, memo: `Cost of goods sold · ${cost.id}`, source: "sale", lines: [dr("5000", cost.amount), cr("1200", cost.amount)] });
   } else if (tzs(input.cogs)) entries.push({ id: "cogs", date: Date.now(), memo: "Cost of goods sold", source: "adjustment", lines: [dr("5000", input.cogs), cr("1200", input.cogs)] });

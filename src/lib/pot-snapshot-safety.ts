@@ -29,10 +29,21 @@ export function validatePotSnapshot(previous: Data, incoming: Data, userId: stri
     const old = rows(previous, "cookedCommodityBatches").find((x) => x['id'] === r['id']);
     const frozen = ["recipe_id", "ingredients_snapshot", "raw_cost", "unit_cost", "base_quantity", "estimated_extra", "estimated_unit_cost", "initial_quantity", "name", "unit", "produced_by", "carried_from"];
     if (old) {
-      if ((old['recipe_id'] || r['recipe_id']) && frozen.some((k) => !equal(old[k], r[k]))) throw new Error("Historical production costs cannot change");
+      if ((old['recipe_id'] || r['recipe_id'] || old['ingredients_snapshot']) && frozen.some((k) => !equal(old[k], r[k]))) throw new Error("Historical production costs cannot change");
       continue;
     }
-    if (!r['recipe_id']) continue; // legacy pots retain unknown costs
+    if (!r['recipe_id']) {
+      if (r['ingredients_snapshot']) {
+        if (!producer(String(r['store_id'])) || r['produced_by'] !== userId) throw new Error("Invalid legacy production evidence");
+        const ingredients = r['ingredients_snapshot'] as { raw_id: string; qty: number }[];
+        if (ingredients.length !== 1 || ingredients[0]?.raw_id !== r['raw_material_id']) throw new Error("Invalid legacy production evidence");
+        for (const i of ingredients) {
+          const movement = scoped("rawStockMovements").find((m) => m['id'] === `${r['id']}:${i.raw_id}`);
+          if (!Number.isFinite(i.qty) || i.qty <= 0 || movement?.['quantity'] !== -i.qty) throw new Error("Production ingredient deduction is missing");
+        }
+      }
+      continue; // legacy pots retain unknown costs
+    }
     if (!producer(String(r['store_id']))) throw new Error("Only kitchen staff or managers can produce pots");
     if (r['carried_from']) {
       const source = [...rows(previous, "cookedCommodityUsages"), ...rows(incoming, "cookedCommodityUsages")].find((x) => x['id'] === r['carried_from'] && x['kind'] === "carry_over" && x['store_id'] === r['store_id']);

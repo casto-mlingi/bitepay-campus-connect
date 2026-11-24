@@ -36,3 +36,27 @@ it("saved cost takes precedence and missing history is flagged, not fabricated",
 it("future batches cannot supply costs to an older sale", () => {
   assert.equal(hospitalityCosting([sale], [{ ...batch, created_at: 3 }]).uncostedQuantity, 50);
 });
+const pot = { id: "pot", store_id: "s", name: "Beans", unit: "pcs", active: true, initial_quantity: 30, unit_cost: 360 };
+const draw = { id: "u", batch_id: "pot", product_id: "p", order_id: "s", quantity: 5, created_at: 2 };
+it("actual pot usage costs 1,800 without adding legacy dish batch cost", () => {
+  const result = hospitalityCosting([{ ...sale, items: [{ product_id: "p", qty: 5 }] }], [batch], [pot], [draw]);
+  assert.equal(result.cogs, 1800); assert.equal(result.uncostedQuantity, 0);
+});
+it("waste and carry-over remain separate from sold costs", () => {
+  const waste = { ...draw, id: "w", kind: "waste" as const, quantity: 5, closes_batch: true };
+  const carry = { ...draw, id: "c", kind: "carry_over" as const, quantity: 20 };
+  const result = hospitalityCosting([sale], [], [pot], [draw, waste, carry]);
+  assert.equal(result.cogs, 1800); assert.equal(result.wasteCost, 1800); assert.equal(result.inventoryValue, 7200);
+});
+it("released carry-over retains original cost without counting stored stock twice", () => {
+  const carry = { ...draw, id: "c", kind: "carry_over" as const, quantity: 25, closes_batch: true };
+  const release = { ...draw, id: "release", kind: "carry_over_release" as const, source_usage_id: "c", quantity: 0 };
+  const result = hospitalityCosting([sale], [], [pot, { ...pot, id: "next", initial_quantity: 25 }], [draw, carry, release]);
+  assert.equal(result.inventoryValue, 9000); assert.equal(result.cogs, 1800);
+});
+it("unknown legacy pot costs are flagged and refunds reverse frozen costs", () => {
+  const missing = hospitalityCosting([{ ...sale, items: [{ product_id: "p", qty: 5 }] }], [batch], [{ ...pot, unit_cost: undefined }], [draw]);
+  assert.equal(missing.cogs, 0); assert.equal(missing.uncostedQuantity, 5);
+  const refund = { ...sale, id: "refund", is_reversal: true, reversal_of: "s", created_at: 3, items: [{ product_id: "p", qty: -5 }] };
+  assert.equal(hospitalityCosting([sale, refund], [], [pot], [draw]).cogs, 0);
+});

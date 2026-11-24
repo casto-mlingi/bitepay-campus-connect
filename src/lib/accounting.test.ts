@@ -3,6 +3,13 @@ import { strict as assert } from "node:assert";
 import { buildLedger, isBalanced, saleEntry, trialBalance } from "./accounting";
 
 const base = { purchases: [], expenses: [], cogs: 0, walletLiabilities: 0, inventoryValue: 0 };
+it("cooked waste reduces inventory and profit, never cash or bank", () => {
+  const e = buildLedger({ ...base, orders: [], cash: 0, bank: 0, wasteEntries: [{ id: "w", date: 1, amount: 1800 }] }).find((e) => e.id === "waste-w");
+  assert.ok(e); if (!e) return;
+  assert.equal(e.lines.find((l) => l.account === "6000")?.debit, 1800);
+  assert.equal(e.lines.find((l) => l.account === "1200")?.credit, 1800);
+  assert.equal(e.lines.some((l) => l.account === "1000" || l.account === "1010"), false); assert.ok(isBalanced(e));
+});
 
 it("sold-stock costs post once at sale dates and refunds reverse the same cost", () => {
   const entries = buildLedger({ ...base, orders: [], cash: 0, bank: 0, cogs: 0, costEntries: [{ id: "s", date: 2, amount: 250000 }, { id: "r", date: 3, amount: -250000 }] });

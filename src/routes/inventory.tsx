@@ -18,6 +18,8 @@ import { StaffShell } from "@/components/staff-shell";
 import { DishImagePicker } from "@/components/dish-image-picker";
 import { ListFilter, useListFilter } from "@/components/list-filter";
 import { ItemBulkTools, Pager } from "@/components/item-bulk-tools";
+import { PotRecipeEditor } from "@/components/pot-recipe-editor";
+import { PotRecipeCook } from "@/components/pot-recipe-cook";
 
 
 
@@ -672,7 +674,7 @@ function MenuPanel() {
 /* ────────────── Cooking Batches ────────────── */
 function BatchesPanel() {
   const {
-    rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages,
+    rawMaterials, products, batches, cookedCommodityBatches, menuPortionMappings, cookedCommodityUsages, cookedPotRecipes,
     createBatch, updateBatch, deleteBatch, createCookedCommodityBatch,
     setProductPortionMappings, logCookedCommodityWaste, store,
   } = useStore();
@@ -754,6 +756,8 @@ function BatchesPanel() {
           <h2 className="font-bold text-lg">Shared Cooked Stock</h2>
           <p className="text-sm text-muted-foreground">Track one cooked item across several dishes using standard full, half, or side portions.</p>
         </div>
+        <PotRecipeEditor />
+        <PotRecipeCook />
         <div className="grid lg:grid-cols-2 gap-4">
           <form className="border rounded-lg p-4 space-y-3" onSubmit={(e) => {
             e.preventDefault();
@@ -792,10 +796,11 @@ function BatchesPanel() {
               </select>
               <select required value={portion.commodityName} onChange={(e) => {
                 const batch = cookedCommodityBatches.find((b) => b.name === e.target.value);
-                setPortion({ ...portion, commodityName: e.target.value, unit: batch?.unit ?? portion.unit });
+                const recipe = cookedPotRecipes.find((r) => !r.archived_at && r.name === e.target.value);
+                setPortion({ ...portion, commodityName: e.target.value, unit: recipe?.output_unit ?? batch?.unit ?? portion.unit });
               }} className="h-10 rounded-lg border bg-background px-3 text-sm">
                 <option value="">Choose cooked item</option>
-                {[...new Set(cookedCommodityBatches.map((b) => b.name))].map((name) => <option key={name} value={name}>{name}</option>)}
+                {[...new Set([...cookedCommodityBatches.map((b) => b.name), ...cookedPotRecipes.filter((r) => !r.archived_at).map((r) => r.name)])].map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
               <select value={portion.portion} onChange={(e) => setPortion({ ...portion, portion: e.target.value as StandardPortion })} className="h-10 rounded-lg border bg-background px-3 text-sm">
                 <option value="full">Full</option><option value="half">Half</option><option value="side">Side</option><option value="custom">Custom</option>

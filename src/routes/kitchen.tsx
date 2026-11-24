@@ -10,6 +10,7 @@ import { KitchenDisposalSummary } from "@/components/kitchen-disposal-summary";
 import { pendingCarryOvers, isNextKitchenDay } from "@/lib/pot-closure";
 import { potRemaining } from "@/lib/cooked-availability";
 import { useT } from "@/lib/i18n";
+import { PotRecipeCook } from "@/components/pot-recipe-cook";
 
 export const Route = createFileRoute("/kitchen")({
   component: KitchenPage,
@@ -26,7 +27,7 @@ type Unit = "kg" | "liters" | "pcs";
 
 function KitchenPage() {
   const { currentUser, sessionReady, can, cookedCommodityBatches, cookedCommodityUsages, rawMaterials, orders,
-    store, releaseCookedCarryOver, createCookedCommodityBatch, logCookedCommodityWaste } = useStore();
+    store, cookedPotRecipes, releaseCookedCarryOver, createCookedCommodityBatch, logCookedCommodityWaste } = useStore();
   const { t } = useT();
   const navigate = useNavigate();
   const [closeId, setCloseId] = useState<string | null>(null);
@@ -61,8 +62,8 @@ function KitchenPage() {
   const knownPots = useMemo(() => {
     const m = new Map<string, { name: string; unit: Unit }>();
     for (const b of [...cookedCommodityBatches].sort((a, c) => c.created_at - a.created_at)) if (!m.has(b.name.toLowerCase())) m.set(b.name.toLowerCase(), { name: b.name, unit: b.unit });
-    return [...m.values()];
-  }, [cookedCommodityBatches]);
+    return [...m.values()].filter((p) => !cookedPotRecipes.some((r) => !r.archived_at && r.name.toLowerCase() === p.name.toLowerCase()));
+  }, [cookedCommodityBatches, cookedPotRecipes]);
   const pickPreset = (name: string, unit: Unit) => {
     const pr = presets[name.toLowerCase()];
     setForm({ name, unit: pr?.unit ?? unit, portions: pr?.portions ?? 50, rawId: pr?.rawId ?? "", rawQty: pr?.rawQty ?? 0 });
@@ -89,6 +90,7 @@ function KitchenPage() {
         <Link to="/staff" className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm font-semibold"><ClipboardList className="w-4 h-4" />{t("Live orders")} <span className="rounded-full bg-primary px-2 text-xs text-primary-foreground">{queue}</span></Link>
       </div>
       {msg && <div role="status" className="mb-3 rounded-lg bg-muted px-3 py-2 text-sm">{msg}</div>}
+      <PotRecipeCook />
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-6">
         {pots.length === 0 && <p className="text-sm text-muted-foreground">{t("No pots cooked yet. Log the first pot below.")}</p>}
@@ -103,9 +105,9 @@ function KitchenPage() {
               </div>
               <div className="text-3xl font-black tabular-nums my-1">{+g.left.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">/ {+g.made.toFixed(2)} {g.unit}</span></div>
               <div className="h-2 rounded-full bg-muted overflow-hidden mb-3"><div className="h-full bg-primary" style={{ width: `${Math.round(pct * 100)}%` }} /></div>
-              <div className="grid grid-cols-3 gap-2">
+              {!cookedPotRecipes.some((r) => !r.archived_at && r.name.toLowerCase() === g.name.toLowerCase()) && <div className="grid grid-cols-3 gap-2">
                 {[10, 20, 50].map((n) => <Button key={n} type="button" variant="outline" className="min-h-12 text-base font-bold" onClick={() => addPot(g.name, g.unit, n)}>+{n}</Button>)}
-              </div>
+              </div>}
               <div className="mt-2 flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setWaste({ id: g.ids[0], qty: "", reason: "Leftover" })}><Trash2 className="w-4 h-4" />{t("Leftover / waste")}</Button>
                 <div className="grid gap-1 min-w-0">{g.ids.map((id, index) => <div key={id}>

@@ -1,11 +1,11 @@
-import { potRemaining } from "./cooked-availability";
+import { potRemaining, type PotLike } from "./cooked-availability";
 import { pendingCarryOvers } from "./pot-closure";
 /** Read-only FIFO reconstruction for legacy hospitality sales; never edits stock. */
 type Batch = { id: string; product_id: string; plates: number; plates_remaining: number; unit_cost: number; created_at: number };
 type Sale = { id: string; created_at: number; items: { product_id: string; qty: number }[]; cost_amount?: number; is_reversal?: boolean; reversal_of?: string };
 export type SaleCost = { id: string; date: number; amount: number };
 
-type Pot = { id: string; initial_quantity: number; active: boolean; unit_cost?: number | null };
+type Pot = PotLike & { unit_cost?: number | null };
 type Usage = { id: string; batch_id: string; order_id: string; product_id: string; quantity: number; created_at: number; kind?: "sale" | "waste" | "carry_over" | "carry_over_release"; source_usage_id?: string; closes_batch?: boolean };
 export function hospitalityCosting(orders: Sale[], batches: Batch[], pots: Pot[] = [], usages: Usage[] = []) {
   const stock = batches.slice().sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id))
