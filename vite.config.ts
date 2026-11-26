@@ -20,6 +20,8 @@ export default defineConfig({
         registerType: "autoUpdate",
         injectRegister: null,
         filename: "sw.js",
+        // Write the worker next to the public client files so every host (incl. self-hosted Node) serves /sw.js.
+        outDir: "dist/client",
         devOptions: { enabled: false },
         manifest: {
           name: "BitePay — Prepaid Canteen & Hotel Wallet",
@@ -38,6 +40,7 @@ export default defineConfig({
           ],
         },
         workbox: {
+          globDirectory: "dist/client",
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
           navigateFallback: null,
           navigateFallbackDenylist: [/^\/~oauth/, /^\/api\//],
