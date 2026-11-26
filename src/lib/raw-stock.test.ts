@@ -12,7 +12,7 @@ it("migration anchors 20 then deducts 3 only once, even on operation retry", () 
 });
 it("purchase and stock adjustment use the same anchored balance", () => {
   const cooked = applyRawChanges([material], [{ ...material, stock: 17 }], [], "cook", 1);
-  const bought = applyRawChanges(cooked.materials, [{ ...material, stock: 22 }], cooked.movements, "purchase", 2);
+  const bought = applyRawChanges(cooked.materials, cooked.materials.map((r) => ({ ...r, stock: 22 })), cooked.movements, "purchase", 2);
   assert.equal(bought.materials[0]?.stock, 22); assert.equal(bought.movements.length, 2);
 });
 it("two offline devices retain both 3 kg and 5 kg deductions across reload/merge", () => {
